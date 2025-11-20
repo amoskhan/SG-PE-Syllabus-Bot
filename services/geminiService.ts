@@ -7,7 +7,7 @@ const MODEL_NAME = 'gemini-2.5-flash';
 
 // Initialize the client
 // Note: In a real app, never expose keys on the client. This is for the generated demo environment.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 const SYSTEM_INSTRUCTION = `
 You are the Singapore PE Syllabus Assistant, an expert on the Physical Education (PE) syllabus provided by the Ministry of Education (MOE) Singapore.
@@ -47,20 +47,20 @@ export const sendMessageToGemini = async (
 ): Promise<ChatResponse> => {
   try {
     const chat = ai.chats.create({
-        model: MODEL_NAME,
-        config: {
-            systemInstruction: SYSTEM_INSTRUCTION,
-            tools: [{ googleSearch: {} }], // Enable Search Grounding for supplementary info
-        },
-        history: history
+      model: MODEL_NAME,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        tools: [{ googleSearch: {} }], // Enable Search Grounding for supplementary info
+      },
+      history: history
     });
 
     const result = await chat.sendMessage({ message: currentMessage });
-    const response = result; 
+    const response = result;
 
     const text = response.text || "I couldn't generate a response. Please try again.";
-    
-    const groundingChunks: GroundingChunk[] = 
+
+    const groundingChunks: GroundingChunk[] =
       response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
 
     return {
