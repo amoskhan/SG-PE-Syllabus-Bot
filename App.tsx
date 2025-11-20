@@ -11,7 +11,7 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome-1',
-      text: "Hello! I am your **Singapore PE Syllabus Assistant**.\n\nI have access to the full **2024 Teaching & Learning Syllabus** for Primary, Secondary, and Pre-University levels.\n\nAsk me about:\n- Specific Learning Outcomes (e.g., Primary 1 Dance, Secondary Netball)\n- Outdoor Education modules (Navigation, Outdoor Cooking)\n- Physical Health & Safety strands\n- Pedagogy and Assessment strategies\n\nHow can I help you today?",
+      text: "Hello! I am your **Singapore PE Syllabus Assistant**.\n\nI have access to the full **2024 Teaching & Learning Syllabus** for Primary, Secondary, and Pre-University levels.\n\nHow can I help you today?",
       sender: Sender.BOT,
       timestamp: new Date(),
     }
