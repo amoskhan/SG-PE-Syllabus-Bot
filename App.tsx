@@ -11,7 +11,7 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome-1',
-      text: "Hello!",
+      text: "Hello! I am your **Singapore PE Syllabus Assistant**.How can I help you today?",
       sender: Sender.BOT,
       timestamp: new Date(),
     }
