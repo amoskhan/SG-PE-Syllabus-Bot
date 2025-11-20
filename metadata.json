@@ -1,0 +1,5 @@
+{
+  "name": "SG PE Syllabus Bot",
+  "description": "An AI assistant specialized in the Singapore Ministry of Education Physical Education Syllabus, utilizing Google Search for up-to-date information.",
+  "requestFramePermissions": []
+}
