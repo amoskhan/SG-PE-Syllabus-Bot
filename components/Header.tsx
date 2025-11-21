@@ -9,7 +9,7 @@ const Header: React.FC = () => {
         </div>
         <div>
           <h1 className="font-bold text-lg text-slate-800">PE Syllabus Bot</h1>
-          <p className="text-xs text-slate-500">Singapore MOE EP Curriculum</p>
+          <p className="text-xs text-slate-500">Singapore MOE Curriculum</p>
         </div>
       </div>
       <div className="hidden md:block">
