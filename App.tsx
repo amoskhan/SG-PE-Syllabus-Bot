@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Content, Part } from '@google/genai';
+import { Analytics } from "@vercel/analytics/react";
 import Header from './components/Header';
 import ChatInput from './components/ChatInput';
 import ChatMessage from './components/ChatMessage';
@@ -124,6 +125,7 @@ const App: React.FC = () => {
       </main>
 
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      <Analytics />
     </div>
   );
 };
