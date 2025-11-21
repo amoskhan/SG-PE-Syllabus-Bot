@@ -45,7 +45,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask about NAPFA, learning outcomes, or sports..."
+          placeholder="Ask me anything! (i.e. Design an activity for primary 4 net and barrier games...) "
           className="w-full bg-transparent border-none focus:ring-0 resize-none max-h-32 min-h-[24px] py-2 px-2 text-slate-800 placeholder-slate-400"
           rows={1}
           disabled={isLoading}
@@ -54,8 +54,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
           type="submit"
           disabled={!input.trim() || isLoading}
           className={`p-2 rounded-xl flex-shrink-0 transition-all duration-200 ${input.trim() && !isLoading
-              ? 'bg-red-600 text-white hover:bg-red-700 shadow-md transform hover:scale-105'
-              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            ? 'bg-red-600 text-white hover:bg-red-700 shadow-md transform hover:scale-105'
+            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">

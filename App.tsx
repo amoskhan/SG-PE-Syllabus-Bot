@@ -11,7 +11,7 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome-1',
-      text: "Hello! I am your **Singapore PE Syllabus Assistant**. How can I help you today?",
+      text: "Hello! I am your **Singapore PE Syllabus Assistant**. I can help you with anything related to the **PE Syllabus (2024)** and **Fundamental Movement Skills** (e.g., overhand throw, kick). How can I help you today?",
       sender: Sender.BOT,
       timestamp: new Date(),
     }
@@ -41,7 +41,7 @@ const App: React.FC = () => {
         role: m.sender === Sender.USER ? 'user' : 'model',
         parts: [{ text: m.text } as Part]
       }));
-      
+
       // Add the new user message to history (gemini 2.5 flash handles context well)
       history.push({
         role: 'user',
@@ -80,32 +80,32 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-slate-50">
       <Header />
-      
+
       <main className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
         <div className="max-w-4xl mx-auto">
-          
+
           {/* Welcome Chips (Only show if history is short) */}
           {messages.length < 2 && (
-             <div className="mb-8 animate-fade-in">
-               <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 ml-1">Explore the Syllabus</h2>
-               <div className="flex flex-wrap gap-2">
-                 {PE_TOPICS.map((topic, idx) => (
-                   <button
-                     key={idx}
-                     onClick={() => handleChipClick(topic)}
-                     className="px-4 py-2 bg-white border border-slate-200 rounded-full text-sm text-slate-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition-all shadow-sm"
-                   >
-                     {topic}
-                   </button>
-                 ))}
-               </div>
-             </div>
+            <div className="mb-8 animate-fade-in">
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 ml-1">Explore the Syllabus</h2>
+              <div className="flex flex-wrap gap-2">
+                {PE_TOPICS.map((topic, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleChipClick(topic)}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-full text-sm text-slate-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition-all shadow-sm"
+                  >
+                    {topic}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
           ))}
-          
+
           {isLoading && (
             <div className="flex justify-start mb-6 animate-pulse">
               <div className="flex flex-row items-center gap-3">
@@ -113,12 +113,12 @@ const App: React.FC = () => {
                   <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                 </div>
                 <div className="bg-white px-4 py-3 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm text-slate-500 text-sm flex items-center gap-1">
-                   Thinking <span className="typing-dot">.</span><span className="typing-dot">.</span><span className="typing-dot">.</span>
+                  Thinking <span className="typing-dot">.</span><span className="typing-dot">.</span><span className="typing-dot">.</span>
                 </div>
               </div>
             </div>
           )}
-          
+
           <div ref={messagesEndRef} className="h-4" />
         </div>
       </main>
