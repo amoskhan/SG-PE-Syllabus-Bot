@@ -301,7 +301,7 @@ Table 2. Sample Allocation of Curriculum Time for each Learning Area by Level (P
 OFFICIAL (CLOSED) / NON-SENSITIVE
 FOR USE BY EDUCATION OFFICERS ONLY
 
-Learning Outcomes
+Learning Outcomes
 The developmentally appropriate Learning Outcomes (LOs) specify minimally what students
 should know and be able to do for all the learning areas by each specific level except for
 swimming which is to be completed by the end of the primary level. They serve to guide the
@@ -335,7 +335,7 @@ work on a health practice for personal improvement in each year from Primary 3 t
 OFFICIAL (CLOSED) / NON-SENSITIVE
 FOR USE BY EDUCATION OFFICERS ONLY
 
-2.2 Learning Areas
+2.2 Learning Areas
 Physical Activity
 The Motor Skills and Concepts Framework2 underpins the Physical Activity learning area and
 its content areas of Athletics, Dance, Games and Sports, Gymnastics and Swimming at the
@@ -399,7 +399,7 @@ p. 388-389, 393); Graham et al. (1993, p.24); Logsdon et al. (1984, p.140).
 OFFICIAL (CLOSED) / NON-SENSITIVE
 FOR USE BY EDUCATION OFFICERS ONLY
 
-Table 4 provides the description of the four broad categories of movement concepts and
+Table 4 provides the description of the four broad categories of movement concepts and
 related sub-categories to be applied across the specific activity areas of Athletics, Dance,
 Games and Sports, Gymnastics and Swimming (see specific learning area descriptions).
 Body Awareness
@@ -527,7 +527,7 @@ Table 4. Motor Skills and Concepts Framework
 OFFICIAL (CLOSED) / NON-SENSITIVE
 FOR USE BY EDUCATION OFFICERS ONLY
 
-GUIDELINES IN THE TEACHING OF MOVEMENT SKILLS AND CONCEPTS
+GUIDELINES IN THE TEACHING OF MOVEMENT SKILLS AND CONCEPTS
 In the teaching of a movement skill and related concept, the following guidelines are
 recommended:
 •
@@ -567,10 +567,9 @@ setting provided by the recreational competition and performance atmosphere.
 6 The mature pattern indicates the sequence in which components of the fundamental motor skill occur.
 
 18
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Athletics
+
+Athletics
 The athletics component involves students primarily in running, jumping and throwing
 activities that promote personal striving. Initial learning should focus on exploring the
 fundamentals of walking, running, jumping, and throwing while progressively developing
@@ -583,10 +582,9 @@ opportunities encourage students to run faster and over different distances, jum
 and further, and throw different objects with improving distances.
 
 19
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PROGRESSION
+
+PROGRESSION
 The basic actions of Athletics, which are running, jumping and throwing are acquired at
 Primary 1 to 3 mainly through Dance, Games and Sports and Gymnastics. Athletics is taught
 from Primary 4 onwards where the basic actions of running, jumping and throwing acquired
@@ -640,10 +638,9 @@ scaffold students’ learning, teachers are encouraged to cover ‘Run for 9 to 
 in Primary 3.
 
 20
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 5 – ATHLETICS
+
+PRIMARY 5 – ATHLETICS
 Movement Skills and Concepts
 
 •
@@ -685,10 +682,9 @@ Safety Practices
 Demonstrate safe use of equipment and apparatus to prevent placing self at risk.
 
 21
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 6 – ATHLETICS
+
+PRIMARY 6 – ATHLETICS
 Movement Skills and Concepts
 
 •
@@ -729,10 +725,9 @@ Demonstrate safe use of equipment and apparatus to prevent placing self and othe
 risk.
 
 22
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Dance
+
+Dance
 Dance develops in students an understanding of rhythmic movement. It also enables
 students to express and communicate feelings and ideas through exploration, creation and
 performance. The focus is on the use of body as instrument of communication and selfexpression, accompanied by various stimuli. Through a variety of learning experiences and
@@ -741,10 +736,9 @@ Opportunities for involvement in and enjoyment of different dances can promote h
 and respect for cultural differences.
 
 23
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PROGRESSION
+
+PROGRESSION
 In learning to move through dance, students will progress through the following
 developmental sequence incorporating an understanding of body, space, effort and
 relationship awareness:
@@ -770,10 +764,9 @@ reflecting a mastery of the concepts of direction and time, while learning to in
 new concept of pathway in their previous movements.
 
 24
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEARNING OUTCOMES
+
+LEARNING OUTCOMES
 PRIMARY 1 – DANCE
 Movement Skills and Concepts
 Exploring
@@ -818,10 +811,9 @@ e. Kinesthetic (movement itself – i.e., start off with a movement pattern or i
 10 pre-designed movement experience comprises simple movement phrases.
 
 25
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 2 - DANCE
+
+PRIMARY 2 - DANCE
 Movement Skills and Concepts
 Exploring
 
@@ -887,10 +879,9 @@ making sure that shoelaces are tied, warm-up to prevent injury)
 11 Where people are located in relation to others (e.g., line, square, circle, triangle).
 
 26
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 4 - DANCE
+
+PRIMARY 4 - DANCE
 Movement Skills and Concepts
 Exploring
 
@@ -958,10 +949,9 @@ Safety Practices
 Demonstrate safe use of equipment and apparatus to prevent placing self and others
 at risk.
 27
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games and Sports
+
+Games and Sports
 Games and Sports promote the students’ playful tendency to control objects and the body
 during the early stages of learning. Early movement experiences, practised individually and
 in cooperative relationships with others, help develop competency and confidence in
@@ -977,10 +967,9 @@ encourages students’ safe and maximal participation, with modification to game
 match and enhance their developing skills and understanding.
 
 28
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PROGRESSION
+
+PROGRESSION
 In Games and Sports, the basic fundamentals of manipulative skills are mainly taught from
 Primary 1 to 3. Students learn the various movement patterns for each skill and how it can be
 performed under the different movement concepts of space, effort and relationship
@@ -1024,10 +1013,9 @@ specifically and to translate that decision into movement skills.
 13 Adapted from Butler (1997), Mitchell et al. (2006, 2013, 2021), Ward & Griggs (2011).
 
 29
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Main
+
+Main
 intention
 of the
 game
@@ -1117,10 +1105,9 @@ creatively designed by teachers to bear critical concepts of each game category.
 highlights the number of players for each game category and the design considerations.
 
 30
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Net-Barrier
+
+Net-Barrier
 • 1v1 (with implement)
 • Up to 4v4 (without
 implement)
@@ -1168,10 +1155,9 @@ implement/equipment
 Table 6. Design Considerations for the End-state Games by Game Category
 
 31
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEARNING OUTCOMES
+
+LEARNING OUTCOMES
 PRIMARY 1 – GAMES AND SPORTS
 Movement Skills and Concepts
 1. Roll using the underhand movement pattern, small to medium-sized
@@ -1239,10 +1225,9 @@ Demonstrate safe behaviour in a physical activity setting with self.
 15 Receiving refers to obtaining possession of an object coming at any level, direction and speed (e.g., catching, trapping).
 
 32
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 2 – GAMES AND SPORTS
+
+PRIMARY 2 – GAMES AND SPORTS
 
 Propelling16
 
@@ -1334,10 +1319,9 @@ Propelling refers to what one does when travelling with an object and maintain p
 dribble an object with the hands, feet or implement).
 
 33
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Safety Practices
+
+Safety Practices
 •
 
 Identify ways of protecting oneself and others during physical activities.
@@ -1418,10 +1402,9 @@ Recognise the key elements of rolling and throwing for distance.
 Demonstrate an understanding on how to reduce the impact force while catching and
 receiving objects.
 34
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 3 – GAMES AND SPORTS
+
+PRIMARY 3 – GAMES AND SPORTS
 •
 •
 
@@ -1494,10 +1477,9 @@ Demonstrate safe behaviour when participating in physical activities individuall
 others (e.g., following the rules and playing fair, cooperating with others).
 
 35
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 5 AND 6: LEARNING OUTCOMES - NET-BARRIER CATEGORY
+
+PRIMARY 5 AND 6: LEARNING OUTCOMES - NET-BARRIER CATEGORY
 Winning the Point/ Defending against an Attack
 Movement Skills and Concepts
 Offence
@@ -1649,10 +1631,9 @@ specifically and to translate that decision into movement skills.
 18 Boundary as dictated by the service court or area.
 
 36
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Winning the Point
@@ -1675,10 +1656,9 @@ to his original central
 base position
 
 37
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Setting up an Attack/ Defending Space
+
+Setting up an Attack/ Defending Space
 Movement Skills and Concepts
 Offence
 Defence
@@ -1830,10 +1810,9 @@ and defence, with rules to the game played, and where players in the offence and
 specifically and to translate that decision into movement skills.
 
 38
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Setting up an Attack
@@ -2000,10 +1979,9 @@ to his original central
 base position
 
 39
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Setting up an Attack
@@ -2165,10 +2143,9 @@ the attack’
 base position
 
 40
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Setting up an Attack
@@ -2275,8 +2252,7 @@ to his original central
 base position
 
 41
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Move into
 position to
@@ -2285,7 +2261,7 @@ an object
 
 • Travelling
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Setting up an Attack
@@ -2370,10 +2346,9 @@ allowed
 base position
 
 42
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 5 AND 6: LEARNING OUTCOMES - STRIKING-FIELDING CATEGORY
+
+PRIMARY 5 AND 6: LEARNING OUTCOMES - STRIKING-FIELDING CATEGORY
 Sending into Space/ Defending Space
 Movement Skills and Concepts
 Offence
@@ -2440,10 +2415,9 @@ specifically and to translate that decision into movement skills.
 21 Also include other objects like disc, beanbags etc.
 
 43
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Advancing Bases to Score/ Defending Bases
+
+Advancing Bases to Score/ Defending Bases
 Movement Skills and Concepts
 Offence
 Defence
@@ -2561,15 +2535,14 @@ to be ready to
 receive a fielded ball
 
 44
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Receive and
 send a ball
 to a
 teammate
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Advancing Bases to Score
@@ -2687,15 +2660,14 @@ fielding error
 advancing, fielder
 
 45
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Receive and
 send a ball
 to a
 teammate
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Advancing Bases to Score
@@ -2722,10 +2694,9 @@ to the
 catcher/pitcher
 
 46
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 5 AND 6: LEARNING OUTCOMES - TERRITORIAL-INVASION CATEGORY
+
+PRIMARY 5 AND 6: LEARNING OUTCOMES - TERRITORIAL-INVASION CATEGORY
 GamesRelated
 Concepts
 Situational
@@ -2823,10 +2794,9 @@ Direction of goal
 Situation depicted by the diagram is an illustration and not meant to be exhaustive.
 
 47
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Keeping Possession of the Ball/ Regaining Possession of the Ball
+
+Keeping Possession of the Ball/ Regaining Possession of the Ball
 Movement Skills and Concepts
 Offence
 Defence
@@ -2919,14 +2889,13 @@ possession
 Also includes any other object that can be sent such as a disc.
 
 48
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 -
 
 -
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Keeping Possession
@@ -3037,14 +3006,13 @@ personal space of
 the on-the ball
 defender
 49
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Move into
 position to
 tackle
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Keeping Possession
@@ -3122,10 +3090,9 @@ receive a pass
 Line of pass is similar to passing lane, it also refers to the imaginary line between the passer and receiver.
 
 50
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Keeping Possession
@@ -3212,10 +3179,9 @@ stationary or
 on the move
 
 51
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Keeping Possession
@@ -3296,10 +3262,9 @@ receive a pass
 on the move
 
 52
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Keeping Possession
@@ -3413,10 +3378,9 @@ or force an
 unsuccessful pass
 
 53
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Using Space to Invade/ Delaying the Invasion
+
+Using Space to Invade/ Delaying the Invasion
 Movement Skills and Concepts
 Offence
 Defence
@@ -3489,10 +3453,9 @@ pass
 Direction of Attack
 
 54
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Using Space to Invade
@@ -3605,15 +3568,14 @@ attacker to get the
 ball back.
 
 55
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Move into
 
 position to
 tackle
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Using Space to Invade
@@ -3750,10 +3712,9 @@ Attack
 receive a pass
 
 56
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Using Space to Invade
@@ -3892,8 +3853,7 @@ force an
 unsuccessful pass
 
 57
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Move into
 position to
@@ -3905,7 +3865,7 @@ push
 position to
 tackle
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Using Space to Invade
@@ -3953,10 +3913,9 @@ unsuccessful pass
 receive a pass
 
 58
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Creating Space to Invade/ Denying Space to Invade
+
+Creating Space to Invade/ Denying Space to Invade
 Movement Skills and Concepts
 Offence
 Defence
@@ -4047,14 +4006,13 @@ be ready to receive a
 pass
 
 59
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 -
 
 -
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Creating Space to Invade
@@ -4163,15 +4121,14 @@ the line of pass to
 get the ball back
 
 60
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Move into
 
 position to
 tackle
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Creating Space to Invade
@@ -4292,8 +4249,7 @@ Direction of
 Attack
 
 61
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Move into
 position to
@@ -4305,7 +4261,7 @@ push
 position to
 tackle
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Creating Space to Invade
@@ -4450,8 +4406,7 @@ back or force an
 unsuccessful pass
 
 62
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Move into
 position to
@@ -4469,7 +4424,7 @@ intercept a
 throw/kick/
 push
 
-Attacking the Goal/ Denying Scoring Opportunities
+Attacking the Goal/ Denying Scoring Opportunities
 Movement Skills and Concepts
 Offence
 Attacking the Goal
@@ -4587,10 +4542,9 @@ rebound (where
 applicable)
 
 63
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Attacking the Goal
@@ -4716,8 +4670,7 @@ rebound (where
 applicable)
 
 64
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Moving into
 position to
@@ -4731,7 +4684,7 @@ prevent a
 throw/kick/
 push
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Attacking the Goal
@@ -4814,10 +4767,9 @@ possible rebound
 (where applicable)
 
 65
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement Skills and Concepts
+
+Movement Skills and Concepts
 Offence
 Defence
 Attacking the Goal
@@ -4946,8 +4898,7 @@ to shoot or force an
 unsuccessful shot
 
 66
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Moving into
 position to
@@ -4966,7 +4917,7 @@ prevent a
 throw/kick/p
 ush
 
-Movement Skills and Concepts
+Movement Skills and Concepts
 Offence
 Defence
 Attacking the Goal
@@ -5009,10 +4960,9 @@ Safety Practices
 Demonstrate safe use of equipment and apparatus to prevent placing self and others at risk.
 
 67
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Gymnastics
+
+Gymnastics
 Gymnastics enhances overall body management and control through creative
 interpretation of movement and sequence. The learning experience starts within the
 boundaries of open-ended tasks, and progressively moves onto more stylised gymnastic
@@ -5024,10 +4974,9 @@ gymnastics problems facilitate the development of care, harmony, responsibility 
 resilience.
 
 68
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-DESIGN PRINCIPLES
+
+DESIGN PRINCIPLES
 The Gymnastics learning area is designed based on a continuum of principles as represented
 in Figure 4 below.
 
@@ -5062,10 +5011,9 @@ perform the gymnastics movement with control on their own.
 • Students should learn how to move on and off apparatus, move into and out of
 movements, safely and with control.
 69
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-•
+
+•
 
 Where low, medium-height, or high apparatus is required, the recommended
 apparatus height takes into consideration fall height from feet to landing surface (e.g.,
@@ -5104,10 +5052,9 @@ movements.
 at the end of the gymnastics module.
 
 70
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEARNING OUTCOMES
+
+LEARNING OUTCOMES
 PRIMARY 1 – GYMNASTICS
 Movement Skills and Concepts
 Travelling and
@@ -5168,10 +5115,9 @@ Primary 2, students should focus on exploring a wide variety of balances that do
 hands and head.
 
 71
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 2 – GYMNASTICS
+
+PRIMARY 2 – GYMNASTICS
 Movement Skills and Concepts
 Travelling,
 Jumping and
@@ -5242,10 +5188,9 @@ Landing in a controlled finish position requires the student to contact the land
 by tightening the abdominal muscles and keeping the arms outstretched for balance.
 
 72
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 3 – GYMNASTICS
+
+PRIMARY 3 – GYMNASTICS
 Movement Skills and Concepts
 Travelling,
 1. Travel in relation to position (e.g., over/under, beside, on/off, alongside) with
@@ -5311,10 +5256,9 @@ Landing in a controlled finish position requires the student to contact the land
 by tightening the abdominal muscles and keeping the arms outstretched for balance.
 
 73
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 4 – GYMNASTICS
+
+PRIMARY 4 – GYMNASTICS
 Movement Skills and Concepts
 Travelling,
 1. Hang momentarily on overhead apparatus demonstrating a variety of
@@ -5383,10 +5327,9 @@ hips, knees or ankles.
 Three of the five basic gymnastics shapes of stretch, tuck, star, straddle and pike are required here.
 
 74
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 5 – GYMNASTICS
+
+PRIMARY 5 – GYMNASTICS
 Movement Skills and Concepts
 Travelling,
 Jumping and
@@ -5453,10 +5396,9 @@ Three of the five basic gymnastics shapes of stretch, tuck, star, straddle and p
 placement surface.
 
 75
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 5 – GYMNASTICS
+
+PRIMARY 5 – GYMNASTICS
 •
 •
 •
@@ -5474,10 +5416,9 @@ Safety Practices
 Demonstrate safe use of equipment and apparatus to prevent placing self at risk.
 
 76
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 6 – GYMNASTICS
+
+PRIMARY 6 – GYMNASTICS
 Movement Skills and Concepts
 Balancing
 
@@ -5545,10 +5486,9 @@ example, the student may perform a movement in front of, alongside or over one o
 concepts.
 
 77
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Swimming
+
+Swimming
 Swimming develops students’ confidence to manoeuvre their bodies with control while
 experiencing the sensation of water balance, buoyancy and propulsion, in order to facilitate
 floating and moving in, under, and on water. The water environment offers unique
@@ -5561,10 +5501,9 @@ floating aids, to emphasis on using specified swim form, and managing water safe
 water-based activities.
 
 78
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-OFFERING OF SWIMMING
+
+OFFERING OF SWIMMING
 Beyond teaching fundamental movement skills on land, students will also learn movement
 skills through water so as to open up new possibilities in aquatics. Schools will offer swimming
 to one cohort of students at any level. The water environment offers unique challenges to the
@@ -5612,10 +5551,9 @@ the pool.
 60 This refers to using alternating arms and legs, and/or simultaneous arms and legs.
 
 79
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Outdoor Education
+
+Outdoor Education
 Outdoor Education engages students’ spirit of adventure, develops their resilience, and
 builds their connections with places (i.e., environment and its inhabitants). Students do so
 by exploring natural and urban environments, starting from their immediate surroundings
@@ -5634,10 +5572,9 @@ participation in these experiences, students learn to enjoy outdoor physical rec
 take actions to live an active, healthy, and sustainable lifestyle.
 
 80
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-OUTDOOR EDUCATION STRANDS
+
+OUTDOOR EDUCATION STRANDS
 Outdoor Education equips students with outdoor competencies to explore the natural and
 urban environments safely and responsibly. The Outdoor Education content is designed
 based on three strands, namely: (a) Outdoor Living, (b) Sense of Place, and (c) Risk Assessment
@@ -5668,10 +5605,9 @@ to various outdoor situations. They learn how to make safe and responsible decis
 so they can enjoy outdoor participation.
 
 81
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Figure 5. Outdoor Education Framework
+
+Figure 5. Outdoor Education Framework
 The Outdoor Education lessons provide the foundation for the outdoor competencies that
 will enable students to be comfortable and engage in outdoor adventure experiences
 meaningfully. They develop a sense of connectedness with the places visited; for example,
@@ -5693,10 +5629,9 @@ This syllabus leverages place-responsive pedagogy and experiential learning appr
 increase relevance for Outdoor Education learning using authentic contexts. MOE’s placeresponsive pedagogical framework (details in Section 5) guides teachers in their
 understanding of how place is relevant to learning in Outdoor Education and how teachers
 82
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-can empower students in discovering the distinctiveness of places. The five pedagogical foci,
+
+can empower students in discovering the distinctiveness of places. The five pedagogical foci,
 when taught in a spiral and progressive manner, enable students to build personal
 connections with places during exploration. As students learn place-responsive skills under
 the sense of place strand and have repeated engaging experiences to learn more about
@@ -5738,10 +5673,9 @@ surroundings (e.g., school for lower primary) to other unfamiliar locations (e.g
 campsite for upper primary). Themes are coupled with the pedagogical foci (see Section 5) to
 emphasise the importance of spending time to connect with places, ranging from exploration
 83
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-(Primary 1-2), learning about places (Primary 3-4), and developing connectedness with it
+
+(Primary 1-2), learning about places (Primary 3-4), and developing connectedness with it
 (Primary 5-6).
 Themes are also used to increase relevance for learning and allow integration of the three
 strands using authentic contexts. The learning outcomes from the three strands should be
@@ -5786,10 +5720,9 @@ school and the surrounding neighbourhood, and develop a desire to care for the e
 through small actions.
 
 84
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Level
+
+Level
 Theme
 
 Culminating
@@ -5822,10 +5755,9 @@ camp
 Table 7. Themes for Lessons and Culminating Events across Primary Levels
 
 85
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEARNING OUTCOMES
+
+LEARNING OUTCOMES
 PRIMARY 1 – OUTDOOR EDUCATION
 Theme: Discovering my school
 Students discover through sensory cues different places within the school compound
@@ -5889,10 +5821,9 @@ outdoor activity.
 3. Suggest suitable approaches to manage the risk associated with
 weather hazards.
 86
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 3 – OUTDOOR EDUCATION
+
+PRIMARY 3 – OUTDOOR EDUCATION
 Theme: Understanding my school and its neighbourhood
 Students explore the school compound safely and discover the social and ecological
 aspects of different places. Students pack a backpack for an outdoor activity while
@@ -5928,10 +5859,9 @@ during an outdoor activity.
 2. Take actions to mitigate the identified risks.
 
 87
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 4 – OUTDOOR EDUCATION
+
+PRIMARY 4 – OUTDOOR EDUCATION
 Theme: Understanding my school and its neighbourhood
 Students explore different places in the school and its neighbourhood safely using a map.
 Students pack a backpack for a day trip while adopting environmentally sustainable
@@ -5973,10 +5903,9 @@ a day trip.
 2. Take actions to mitigate the identified risks.
 
 88
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 5 – OUTDOOR EDUCATION
+
+PRIMARY 5 – OUTDOOR EDUCATION
 Theme: Exploring beyond my school and its neighbourhood
 Students explore different places in the school and its neighbourhood safely through
 visual representations. Students pack a backpack for a trip with an overnight camping
@@ -6021,10 +5950,9 @@ an overnight camp.
 2. Take actions to mitigate the identified risks.
 
 89
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 6 – OUTDOOR EDUCATION
+
+PRIMARY 6 – OUTDOOR EDUCATION
 Theme: Exploring beyond my school and its neighbourhood
 Students explore the distinctiveness of the school and its neighbourhood safely. With
 deeper understanding of places around them, they are provided with learning opportunities
@@ -6052,10 +5980,9 @@ management
 2. Take actions to mitigate the identified risks.
 
 90
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Physical Health and Safety
+
+Physical Health and Safety
 Physical Health and Safety stimulates students’ interest in physical activity as meaningful
 connections between health concepts and practical applications are made through
 experiential learning. Through authentic learning experiences, students develop an
@@ -6067,10 +5994,9 @@ healthier behaviours. As students mature, they build the commitment to lead an a
 heathy lifestyle and encourage others to do so.
 
 91
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PHYSICAL HEALTH AND SAFETY STRANDS
+
+PHYSICAL HEALTH AND SAFETY STRANDS
 The content areas are organised under the four strands, namely: (a) Physical Fitness, (b)
 Safety and Risk Management, (c) Nutrition, and (d) Personal Hygiene and Self-Care. Through
 the four strands, students develop an understanding of physical health concepts, healthy and
@@ -6113,10 +6039,9 @@ and knowing healthier cooking methods.
 61 PRICE is the acronym for treatment of injury. It stands for Protection, Rest, Ice, Compression and Elevation.
 
 92
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-d. Personal Hygiene and Self-Care
+
+d. Personal Hygiene and Self-Care
 Students understand the importance of and exhibit good personal hygiene such as
 wash their hands, brush their teeth, clean their body/hair and face, change their
 clothes and puberty hygiene. Within these topics, students learn about good eye, oral
@@ -6138,10 +6063,9 @@ practices, they identify the barriers to demonstrate these practices and develop
 overcome them.
 
 93
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEARNING OUTCOMES
+
+LEARNING OUTCOMES
 PRIMARY 1 – PHYSICAL HEALTH AND SAFETY
 Strand
 
@@ -6195,10 +6119,9 @@ Germs and Diseases
 Understand the importance of having good hygiene practices.
 
 94
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 2 – PHYSICAL HEALTH AND SAFETY
+
+PRIMARY 2 – PHYSICAL HEALTH AND SAFETY
 Strand
 
 Learning Outcome
@@ -6245,10 +6168,9 @@ Airborne Diseases
 diseases.
 
 95
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 3 – PHYSICAL HEALTH AND SAFETY
+
+PRIMARY 3 – PHYSICAL HEALTH AND SAFETY
 Strand
 
 Learning Outcome
@@ -6301,10 +6223,9 @@ Understand the signs, symptoms and preventive measures for
 mosquito-borne diseases.
 
 96
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 4 – PHYSICAL HEALTH AND SAFETY
+
+PRIMARY 4 – PHYSICAL HEALTH AND SAFETY
 Strand
 
 Learning Outcome
@@ -6365,10 +6286,9 @@ Understand the causes, signs, symptoms and preventive measures for
 food-borne diseases.
 
 97
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 5 – PHYSICAL HEALTH AND SAFETY
+
+PRIMARY 5 – PHYSICAL HEALTH AND SAFETY
 Strand
 
 Learning Outcome
@@ -6419,10 +6339,9 @@ Infectious Diseases
 Understand infectious diseases and its preventive measures.
 
 98
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRIMARY 6 – PHYSICAL HEALTH AND SAFETY
+
+PRIMARY 6 – PHYSICAL HEALTH AND SAFETY
 Strand
 
 Learning Outcome
@@ -6472,10 +6391,9 @@ Auditory Care
 Understand the importance of having good auditory care practices.
 
 99
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-2.3 Character and Citizenship Education Developmental
+
+2.3 Character and Citizenship Education Developmental
 Milestones (Primary Level)
 In this Physical Education syllabus, learning outcomes are identified for each core value,
 presented in the form of related social-emotional competencies (as Developmental
@@ -6562,8 +6480,7 @@ other perspectives in
 decision-making.
 
 100
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 [CCE 3.1.3b] The
 student understands
@@ -6573,7 +6490,7 @@ from their
 perspectives when
 making decisions.
 
-Responsibility
+Responsibility
 What it means
 
 A person who is responsible recognises that he/she has a duty to
@@ -6681,10 +6598,9 @@ decisions in handling
 dilemmas.
 
 101
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Resilience
+
+Resilience
 What it means
 
 A person who is resilient has emotional strength and perseveres in the
@@ -6775,10 +6691,9 @@ decisions in handling
 dilemmas.
 
 102
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Integrity
+
+Integrity
 What it means
 
 A person of integrity upholds ethical principles and has moral courage
@@ -6886,12 +6801,11 @@ decisions in handling
 dilemmas.
 
 103
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 Upper Pri
 
-Care
+Care
 What it means
 
 A person who is caring acts with kindness and compassion. He/she
@@ -6989,10 +6903,9 @@ towards him/herself
 and others.
 
 104
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Harmony
+
+Harmony
 What it means
 
 A person who values harmony seeks inner happiness and promotes
@@ -7087,10 +7000,9 @@ perspectives when
 making decisions.
 
 105
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-3. SECONDARY LEVEL SYLLABUS CONTENT
+
+3. SECONDARY LEVEL SYLLABUS CONTENT
 3.1 Overview
 KEY ATTRIBUTES OF STUDENTS AND LEARNING EXPERIENCES
 For students to achieve the goals of Physical Education, the journey continues at the secondary
@@ -7128,10 +7040,9 @@ in recreational physical activities, including the outdoors at post-secondary le
 well-planned learning experiences in the different learning areas, students develop their
 mature performance and be Confident Participants.
 106
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-CONTENT ORGANISATION
+
+CONTENT ORGANISATION
 Learning Areas
 The three learning areas and strands that facilitate the organisation of the learning
 experiences to achieve the goals of Physical Education at the secondary level are presented
@@ -7205,10 +7116,9 @@ Physical Health & Safety
 Table 9. Sample Curriculum Time Allocation for Each learning Area by Level (Secondary)
 
 107
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Learning Outcomes
+
+Learning Outcomes
 The learning Outcomes (LOs) in the learning areas for the secondary level build on the
 movement capacity and knowledge that were learnt at the primary level.
 For Physical Activity, the LOs are premised on the expected student competence in a
@@ -7249,10 +7159,9 @@ competencies, and consciously seize opportunities to continually learn and parti
 recreational physical activities, including the outdoors with family and friends at postsecondary level.
 
 108
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-SECONDARY 5 GUIDELINES
+
+SECONDARY 5 GUIDELINES
 At the end of Secondary 4, students are competent in at least 5 different physical activities
 and are enthusiastic in participation. Thus, for the additional year in secondary school, the
 focus will be on further enabling students to lead an active and healthy lifestyle after they
@@ -7274,10 +7183,9 @@ enjoy the physical activities safely and subsequently influence family and frien
 active lifestyle.
 
 109
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-3.2 Learning Areas
+
+3.2 Learning Areas
 Physical Activity
 Physical Activities provide the contexts for students to display various fundamental
 movement skills, either individually or in combination that they have learnt at the primary
@@ -7293,10 +7201,9 @@ make use of the experiences that they have gained through the active participati
 physical activities and are motivated to lead an active and healthy lifestyle.
 
 110
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PHYSICAL ACTIVITIES GUIDELINES
+
+PHYSICAL ACTIVITIES GUIDELINES
 The more common physical activities for Singaporeans are individual/dual in nature. These
 activities require one or two people to participate in and thus have a higher chance of them
 being undertaken beyond secondary school. Examples of such activities are jogging and
@@ -7345,10 +7252,9 @@ weight and safety practices for students to apply their learning in the Physical
 and Safety learning area
 
 111
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Territorialinvasion
+
+Territorialinvasion
 -
 
 Format
@@ -7446,10 +7352,9 @@ Can the offering of this physical activity be sustained in the school?
 learning area.
 
 112
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-GAMES-RELATED CONCEPTS AND SKILLS
+
+GAMES-RELATED CONCEPTS AND SKILLS
 Games-related concepts63 are introduced to students through modified games at the upper
 primary and reinforced at the secondary levels. Both fundamental and specialised skills and
 movement concepts are required in playing these games. In this syllabus, games are classified
@@ -7558,10 +7463,9 @@ base runner(s) out?
 63 Adapted from Butler (1997), Mitchell et al. (2006, 2013, 2021), Gréhaigne et al. (2012), Ward & Griggs (2011).
 
 113
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games
+
+Games
 Category
 
 Main Intention
@@ -7655,10 +7559,9 @@ have to be mindful of structuring Physical Education lessons appropriately to cr
 learning environment. They should constantly emphasise doing one’s best in practice tasks
 and in competition to highlight that the process is more important and meaningful than
 114
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-achieving the outcome. More importantly, a teacher should make good use of the opportunity
+
+achieving the outcome. More importantly, a teacher should make good use of the opportunity
 to introduce appropriate skills to help students develop 21st Century Competencies.
 Recreational competitions are at intra-school level and students can participate in with their
 classmates. Rules and competition formats are modified to ensure age-appropriateness of
@@ -7668,10 +7571,9 @@ similar ability where students will have opportunities to play at least 3 matche
 assigned grouping. There is no need for the lead up to an overall champion.
 
 115
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Badminton
+
+Badminton
 DESCRIPTION OF THE GAME
 Students play a singles badminton game, with appropriate rules.
 During game play, students execute skills of foot work, service and shuttle control, as well as a
@@ -7726,8 +7628,7 @@ opponent’s rearcourt to move
 opponent to the back.
 
 116
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 Skill
 • Smashing
@@ -7763,7 +7664,7 @@ Shot (Forehand)
 - Side shuffle
 - Lunge
 
-Games-related Concept
+Games-related Concept
 Defending space
 
 Learning Outcome
@@ -7793,10 +7694,9 @@ Secondary].
 in physical activities.
 
 117
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Mini/Paddle Tennis
+
+Mini/Paddle Tennis
 DESCRIPTION OF THE GAME
 Students play a singles tennis game using sponge balls, with appropriate rules.
 During game play, students execute skills of foot work, service and racquet/paddle control, as well
@@ -7856,8 +7756,7 @@ from placing ball at an
 open space by moving to
 strategic position?
 118
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 Skill
 • Groundstrokes
@@ -7890,7 +7789,7 @@ and Deep)
 - Running steps
 - Split steps
 
-Fitness Conditioning & Safety Practices
+Fitness Conditioning & Safety Practices
 9. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 10. Perform resistance exercises using body weight [when the physical activity is taught in Lower
@@ -7902,10 +7801,9 @@ Secondary].
 in physical activities.
 
 119
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Table Tennis
+
+Table Tennis
 DESCRIPTION OF THE GAME
 Students play a single table tennis game, with appropriate rules.
 During game play, students execute skills of foot work, service, a variety of shots and ball control,
@@ -8003,10 +7901,9 @@ the centreline64
 centre of the table. This moves the whole body to left (more so for right-handers, vice-versa for left handers).
 
 120
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Fitness Conditioning & Safety Practices
+
+Fitness Conditioning & Safety Practices
 7. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 8. Perform resistance exercises using body weight [when the physical activity is taught in Lower
@@ -8018,10 +7915,9 @@ Secondary].
 in physical activities.
 
 121
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Volleyball
+
+Volleyball
 DESCRIPTION OF THE GAME
 Students play a 4v4 volleyball game, with appropriate rules.
 During the game, students execute skills of passing, setting, spiking, blocking, digging and serving, as
@@ -8095,8 +7991,7 @@ strategic position?
 opponent from scoring.
 
 122
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Blocking
 • Digging
@@ -8112,7 +8007,7 @@ FOR USE BY EDUCATION OFFICERS ONLY
 - Side steps
 - Lunge
 
-Fitness Conditioning & Safety Practices
+Fitness Conditioning & Safety Practices
 9. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 10. Perform resistance exercises using body weight [when the physical activity is taught in Lower
@@ -8124,10 +8019,9 @@ Secondary].
 in physical activities.
 
 123
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Tchoukball
+
+Tchoukball
 DESCRIPTION OF THE GAME
 Students play a 5v5 tchoukball game, with appropriate rules.
 During game play, students execute skills of passing, receiving and shooting, and a combination of
@@ -8207,14 +8101,13 @@ from placing ball at an
 open space by moving to
 strategic position?
 124
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Defending stance
 - Half squat
 - Side shuffle
 
-Fitness Conditioning & Safety Practices
+Fitness Conditioning & Safety Practices
 9. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 10. Perform resistance exercises using body weight [when the physical activity is taught in Lower
@@ -8226,10 +8119,9 @@ Secondary].
 in physical activities.
 
 125
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Softball
+
+Softball
 DESCRIPTION OF THE GAME
 Students play a 6v6 striking and fielding game, with appropriate rules.
 During the game, students execute skills of throwing, catching and hitting, as well as a combination
@@ -8324,15 +8216,14 @@ the ball to stop base runner from
 advancing to the next base or to avoid a
 run score.
 126
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 •
 •
 •
 •
 
-Fitness Conditioning & Safety Practices
+Fitness Conditioning & Safety Practices
 10. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 11. Perform resistance exercises using body weight [when the physical activity is taught in Lower
@@ -8344,10 +8235,9 @@ Secondary].
 physical activities.
 
 127
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Basketball
+
+Basketball
 DESCRIPTION OF THE GAME
 Students play a 3v3 half-court basketball game, with appropriate rules.
 During game play, students execute skills of passing, dribbling, and shooting, as well as a
@@ -8447,10 +8337,9 @@ from under the
 basket
 
 128
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 
 Learning Outcome
 Defence
@@ -8526,10 +8415,9 @@ Secondary].
 in physical activities.
 
 129
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Floorball
+
+Floorball
 DESCRIPTION OF THE GAME
 Students play a 4v4 floorball game without goalkeeper, with appropriate rules.
 During game play, students execute skills of dribbling, passing, shooting and moving off the ball, as
@@ -8599,10 +8487,9 @@ opponent’s goal.
 67 While running with the ball, the player drags the ball across his/her body while running with the ball.
 
 130
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Creating space to invade
 How to support ball carrier
 by providing space to keep
@@ -8702,10 +8589,9 @@ from shooting.
 the ball.
 
 131
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Fitness & Safety Practices
+
+Fitness & Safety Practices
 13. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 14. Perform resistance exercises using body weight [when the physical activity is taught in Lower
@@ -8716,10 +8602,9 @@ and ability [when the physical activity is taught in Upper Secondary].
 physical activities.
 
 132
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Football
+
+Football
 DESCRIPTION OF THE GAME
 Students play a 5v5 football game without goalkeeper, with appropriate rules.
 During game play, students execute skills of dribbling, passing, shooting and defending, as well as a
@@ -8800,10 +8685,9 @@ pass, dribble or shoot.
 - Body feint
 
 133
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Attacking the goal
 How to facilitate scoring a
 goal?
@@ -8899,10 +8783,9 @@ Secondary].
 14. Identify potential hazards, evaluate risks and take actions to mitigate risks while participating
 in physical activities.
 134
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Non-Contact Rugby
+
+Non-Contact Rugby
 DESCRIPTION OF THE GAME
 Students play a 4v4 rugby game without scrummaging, tackling and mauling, with appropriate
 rules.
@@ -8985,10 +8868,9 @@ direction
 space
 
 135
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Attacking the goal
 How to facilitate scoring
 a goal?
@@ -9084,10 +8966,9 @@ Secondary].
 14. Identify potential hazards, evaluate risks and take actions to mitigate risks while
 participating in physical activities.
 136
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Netball
+
+Netball
 DESCRIPTION OF THE GAME
 Students play a 4v4, half court netball game, with appropriate rules.
 During game play, students execute skills of passing and shooting, as well as a combination of skills
@@ -9185,10 +9066,9 @@ and direction
 • Shooting
 
 137
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Regaining possession of the
 ball
 
@@ -9266,10 +9146,9 @@ Secondary].
 in physical activities.
 
 138
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Ultimate Frisbee
+
+Ultimate Frisbee
 DESCRIPTION OF THE GAME
 Students play a 5v5 territorial game using a flying disc, with appropriate rules.
 During game play, students are able to apply or combine throwing and catching skills to attack the
@@ -9339,10 +9218,9 @@ Catching
 - Backhand fake
 
 139
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Creating space to invade
 How to support teammate
 with disc by providing
@@ -9452,10 +9330,9 @@ Cutter refers to off-the-disc attacker
 71 Force refers to the defender inducing the attacker to make a throw to where the rest of the defenders are positioned.
 
 140
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Fitness Conditioning & Safety Practices
+
+Fitness Conditioning & Safety Practices
 12. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 13. Perform resistance exercises using body weight [when the physical activity is taught in Lower
@@ -9467,10 +9344,9 @@ Secondary].
 in physical activities.
 
 141
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Track and Field
+
+Track and Field
 DESCRIPTION OF THE PHYSICAL ACTIVITY
 Students will learn and perform a minimum of 4 events (e.g., Hurdles, Discus) of at least one from
 the Track and the Field events.
@@ -9543,10 +9419,9 @@ balance and control
 clearing the bar
 
 142
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Events
+
+Events
 Long
 Jump
 
@@ -9625,10 +9500,9 @@ Secondary].
 in physical activities.
 
 143
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Outdoor Education
+
+Outdoor Education
 Outdoor Education engages students’ spirit of adventure, develops their resilience, and
 builds their connections with places (i.e., environment and its inhabitants). Students do so
 by exploring natural and urban environments, ranging from their immediate surroundings
@@ -9647,10 +9521,9 @@ students learn to enjoy outdoor physical recreation and take actions to live an 
 healthy, and sustainable lifestyle.
 
 144
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-OUTDOOR EDUCATION STRANDS
+
+OUTDOOR EDUCATION STRANDS
 Outdoor Education equips students with outdoor competencies to explore the natural and
 urban environments safely and responsibly. The Outdoor Education content is designed
 based on three strands, namely: (a) Outdoor Living, (b) Sense of Place, and (c) Risk Assessment
@@ -9682,10 +9555,9 @@ situations in the outdoors, risk evaluation and mitigation for outdoor participa
 responsible decisions so they can enjoy outdoor participation.
 
 145
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Figure 6. Outdoor Education Framework
+
+Figure 6. Outdoor Education Framework
 The Outdoor Education lessons provide the foundation for the outdoor competencies that
 will enable students to be comfortable and engage in outdoor adventure experiences
 meaningfully. They develop a sense of connectedness with the places visited; for example,
@@ -9709,10 +9581,9 @@ understanding of how place is relevant to learning in Outdoor Education and how 
 can empower students in discovering the distinctiveness of places. The five pedagogical foci,
 when taught in a spiral and progressive manner, enable students to build personal
 146
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-connections with places during exploration. As students learn place-responsive skills under
+
+connections with places during exploration. As students learn place-responsive skills under
 the sense of place strand and have repeated engaging experiences to learn more about
 places, the process will deepen their desire to connect with places and its inhabitants. At the
 end of secondary level, students are empowered to develop special relationships with places
@@ -9754,10 +9625,9 @@ the end of Secondary 3, it can be taught in Secondary 2 and/or Secondary 3 to pr
 students for their 5-Day 4-Night outdoor adventure learning cohort camps.
 
 147
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-APPLICATION OF LEARNING IN AUTHENTIC CONTEXT
+
+APPLICATION OF LEARNING IN AUTHENTIC CONTEXT
 Themes
 The Outdoor Education content is organised by themes revolving around exploring places.
 Table 12 shows the themes across the secondary school years for Outdoor Education lessons
@@ -9800,10 +9670,9 @@ a 4-Day 3-Night outdoor adventure learning cohort camp by the end of Secondary 1
 and
 a 5-Day 4-Night outdoor adventure learning cohort camp by the end of Secondary 3.
 148
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-At Secondary 1, students apply the outdoor competencies learnt in primary school to develop
+
+At Secondary 1, students apply the outdoor competencies learnt in primary school to develop
 a sense of place with their new school environment. They continue to deepen their outdoor
 competencies; they learn more complex knowledge and skills during their Secondary 1
 Outdoor Education lessons in preparation for extended residential camping. They will then
@@ -9841,10 +9710,9 @@ cohort camp
 Table 12. Themes for Lessons and Culminating Events across Secondary Levels
 
 149
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEARNING OUTCOMES
+
+LEARNING OUTCOMES
 SECONDARY 1 – NAVIGATION
 Theme: Connecting with my environment and community
 Students explore the distinctiveness of the new school safely through navigation activities.
@@ -9908,10 +9776,9 @@ environment.
 2. Take actions to mitigate the identified risks.
 
 150
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-SECONDARY 1 – OUTDOOR COOKING
+
+SECONDARY 1 – OUTDOOR COOKING
 Theme: Connecting with my environment and community
 Students adopt safe and environmentally sustainable practices to set up a fire for outdoor
 cooking. Learning opportunities are provided to build students’ holistic understanding of
@@ -9974,10 +9841,9 @@ outdoor cooking.
 cooking.
 
 151
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-SECONDARY 1 – SHELTER BUILDING
+
+SECONDARY 1 – SHELTER BUILDING
 Theme: Connecting with my environment and community
 Students adopt safe and environmentally sustainable practices to pitch a tent for an
 overnight camp. Learning opportunities are provided to build students’ holistic
@@ -10035,10 +9901,9 @@ building shelters.
 2. Take actions to mitigate the identified risks.
 
 152
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-SECONDARY 1 – TRIP PLANNING
+
+SECONDARY 1 – TRIP PLANNING
 Theme: Connecting with my environment and community
 Students plan and apply outdoor living skills in the exploration of green and blue places in
 a day trip. Learning opportunities are provided to build students’ holistic understanding of
@@ -10095,10 +9960,9 @@ management
 3. Demonstrate field hygiene while on a trip.
 
 153
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Physical Health and Safety
+
+Physical Health and Safety
 Physical Health and Safety support students in their development of healthy lifestyle
 practices and pursuit of a lifetime of active and healthy living. Through authentic learning
 experiences, students develop an understanding in physical health concepts, healthy and
@@ -10109,10 +9973,9 @@ evaluate their lifestyles and work towards healthier behaviours. As students mat
 build the commitment to lead an active and heathy lifestyle and encourage others to do so.
 
 154
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PHYSICAL HEALTH AND SAFETY STRANDS
+
+PHYSICAL HEALTH AND SAFETY STRANDS
 The content areas are organised under the four strands, namely: (a) Physical Fitness, (b)
 Safety and Risk Management, (c) Nutrition, and (d) Personal Hygiene and Self-Care. Through
 the four strands, students develop an understanding of physical health concepts, healthy and
@@ -10154,10 +10017,9 @@ c. Nutrition
 Through the strand on Nutrition, students learn about the nutritional requirements in
 relation to exercise and participation in physical activities. Building on the knowledge
 155
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-from Food and Consumer Education (FCE) in Secondary 1 and 2, students understand
+
+from Food and Consumer Education (FCE) in Secondary 1 and 2, students understand
 the importance of macronutrients and micronutrients to which are necessary for
 participation in and recovery after physical activities. They discuss topics such as
 alternative diets, supplement intake and intake of sports drinks. Students will be
@@ -10203,10 +10065,9 @@ Through the positive experiences, students’ confidence in their skills and kno
 reinforced. This builds their self-efficacy in enacting the practices of an active and healthy
 lifestyle.
 156
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEARNING OUTCOMES
+
+LEARNING OUTCOMES
 SECONDARY 1 – PHYSICAL HEALTH AND SAFETY
 Strand
 
@@ -10272,10 +10133,9 @@ Understand the importance of sleep.
 •
 
 157
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-SECONDARY 2 – PHYSICAL HEALTH AND SAFETY
+
+SECONDARY 2 – PHYSICAL HEALTH AND SAFETY
 Strand
 
 Learning Outcome
@@ -10342,10 +10202,9 @@ risks while planning and participating in physical activities.
 Apply simple first aid to manage common sports injuries.
 
 158
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-SECONDARY 3 – PHYSICAL HEALTH AND SAFETY
+
+SECONDARY 3 – PHYSICAL HEALTH AND SAFETY
 Strand
 
 Learning Outcome
@@ -10399,10 +10258,9 @@ Self-Care
 Evaluate sleep routine and apply strategies to improve sleep.
 
 159
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-SECONDARY 4 – PHYSICAL HEALTH AND SAFETY
+
+SECONDARY 4 – PHYSICAL HEALTH AND SAFETY
 Strand
 
 Learning Outcome
@@ -10461,10 +10319,9 @@ Apply strategies to overcome barriers when working towards
 healthier behaviour(s).
 
 160
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-3.3 Character and Citizenship Education Developmental
+
+3.3 Character and Citizenship Education Developmental
 Milestones (Secondary Level)
 In this Physical Education syllabus, learning outcomes are identified for each core value,
 presented in the form of related social-emotional competencies (as Developmental
@@ -10538,10 +10395,9 @@ clear about his/her own
 perspectives on the issues.
 
 161
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Responsibility
+
+Responsibility
 What it means
 
 A person who is responsible recognises that he/she has a duty to
@@ -10605,10 +10461,9 @@ decisions, and has the conviction
 to stand by the decisions made.
 
 162
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Resilience
+
+Resilience
 What it means
 
 A person who is resilient has emotional strength and perseveres in
@@ -10669,10 +10524,9 @@ conviction to stand by the
 decisions made.
 
 163
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Integrity
+
+Integrity
 What it means
 
 A person of integrity upholds ethical principles and has moral
@@ -10730,10 +10584,9 @@ moral courage to make valuesbased decisions regardless of
 circumstances.
 
 164
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Care
+
+Care
 What it means
 
 A person who is caring acts with kindness and compassion. He/she
@@ -10788,10 +10641,9 @@ decisions, and has the conviction
 to stand by the decisions made.
 
 165
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Harmony
+
+Harmony
 What it means
 
 A person who values harmony seeks inner happiness and promotes
@@ -10859,10 +10711,9 @@ being clear about his/her own
 perspectives on the issues.
 
 166
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-4. PRE-UNIVERSITY LEVEL SYLLABUS CONTENT
+
+4. PRE-UNIVERSITY LEVEL SYLLABUS CONTENT
 4.1 Overview
 KEY ATTRIBUTES OF STUDENTS AND LEARNING EXPERIENCES
 The purpose of Physical Education is to enable students to demonstrate individually and with
@@ -10904,10 +10755,9 @@ Strand
 
 Table 13. Learning Areas and Strands at the Pre-University Level
 167
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-A sample curriculum time allocation for each learning area by level is shown in Table 14.
+
+A sample curriculum time allocation for each learning area by level is shown in Table 14.
 Level
 Learning
 Area
@@ -10937,10 +10787,9 @@ competition organised by the school. In addition, they will have experienced dev
 enacting a plan for self or others to work towards a healthier lifestyle.
 
 168
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-4.2 Learning Areas
+
+4.2 Learning Areas
 Physical Activity
 Physical Activities provide the contexts for students to display various fundamental
 movement skills, either individually or in combination that they have learnt at the primary
@@ -10958,10 +10807,9 @@ have gained through the active participation in physical activities and be motiv
 an active and healthy lifestyle.
 
 169
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PHYSICAL ACTIVITIES OFFERINGS
+
+PHYSICAL ACTIVITIES OFFERINGS
 At the Pre-University level, students are given the opportunity to revisit physical activities that
 they have learnt at the Secondary level or pick up new physical activities. They should be given
 opportunity to participate in physical activities, which are individual, dual or team in nature,
@@ -11019,10 +10867,9 @@ The culminating event allows students to extend their skills applications and ca
 mirror game format in the full game setting (e.g., 7v7 Football with goalkeeper, 6v6
 Volleyball, 7v7 Netball).
 170
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-In addition, schools should take into consideration the following curricular questions before
+
+In addition, schools should take into consideration the following curricular questions before
 embarking in designing the school-based physical activity LOs:
 •
 •
@@ -11105,10 +10952,9 @@ Table 15. More Commonly Taught Physical Activities in Schools (Non-Exhaustive Li
 72 Running is not included in this list as it is covered in the Fitness and Conditioning Component of Physical Health and Safety.
 
 171
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-GAMES-RELATED CONCEPTS AND SKILLS
+
+GAMES-RELATED CONCEPTS AND SKILLS
 Games-related concepts73 are introduced to students through modified games at the upper
 primary and reinforced at the secondary levels. Both fundamental and specialised skills and
 movement concepts are required in playing these games. In this syllabus, games are classified
@@ -11217,10 +11063,9 @@ base runner(s) out?
 73 Adapted from Butler, J. (1997), Mitchell, S.A., Oslin, J.L., & Griffin, L.L. (2006, 2013), Ward, G & Griggs, G. (2011).
 
 172
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games
+
+Games
 Category
 
 Main Intention
@@ -11314,10 +11159,9 @@ have to be mindful of structuring Physical Education lessons appropriately to cr
 learning environment. They should constantly emphasise doing one’s best in practice tasks
 and in competition to highlight that the process is more important and meaningful than
 173
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-achieving the outcome. More importantly, a teacher should make good use of the opportunity
+
+achieving the outcome. More importantly, a teacher should make good use of the opportunity
 to introduce appropriate skills to help students develop 21st Century Competencies.
 Recreational competitions are at intra-school level and students can participate in with their
 classmates. Rules and competition formats are modified to cater to their skill levels. Team
@@ -11327,10 +11171,9 @@ where students will have opportunities to play at least 3 matches in their assig
 There is no need for the lead up to an overall champion.
 
 174
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Badminton*
+
+Badminton*
 DESCRIPTION OF THE GAME
 Students play a singles badminton game, with appropriate rules.
 During game play, students execute skills of foot work, service and shuttle control, as well as a
@@ -11425,10 +11268,9 @@ Backhand)
 - Lunge
 
 175
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Defending space
 How to prevent opponent
 from placing shuttle at an
@@ -11457,10 +11299,9 @@ in physical activities.
 (in bold).
 
 176
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Mini/Paddle Tennis*
+
+Mini/Paddle Tennis*
 DESCRIPTION OF THE GAME
 Students play a singles tennis game using sponge balls, with appropriate rules.
 During game play, students execute skills of foot work, service and racquet/paddle control, as well
@@ -11556,10 +11397,9 @@ Backhand)
 - Split steps
 
 177
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Fitness Conditioning & Safety Practices
+
+Fitness Conditioning & Safety Practices
 9. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 10. Modify and perform a range of resistance exercises (using body weight or with equipment)
@@ -11570,10 +11410,9 @@ in physical activities.
 (in bold).
 
 178
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Table Tennis*
+
+Table Tennis*
 DESCRIPTION OF THE GAME
 Students play a single table tennis game, with appropriate rules.
 During game play, students execute skills of foot work, service, a variety of shots and ball control,
@@ -11680,10 +11519,9 @@ The playing elbow marks the midpoint between the forehand and backhand, so shoul
 centre of the table. This moves the whole body to left (more so for right-handers, vice-versa for left handers).
 
 179
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-7. Perform warm up and cool down exercises before and after participation in physical activities
+
+7. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 8. Modify and perform a range of resistance exercises (using body weight or with equipment)
 according to individual’s needs and ability.
@@ -11693,10 +11531,9 @@ in physical activities.
 (in bold).
 
 180
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Volleyball*
+
+Volleyball*
 DESCRIPTION OF THE GAME
 Students play a 4v4 volleyball game, with appropriate rules.
 During the game, students execute skills of passing, setting, spiking, blocking, digging and serving, as
@@ -11768,8 +11605,7 @@ position?
 prevent opponent from scoring.
 
 181
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 • Blocking
 • Digging
@@ -11784,7 +11620,7 @@ FOR USE BY EDUCATION OFFICERS ONLY
 - Side steps
 - Lunge
 
-Fitness Conditioning & Safety Practices
+Fitness Conditioning & Safety Practices
 9. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 10. Modify and perform a range of resistance exercises (using body weight or with equipment)
@@ -11795,10 +11631,9 @@ in physical activities.
 (in bold).
 
 182
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Tchoukball*
+
+Tchoukball*
 DESCRIPTION OF THE GAME
 Students play a 5v5 tchoukball game with appropriate rules.
 During game play, students execute skills of passing, receiving and shooting, and a combination of
@@ -11873,10 +11708,9 @@ frame) to receive the ball.
 7. Receive the rebound before the
 ball lands.
 183
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-from teammates to keep
+
+from teammates to keep
 the ball in play?
 Games-related Concept
 Defending the space
@@ -11905,10 +11739,9 @@ in physical activities.
 (in bold).
 
 184
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Softball*
+
+Softball*
 DESCRIPTION OF THE GAME
 Students play a 6v6 striking and fielding game, with appropriate rules.
 During the game, students execute skills of throwing, catching and hitting, as well as a combination
@@ -11990,10 +11823,9 @@ coverage.
 •
 
 185
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Defending bases
 How to determine where
 to throw the ball to put
@@ -12030,10 +11862,9 @@ physical activities.
 (in bold).
 
 186
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Basketball*
+
+Basketball*
 DESCRIPTION OF THE GAME
 Students play a 3v3 half-court basketball game, with appropriate rules.
 During game play, students execute skills of passing, dribbling, and shooting, as well as a
@@ -12123,8 +11954,7 @@ and/or attack the goal.
 •
 
 187
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 Pick and roll
 - On-ball screen
@@ -12134,7 +11964,7 @@ Pick and roll
 - On-ball screen
 - Off-ball screen
 
-Games-related Concept
+Games-related Concept
 Attacking the goal
 How to facilitate scoring a
 goal?
@@ -12239,10 +12069,9 @@ in physical activities.
 (in bold).
 
 188
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Floorball*
+
+Floorball*
 DESCRIPTION OF THE GAME
 Students play a 4v4 floorball game without goalkeeper, with appropriate rules.
 During game play, students execute skills of dribbling, passing, shooting and moving off the ball, as
@@ -12318,10 +12147,9 @@ Using space to invade
 77 While running with the ball, the player drags the ball across his/her body while running with the ball.
 
 189
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Creating space to invade
 How to support ball
 carrier by providing space
@@ -12414,10 +12242,9 @@ attacker from receiving the ball.
 the ball.
 
 190
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Denying scoring
 opportunity
 How to block ball carrier
@@ -12446,10 +12273,9 @@ physical activities.
 (in bold).
 
 191
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Football*
+
+Football*
 DESCRIPTION OF THE GAME
 Students play a 5v5 football game without goalkeeper, with appropriate rules.
 During game play, students execute skills of dribbling, passing, shooting and defending, as well as a
@@ -12506,8 +12332,7 @@ teammate to pass, dribble or
 shoot.
 
 192
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 Skill
 • Dodging
@@ -12534,7 +12359,7 @@ turn 180 degrees
 • Dodging
 - Body feint
 
-Games-related Concept
+Games-related Concept
 Attacking the goal
 How to facilitate scoring
 a goal?
@@ -12627,10 +12452,9 @@ in physical activities.
 (in bold).
 
 193
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Non-Contact Rugby*
+
+Non-Contact Rugby*
 DESCRIPTION OF THE GAME
 Students play a 4v4 rugby game without scrummaging, tackling and mauling, with appropriate
 rules.
@@ -12707,10 +12531,9 @@ direction
 - Accelerate forward to
 space
 194
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Attacking the goal
 How to facilitate scoring
 a goal?
@@ -12807,10 +12630,9 @@ in physical activities.
 (in bold).
 
 195
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Netball*
+
+Netball*
 DESCRIPTION OF THE GAME
 Students play a 4v4, half court netball game, with appropriate rules.
 During game play, students execute skills of passing and shooting, as well as a combination of skills
@@ -12904,10 +12726,9 @@ Lob pass
 • Shooting
 
 196
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Regaining possession of
 the ball
 How to recover the ball by
@@ -12981,10 +12802,9 @@ in physical activities.
 (in bold).
 
 197
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Ultimate Frisbee*
+
+Ultimate Frisbee*
 DESCRIPTION OF THE GAME
 Students play a 5v5 territorial game using a flying disc, with appropriate rules.
 During game play, students are able to apply or combine throwing and catching skills to attack the
@@ -13057,10 +12877,9 @@ Catching
 - Backhand fake
 
 198
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Games-related Concept
+
+Games-related Concept
 Creating space to invade
 How to support
 teammate with disc by
@@ -13169,10 +12988,9 @@ Cutter refers to off-the-disc attacker
 81 Force refers to the defender inducing the attacker to make a throw to where the rest of the defenders are positioned.
 
 199
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Fitness Conditioning & Safety Practices
+
+Fitness Conditioning & Safety Practices
 12. Perform warm up and cool down exercises before and after participation in physical activities
 respectively.
 13. Modify and perform a range of resistance exercises (using body weight or with equipment)
@@ -13183,10 +13001,9 @@ in physical activities.
 (in bold).
 
 200
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Track and Field
+
+Track and Field
 DESCRIPTION OF THE PHSYICAL ACTIVITY
 Students will learn and perform a minimum of 4 events (e.g., Hurdles, Discus) of at least one from
 the Track and the Field events.
@@ -13261,10 +13078,9 @@ balance and control
 clearing the bar
 
 201
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Events
+
+Events
 Long
 Jump
 
@@ -13341,10 +13157,9 @@ in physical activities.
 *This physical activity is offered in secondary level.
 
 202
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Physical Health and Safety
+
+Physical Health and Safety
 Physical Health and Safety stimulates students’ interest in physical activity as meaningful
 connections between health concepts and practical applications are made through
 experiential learning. Through authentic learning experiences, students develop an
@@ -13356,10 +13171,9 @@ healthier behaviours. As students mature, they build the commitment to lead an a
 heathy lifestyle and encourage others to do so.
 
 203
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PHYSICAL HEALTH AND SAFETY STRANDS
+
+PHYSICAL HEALTH AND SAFETY STRANDS
 The content areas are organised under the four strands, namely: (a) Physical Fitness, (b)
 Safety and Risk Management, (c) Nutrition, and (d) Personal Hygiene and Self-Care. Through
 the four strands, students develop an understanding of physical health concepts, healthy and
@@ -13396,10 +13210,9 @@ diets and eating disorders. Students are able to discern information related to
 nutrition and make informed decisions in relation to health.
 
 204
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-d. Personal Hygiene and Self-Care
+
+d. Personal Hygiene and Self-Care
 At the pre-university level, this strand focuses on Self-Care rather than Personal
 Hygiene. Students learn how to lead an active and healthy lifestyle as a resource to
 maintain physical health. They understand the importance of demonstrating healthenhancing behaviours such as regular participation in physical activity including
@@ -13429,10 +13242,9 @@ and healthy lifestyle and provides them with the confidence and commitment to fo
 through their plan.
 
 205
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEARNING OUTCOMES
+
+LEARNING OUTCOMES
 PRE-UNIVERSITY – PHYSICAL HEALTH AND SAFETY
 Strand
 
@@ -13501,10 +13313,9 @@ healthier lifestyle.
 [This is a culminating activity.]
 
 206
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-4.3 Character and Citizenship Education Developmental
+
+4.3 Character and Citizenship Education Developmental
 Milestones (Pre-University Level)
 In this Physical Education syllabus, learning outcomes are identified for each core value,
 presented in the form of related social-emotional competencies (as Developmental
@@ -13562,10 +13373,9 @@ navigating complex issues, accepts one’s fallibility, and is open to
 change his/her views when necessary.
 
 207
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Responsibility
+
+Responsibility
 What it means
 
 What it means in
@@ -13633,10 +13443,9 @@ and taking action by considering his/her own values in relation to
 others. He/she has the moral courage and conviction to stand by the
 decisions made.
 208
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Integrity
+
+Integrity
 What it means
 
 A person of integrity upholds ethical principles and has moral courage
@@ -13717,10 +13526,9 @@ decisions and taking action by considering his/her own values in
 relation to others. He/she has the moral courage and conviction to
 stand by the decisions made.
 209
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Harmony
+
+Harmony
 What it means
 
 A person who values harmony seeks inner happiness and promotes
@@ -13760,10 +13568,9 @@ navigating complex issues, accepts one’s fallibility, and is open to
 change his/her views when necessary.
 
 210
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-5.
+
+5.
 
 PEDAGOGY
 
@@ -13821,10 +13628,9 @@ This developmental tool aims to support their reflective practice, foster collab
 82 Developed by the Physical Education and Sports Teachers Academy (PESTA)
 
 211
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-observations and mentoring culture, and guide professional discourses to promote a teacherled culture of continuing professional development.
+
+observations and mentoring culture, and guide professional discourses to promote a teacherled culture of continuing professional development.
 PELOT articulates the four Teaching Processes and are subsequently unpacked to the 24
 Teaching Areas for Physical Education. The updated PELOT+ Blended Learning (PELOT+BL)
 includes planning considerations for blended learning and tapping on information and
@@ -13870,10 +13676,9 @@ contexts. Generally, the needs of students with SEN come under four broad catego
 83 Hattie (2009)
 
 212
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Learning, Physical, Social-behavioural and Sensory needs. Knowing the profiles of these
+
+Learning, Physical, Social-behavioural and Sensory needs. Knowing the profiles of these
 students enables teachers to determine the type and extent of differentiation required to
 improve access to learning and participation during lessons.
 
@@ -13907,10 +13712,9 @@ with as many balance poses as they can.
 84 Mosston & Ashworth (2008). Table 17 is adapted from the same source.
 
 213
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Teaching Style
+
+Teaching Style
 
 Interaction between Teacher and Learners
 
@@ -14038,10 +13842,9 @@ conceptual framework includes the following four aspects of movement concepts:
 the body aspect describes what the body is doing and the shape of the body
 the space aspects describe where in space the body moves
 214
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-•
+
+•
 •
 
 the effort aspect describes how the body moves
@@ -14089,10 +13892,9 @@ International Advisory Committee released a consensus statement in 2021 on the u
 88 Werner et al. (1996)
 
 215
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-through the five pedagogical foci outlined in the framework, starting with Being present in
+
+through the five pedagogical foci outlined in the framework, starting with Being present in
 and with places. As developing connections is often a dynamic process, these foci do not exist
 in a linear fashion; rather, they are meant to be taught in a spiral and progressive manner.
 The teacher can even design a lesson that engages more than one pedagogical focus. Through
@@ -14121,10 +13923,9 @@ some considerations on how to progressively develop students’ personal connect
 places across the school years.
 
 216
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Personal connections are the foundation of all learning
+
+Personal connections are the foundation of all learning
 How can teachers better relate school to students’ life experiences?
 Overarching
 Students build connections by exploring places where they live and relate to their past, present
@@ -14285,10 +14086,9 @@ society.
 Table 18. Summary of Place-Responsive Pedagogy Taught across Levels.
 
 217
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Nonlinear Pedagogy
+
+Nonlinear Pedagogy
 The Nonlinear Pedagogy (NLP) is underpinned by the understanding that views students as
 open complex systems where goal-directed behaviours emerge as a consequence of the
 interactions among constraints such as their own ability, the task at hand and environment
@@ -14327,10 +14127,9 @@ about the OE concept.
 89 Chow et al. (2020)
 
 218
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Experiential
+
+Experiential
 Learning Stages
 Concrete
 experiences
@@ -14411,10 +14210,9 @@ designing investigations, and evaluating and communicating their learning. Thus,
 90 de Jong & van Joolingen (1998)
 
 219
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-teachers are facilitators of learning in IBL, depending on the readiness of students, they may
+
+teachers are facilitators of learning in IBL, depending on the readiness of students, they may
 need to provide more structured support to guide students.
 While learning games concept and tactics through modified versions of the games or
 activities, students explore and investigate the games situations, discuss and analyse the
@@ -14450,10 +14248,9 @@ the understanding of students’ needs and the attainment of learning outcomes a
 specific moment of the learning experience.
 
 220
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-LEVERAGING AFFECTIVE LEARNING OPPORTUNITIES
+
+LEVERAGING AFFECTIVE LEARNING OPPORTUNITIES
 Besides adopting the pedagogical approach, there is a need for teachers to have an organising
 frame to leverage the numerous affective and 21CC learning opportunities that present
 themselves in the various learning areas in the Physical Education lesson. The five affective
@@ -14549,10 +14346,9 @@ wonderful” with an elaboration why it is so good or wonderful
 Adapted from Abdul Rahman (2022)
 
 221
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Affective Learning
+
+Affective Learning
 Opportunities
 What can I leverage?
 Teachable Moments
@@ -14613,10 +14409,9 @@ used by teachers to facilitate students’ participation in discussion about the
 in the various learning areas. Video tools can also help students provide timely feedback
 about performances to their peers during learning as part of assessment for learning.
 222
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-In an increasingly digitised world, technology is often used to support active and healthy
+
+In an increasingly digitised world, technology is often used to support active and healthy
 practices, and health information is also readily available, it is important that our students are
 critical and responsible users of digital technologies to support them in their journey to lead
 an active and healthy life. Physical Teachers are encouraged to design varied authentic
@@ -14625,10 +14420,9 @@ evaluate information (e.g., evaluating credibility of a new diet fad) and use di
 selecting a new fitness app) in a safe and responsible manner.
 
 223
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-6.
+
+6.
 
 ASSESSMENT
 
@@ -14672,10 +14466,9 @@ address learning gaps.
 92 Wiliam (2018).
 
 224
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-PRINCIPLES
+
+PRINCIPLES
 There are four main guiding principles in setting the direction for on-going assessment in
 Physical Education. In essence, assessments in Physical Education must:
 a. Align to Singapore Curriculum Philosophy
@@ -14714,10 +14507,9 @@ information.
 93 Adapted from Saphier et al. (2008); Leong (2014)
 
 225
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Stage 3 – Analysing evidence of students’ learning. Using the assessment information
+
+Stage 3 – Analysing evidence of students’ learning. Using the assessment information
 to provide feedback and for planning of interventions to progress learning.
 Stage 4 – Sharing students’ attainment levels at the end of the term/semester/module.
 
@@ -14742,10 +14534,9 @@ learning outcome (HDP-LO) to report students’ learning progress. The use of HD
 will be at the end of every Semester.
 
 226
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-For Physical Education, the three learning areas are reported in HDP, with Games and Sports,
+
+For Physical Education, the three learning areas are reported in HDP, with Games and Sports,
 Gymnastics and Dance being reported under Physical Activities. The HDP LOs are shown in
 Table 21.
 Primary 1
@@ -14830,10 +14621,9 @@ are required to standardise the three or four level QDs across all P1 and P2 sub
 • Schools can choose the QDs provided; or
 • Schools can customise QDs.
 227
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Guidelines for Defining Qualitative Descriptors (QDs)
+
+Guidelines for Defining Qualitative Descriptors (QDs)
 Schools can customise the definition of their QDs. Schools may be guided by the following
 characteristics94 to differentiate QDs of the various levels (e.g., beginning, developing,
 achieving).
@@ -14904,10 +14694,9 @@ students’ proficiency qualitatively to ensure holistic assessment.
 Brookhart (2013)
 
 228
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-From Primary 3 onwards
+
+From Primary 3 onwards
 There is no mandatory reporting format for schools to adopt. Schools are encouraged to carry
 on with their current practices for reporting students’ progress levels. Common reporting
 approaches of schools include portfolios and progress reports/cards. For schools that choose
@@ -14916,10 +14705,9 @@ reporting format that is similar to that of HDP. For these schools, they have de
 statements that best characterise the key learning intentions from across the learning areas.
 
 229
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-7.
+
+7.
 
 GLOSSARY
 
@@ -14981,10 +14769,9 @@ eco-literacy, and sustainability. This forms the core of Outdoor Education
 learning area framework.
 
 230
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Environmental
+
+Environmental
 cues
 
 Natural or urban structures, signals and landmarks within the surrounding
@@ -15054,10 +14841,9 @@ Sufficient ability, skill, and knowledge to meet the demands of a particular
 physical activity.
 
 231
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Movement
+
+Movement
 concepts
 
 The ideas used to modify or enrich the range and effectiveness of the skills
@@ -15126,10 +14912,9 @@ skills and understandings expected to be gained by most students as a
 result of effective teaching and learning.
 
 232
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Pedagogical
+
+Pedagogical
 Focus
 (plural: foci)
 
@@ -15199,10 +14984,9 @@ Education, students learn to use these cues based on the understanding
 that real world experiences engage all our senses so we can elicit meaning
 and emotions to learn and draw connections.
 233
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Skill-related
+
+Skill-related
 fitness
 
 Refers to the components of physical fitness that are related to quality of
@@ -15231,10 +15015,9 @@ facilities) in which people live, learn, work, travel, and play (Lee et al.,
 2022).
 
 234
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-8.
+
+8.
 
 REFERENCES
 
@@ -15269,10 +15052,9 @@ Halverson, L.E., McGee, R. & Roberton, M.A. (1984). Physical Education for child
 on the teaching process (2nd ed). Philadelphia: Lea & Febiger.
 
 235
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Leong, W.S. (2014). Assessment with teaching and learning: Promises, problems and
+
+Leong, W.S. (2014). Assessment with teaching and learning: Promises, problems and
 proposals for practice. In C. Ratnam, L. Fernandez, and M. Bakar (Eds.), Curriculum Designs
 for Teachers by Teachers. Singapore: Pearson.
 Mitchell, D., Davis, B., & Lopez, R. (2002). Teaching fundamental gymnastics skills. USA:
@@ -15291,10 +15073,9 @@ Publishing.
 Wiliam, D. (2018). Embedded formative assessment. Bloomington, IN: Solution Tree Press.
 
 236
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-9.
+
+9.
 
 ACKNOWLEDGEMENT
 
@@ -15393,10 +15174,9 @@ Steven Tan (Dr)
 Associate Professor, Physical Education and Sports
 Science, National Institute of Education
 237
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-Member (Ministry of Education)
+
+Member (Ministry of Education)
 1.
 
 Clement Lim
@@ -15504,10 +15284,9 @@ Tan Lay Eng
 Education Officer, Outdoor Education
 
 238
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
 
-OTHER EXTERNAL ORGANISATIONS WHICH WERE CONSULTED
+
+OTHER EXTERNAL ORGANISATIONS WHICH WERE CONSULTED
 Football Association of Singapore
 Land Transport Authority
 National Environment Agency
@@ -15525,7 +15304,6 @@ in one way or another, participated in the process of the development and refine
 2024 Physical Education Syllabus.
 
 239
-OFFICIAL (CLOSED) / NON-SENSITIVE
-FOR USE BY EDUCATION OFFICERS ONLY
+
 
 `;
