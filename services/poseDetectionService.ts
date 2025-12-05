@@ -13,39 +13,65 @@ export interface MovementAnalysis {
 }
 
 class PoseDetectionService {
-    private poseLandmarker: PoseLandmarker | null = null;
-    private initPromise: Promise<void> | null = null;
+    private imageLandmarker: PoseLandmarker | null = null;
+    private videoLandmarker: PoseLandmarker | null = null;
+    private initPromiseImage: Promise<void> | null = null;
+    private initPromiseVideo: Promise<void> | null = null;
 
-    async initialize() {
-        if (this.initPromise) return this.initPromise;
+    // Helper to load vision tasks
+    private async createVision() {
+        return await FilesetResolver.forVisionTasks(
+            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        );
+    }
 
-        this.initPromise = (async () => {
-            console.log('🎯 Initializing MediaPipe Pose Landmarker...');
-            const vision = await FilesetResolver.forVisionTasks(
-                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-            );
-            this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-                baseOptions: {
-                    modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
-                    delegate: 'CPU'
-                },
-                numPoses: 1,
-                minPoseDetectionConfidence: 0.5,
-                minPosePresenceConfidence: 0.5,
-                minTrackingConfidence: 0.5,
-                runningMode: 'VIDEO'
-            });
-            console.log('✅ MediaPipe Pose Landmarker (Full/CPU) initialized');
+    // Helper to create options
+    private createOptions(runningMode: 'IMAGE' | 'VIDEO') {
+        return {
+            baseOptions: {
+                modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
+                delegate: 'CPU' as const
+            },
+            numPoses: 1,
+            minPoseDetectionConfidence: 0.5,
+            minPosePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+            runningMode: runningMode
+        };
+    }
+
+    async initializeImageMode() {
+        if (this.initPromiseImage) return this.initPromiseImage;
+
+        this.initPromiseImage = (async () => {
+            console.log('📷 Initializing MediaPipe Pose Landmarker (IMAGE Mode)...');
+            const vision = await this.createVision();
+            this.imageLandmarker = await PoseLandmarker.createFromOptions(vision, this.createOptions('IMAGE'));
+            console.log('✅ MediaPipe Pose Landmarker (IMAGE Mode) initialized');
         })();
 
-        return this.initPromise;
+        return this.initPromiseImage;
+    }
+
+    async initializeVideoMode() {
+        if (this.initPromiseVideo) return this.initPromiseVideo;
+
+        this.initPromiseVideo = (async () => {
+            console.log('🎥 Initializing MediaPipe Pose Landmarker (VIDEO Mode)...');
+            const vision = await this.createVision();
+            this.videoLandmarker = await PoseLandmarker.createFromOptions(vision, this.createOptions('VIDEO'));
+            console.log('✅ MediaPipe Pose Landmarker (VIDEO Mode) initialized');
+        })();
+
+        return this.initPromiseVideo;
     }
 
     async detectPoseFromImage(imageElement: HTMLImageElement): Promise<PoseData | null> {
-        if (!this.poseLandmarker) await this.initialize();
+        if (!this.imageLandmarker) await this.initializeImageMode();
 
         try {
-            const result = this.poseLandmarker!.detectForVideo(imageElement, Date.now());
+            // IMAGE mode doesn't need timestamp
+            const result = this.imageLandmarker!.detect(imageElement);
             if (result.landmarks.length > 0) {
                 return {
                     landmarks: result.landmarks[0] as NormalizedLandmark[],
@@ -53,16 +79,35 @@ class PoseDetectionService {
                 };
             }
         } catch (error) {
-            console.error('Pose detection error:', error);
+            console.error('Pose detection error (Image):', error);
+        }
+        return null;
+    }
+
+    async detectPoseFrame(videoElement: HTMLVideoElement): Promise<PoseData | null> {
+        if (!this.imageLandmarker) await this.initializeImageMode();
+
+        try {
+            // Treat video frame as an image (stateless detection)
+            // This is more robust for playback loops or seeking than VIDEO mode
+            const result = this.imageLandmarker!.detect(videoElement);
+            if (result.landmarks.length > 0) {
+                return {
+                    landmarks: result.landmarks[0] as NormalizedLandmark[],
+                    worldLandmarks: result.worldLandmarks[0] as NormalizedLandmark[]
+                };
+            }
+        } catch (error) {
+            console.warn('Pose detection warning (Frame/Image Mode):', error);
         }
         return null;
     }
 
     async detectPoseFromVideo(videoElement: HTMLVideoElement, timestamp: number): Promise<PoseData | null> {
-        if (!this.poseLandmarker) await this.initialize();
+        if (!this.videoLandmarker) await this.initializeVideoMode();
 
         try {
-            const result = this.poseLandmarker!.detectForVideo(videoElement, timestamp);
+            const result = this.videoLandmarker!.detectForVideo(videoElement, timestamp);
             if (result.landmarks.length > 0) {
                 return {
                     landmarks: result.landmarks[0] as NormalizedLandmark[],
@@ -70,7 +115,7 @@ class PoseDetectionService {
                 };
             }
         } catch (error) {
-            console.warn('Pose detection warning:', error);
+            console.warn('Pose detection warning (Video):', error);
         }
         return null;
     }
@@ -208,6 +253,24 @@ class PoseDetectionService {
         const bodyAlignment = shoulderWidth > 0.25 ? 'body rotated/sideways' : 'facing camera';
 
         return `Right arm: ${rightArmPosition}, Left arm: ${leftArmPosition}, Body: ${bodyAlignment}`;
+    }
+
+    async drawPoseToImage(imageElement: HTMLImageElement, pose: PoseData): Promise<string> {
+        const canvas = document.createElement('canvas');
+        canvas.width = imageElement.naturalWidth;
+        canvas.height = imageElement.naturalHeight;
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) return '';
+
+        // Draw original image
+        ctx.drawImage(imageElement, 0, 0);
+
+        // Draw pose on top
+        this.drawPose(ctx, pose);
+
+        // Return base64
+        return canvas.toDataURL('image/jpeg', 0.8);
     }
 }
 

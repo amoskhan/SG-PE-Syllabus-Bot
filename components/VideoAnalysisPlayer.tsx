@@ -58,8 +58,9 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
 
             try {
                 // Detect and Draw
-                // Use Date.now() for timestamp to ensure it's always increasing, which MediaPipe VIDEO mode requires
-                const pose = await poseDetectionService.detectPoseFromVideo(video, Date.now());
+                // Use detectPoseFrame (Image Mode) for robust playback tracking
+                // This bypasses strict timestamp requirements which can break on loops/seeking
+                const pose = await poseDetectionService.detectPoseFrame(video);
 
                 // Clear and draw
                 ctx.clearRect(0, 0, canvas.width, canvas.height);

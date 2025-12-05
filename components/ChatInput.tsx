@@ -26,8 +26,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const validFiles = files.filter(f =>
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    const validFiles = files.filter((f: File) =>
       f.type.startsWith('image/') || f.type.startsWith('video/')
     );
     setSelectedFiles(prev => [...prev, ...validFiles]);

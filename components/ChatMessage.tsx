@@ -70,6 +70,26 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             </div>
           )}
 
+          {/* Analysis Breakdown (Visual Proof) */}
+          {!isBot && message.analysisFrames && message.analysisFrames.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1 ml-1 flex items-center gap-1">
+                <span>Analysis Breakdown</span>
+                <span className="bg-green-100 text-green-700 px-1 rounded text-[9px]">AI DEBUG</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200">
+                {message.analysisFrames.map((frame, idx) => (
+                  <div key={idx} className="flex-shrink-0 w-24 h-32 bg-black rounded-lg overflow-hidden border border-slate-200 shadow-sm relative group">
+                    <img src={frame} alt={`Analysis Frame ${idx}`} className="w-full h-full object-cover" />
+                    <div className="absolute top-1 left-1 bg-black/60 text-white text-[8px] px-1 rounded backdrop-blur-sm">
+                      Frame {idx + 1}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Grounding Sources */}
           {isBot && message.groundingChunks && message.groundingChunks.length > 0 && (
             <div className="flex flex-col gap-1 mt-1">

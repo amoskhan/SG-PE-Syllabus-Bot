@@ -30,6 +30,7 @@ export interface Message {
   media?: MediaAttachment[];
   poseData?: any[]; // Store pose data for conversation context
   predictedSkill?: string; // Store predicted skill for video overlay
+  analysisFrames?: string[]; // Visual proof of analysis (images with skeletons)
 }
 
 export interface ChatState {

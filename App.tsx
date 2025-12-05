@@ -50,10 +50,11 @@ const App: React.FC = () => {
   };
 
   // Helper function to process media files
-  const processMediaFiles = async (files: File[]): Promise<{ attachments: MediaAttachment[], poseData: PoseData[], analysisFrames: MediaData[] }> => {
+  const processMediaFiles = async (files: File[]): Promise<{ attachments: MediaAttachment[], poseData: PoseData[], analysisFrames: MediaData[], debugFrames: string[] }> => {
     const attachments: MediaAttachment[] = [];
     const poseData: PoseData[] = [];
     const analysisFrames: MediaData[] = [];
+    const debugFrames: string[] = [];
 
     for (const file of files) {
       if (file.type.startsWith('image/')) {
@@ -78,10 +79,14 @@ const App: React.FC = () => {
         const pose = await poseDetectionService.detectPoseFromImage(img);
         if (pose) {
           poseData.push(pose);
+          // Generate debug frame with skeleton
+          const debugFrame = await poseDetectionService.drawPoseToImage(img, pose);
+          if (debugFrame) debugFrames.push(debugFrame);
         }
       } else if (file.type.startsWith('video/')) {
         // Process video - extract frames
-        const frames = await extractVideoFrames(file, 6);
+        // Increase frame count to 12 for better kinetic chain analysis
+        const frames = await extractVideoFrames(file, 12);
         // Use Blob URL for efficient playback instead of Base64
         const videoUrl = URL.createObjectURL(file);
 
@@ -109,16 +114,19 @@ const App: React.FC = () => {
           const pose = await poseDetectionService.detectPoseFromImage(img);
           if (pose) {
             poseData.push({ ...pose, timestamp: i });
+            // Generate debug frame with skeleton
+            const debugFrame = await poseDetectionService.drawPoseToImage(img, pose);
+            if (debugFrame) debugFrames.push(debugFrame);
           }
         }
       }
     }
 
-    return { attachments, poseData, analysisFrames };
+    return { attachments, poseData, analysisFrames, debugFrames };
   };
 
   // Extract frames from video
-  const extractVideoFrames = (file: File, numFrames: number = 6): Promise<string[]> => {
+  const extractVideoFrames = (file: File, numFrames: number = 12): Promise<string[]> => {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       const canvas = document.createElement('canvas');
@@ -164,12 +172,14 @@ const App: React.FC = () => {
     let mediaAttachments: MediaAttachment[] | undefined;
     let poseData: PoseData[] | undefined;
     let analysisFrames: MediaData[] | undefined;
+    let debugFrames: string[] | undefined;
 
     if (files && files.length > 0) {
       const processed = await processMediaFiles(files);
       mediaAttachments = processed.attachments;
       poseData = processed.poseData;
       analysisFrames = processed.analysisFrames;
+      debugFrames = processed.debugFrames;
     }
 
     const newMessage: Message = {
@@ -178,7 +188,8 @@ const App: React.FC = () => {
       sender: Sender.USER,
       timestamp: new Date(),
       media: mediaAttachments,
-      poseData: poseData // Store pose data in message
+      poseData: poseData, // Store pose data in message
+      analysisFrames: debugFrames // Visual proof of analysis
     };
 
     setMessages((prev) => [...prev, newMessage]);
