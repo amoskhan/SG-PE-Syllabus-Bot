@@ -5,9 +5,10 @@ import { Analytics } from "@vercel/analytics/react";
 import Header from './components/Header';
 import ChatInput from './components/ChatInput';
 import ChatMessage from './components/ChatMessage';
-import { Message, Sender, PE_TOPICS } from './types';
-import { sendMessageToGemini } from './services/geminiService';
+import { Message, Sender, PE_TOPICS, MediaAttachment } from './types';
+import { sendMessageToGemini, MediaData } from './services/geminiService';
 import { sendMessageToBedrock } from './services/bedrockService';
+import { poseDetectionService, type PoseData } from './services/poseDetectionService';
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -27,12 +28,157 @@ const App: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  const handleSendMessage = async (text: string) => {
+  // Helper to load image from URL
+  const loadImageFromUrl = (url: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
+    });
+  };
+
+  // Convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Helper function to process media files
+  const processMediaFiles = async (files: File[]): Promise<{ attachments: MediaAttachment[], poseData: PoseData[], analysisFrames: MediaData[] }> => {
+    const attachments: MediaAttachment[] = [];
+    const poseData: PoseData[] = [];
+    const analysisFrames: MediaData[] = [];
+
+    for (const file of files) {
+      if (file.type.startsWith('image/')) {
+        // Process image
+        const base64 = await fileToBase64(file);
+        attachments.push({
+          id: Date.now().toString() + Math.random(),
+          type: 'image',
+          mimeType: file.type,
+          data: base64,
+          fileName: file.name
+        });
+
+        // Add to analysis frames
+        analysisFrames.push({
+          mimeType: file.type,
+          data: base64
+        });
+
+        // Detect pose from image
+        const img = await loadImageFromUrl(base64);
+        const pose = await poseDetectionService.detectPoseFromImage(img);
+        if (pose) {
+          poseData.push(pose);
+        }
+      } else if (file.type.startsWith('video/')) {
+        // Process video - extract frames
+        const frames = await extractVideoFrames(file, 6);
+        // Use Blob URL for efficient playback instead of Base64
+        const videoUrl = URL.createObjectURL(file);
+
+        // Store video for playback
+        attachments.push({
+          id: Date.now().toString() + Math.random(),
+          type: 'video',
+          mimeType: file.type,
+          data: videoUrl, // Use Blob URL
+          fileName: file.name,
+          thumbnailData: frames[0]
+        });
+
+        // Add extracted frames to analysis payload (instead of full video)
+        frames.forEach(frame => {
+          analysisFrames.push({
+            mimeType: 'image/jpeg',
+            data: frame
+          });
+        });
+
+        // Detect poses from each frame
+        for (let i = 0; i < frames.length; i++) {
+          const img = await loadImageFromUrl(frames[i]);
+          const pose = await poseDetectionService.detectPoseFromImage(img);
+          if (pose) {
+            poseData.push({ ...pose, timestamp: i });
+          }
+        }
+      }
+    }
+
+    return { attachments, poseData, analysisFrames };
+  };
+
+  // Extract frames from video
+  const extractVideoFrames = (file: File, numFrames: number = 6): Promise<string[]> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const frames: string[] = [];
+
+      video.preload = 'metadata';
+      video.src = URL.createObjectURL(file);
+
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const duration = video.duration;
+        const interval = duration / (numFrames + 1);
+        let currentFrame = 0;
+
+        const captureFrame = () => {
+          if (currentFrame >= numFrames) {
+            URL.revokeObjectURL(video.src);
+            resolve(frames);
+            return;
+          }
+
+          const time = interval * (currentFrame + 1);
+          video.currentTime = time;
+        };
+
+        video.onseeked = () => {
+          ctx!.drawImage(video, 0, 0, canvas.width, canvas.height);
+          frames.push(canvas.toDataURL('image/jpeg', 0.8));
+          currentFrame++;
+          captureFrame();
+        };
+
+        video.onerror = () => reject(new Error('Failed to load video'));
+        captureFrame();
+      };
+    });
+  };
+
+  const handleSendMessage = async (text: string, files?: File[]) => {
+    // Process media files if present
+    let mediaAttachments: MediaAttachment[] | undefined;
+    let poseData: PoseData[] | undefined;
+    let analysisFrames: MediaData[] | undefined;
+
+    if (files && files.length > 0) {
+      const processed = await processMediaFiles(files);
+      mediaAttachments = processed.attachments;
+      poseData = processed.poseData;
+      analysisFrames = processed.analysisFrames;
+    }
+
     const newMessage: Message = {
       id: Date.now().toString(),
-      text,
+      text: text || (mediaAttachments ? 'Analyze this movement' : ''),
       sender: Sender.USER,
       timestamp: new Date(),
+      media: mediaAttachments,
+      poseData: poseData // Store pose data in message
     };
 
     setMessages((prev) => [...prev, newMessage]);
@@ -48,13 +194,27 @@ const App: React.FC = () => {
           parts: [{ text: m.text } as Part]
         }));
 
-        // Add the new user message to history (gemini 2.5 flash handles context well)
+        // Add the new user message to history
         history.push({
           role: 'user',
-          parts: [{ text }]
+          parts: [{ text: newMessage.text }]
         });
 
-        response = await sendMessageToGemini(history, text);
+        // Find the most recent pose data from this conversation
+        // (either from the current message or a previous one in this session)
+        let contextPoseData = poseData;
+        if (!contextPoseData) {
+          // Look backwards through messages to find the most recent pose data
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].poseData && messages[i].poseData!.length > 0) {
+              contextPoseData = messages[i].poseData;
+              console.log('📌 Using pose data from previous message for context');
+              break;
+            }
+          }
+        }
+
+        response = await sendMessageToGemini(history, newMessage.text, contextPoseData, analysisFrames);
       } else {
         // Bedrock uses a simpler format
         const history = messages.map(m => ({
@@ -73,7 +233,26 @@ const App: React.FC = () => {
         groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined
       };
 
-      setMessages((prev) => [...prev, botMessage]);
+      // Check for predicted skill in response
+      const skillMatch = response.text.match(/I believe this is a \*\*([^*]+)\*\*/i);
+      const detectedSkill = skillMatch ? skillMatch[1] : undefined;
+
+      setMessages((prev) => {
+        const updatedMessages = [...prev];
+
+        // If skill detected, update the last user message with video
+        if (detectedSkill) {
+          for (let i = updatedMessages.length - 1; i >= 0; i--) {
+            if (updatedMessages[i].sender === Sender.USER && updatedMessages[i].media?.some(m => m.type === 'video')) {
+              updatedMessages[i] = { ...updatedMessages[i], predictedSkill: detectedSkill };
+              console.log(`✅ Updated video message with skill: ${detectedSkill}`);
+              break;
+            }
+          }
+        }
+
+        return [...updatedMessages, botMessage];
+      });
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),

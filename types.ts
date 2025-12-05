@@ -11,6 +11,15 @@ export interface GroundingChunk {
   };
 }
 
+export interface MediaAttachment {
+  id: string;
+  type: 'image' | 'video';
+  mimeType: string;
+  data: string; // base64 encoded
+  fileName: string;
+  thumbnailData?: string; // for video preview
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -18,6 +27,9 @@ export interface Message {
   timestamp: Date;
   isError?: boolean;
   groundingChunks?: GroundingChunk[];
+  media?: MediaAttachment[];
+  poseData?: any[]; // Store pose data for conversation context
+  predictedSkill?: string; // Store predicted skill for video overlay
 }
 
 export interface ChatState {
