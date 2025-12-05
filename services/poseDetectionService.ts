@@ -26,8 +26,8 @@ class PoseDetectionService {
             );
             this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
                 baseOptions: {
-                    modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task',
-                    delegate: 'GPU'
+                    modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
+                    delegate: 'CPU'
                 },
                 numPoses: 1,
                 minPoseDetectionConfidence: 0.5,
@@ -35,7 +35,7 @@ class PoseDetectionService {
                 minTrackingConfidence: 0.5,
                 runningMode: 'VIDEO'
             });
-            console.log('✅ MediaPipe Pose Landmarker (Heavy) initialized');
+            console.log('✅ MediaPipe Pose Landmarker (Full/CPU) initialized');
         })();
 
         return this.initPromise;
@@ -82,7 +82,6 @@ class PoseDetectionService {
 
         // Draw connections
         if (PoseLandmarker.POSE_CONNECTIONS) {
-            ctx.lineWidth = 4;
             for (const connection of PoseLandmarker.POSE_CONNECTIONS) {
                 const startIdx = connection.start;
                 const endIdx = connection.end;
@@ -90,26 +89,22 @@ class PoseDetectionService {
                 const startLandmark = landmarks[startIdx];
                 const endLandmark = landmarks[endIdx];
 
-                // Check visibility using 0.5 threshold if standard model
-                // But for lite model often visibility is not set or reliable, can check presence
-
                 const x1 = startLandmark.x * width;
                 const y1 = startLandmark.y * height;
                 const x2 = endLandmark.x * width;
                 const y2 = endLandmark.y * height;
 
-                // Draw white outline/base
+                // Draw white outline/base (Thicker for better visibility)
                 ctx.beginPath();
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.strokeStyle = 'white';
-                ctx.lineWidth = 6;
+                ctx.lineWidth = 8;
                 ctx.stroke();
 
                 // Draw colored inner line based on side (Left=Cyan, Right=Orange)
                 // Left side indices are usually odd, Right side even (in MediaPipe Body)
-                // Color logic: if both points are odd -> Left (Cyan), both even -> Right (Orange)
-                let color = '#00FF00'; // Default Green (Center)
+                let color = '#FFFFFF';
 
                 if (startIdx % 2 !== 0 && endIdx % 2 !== 0) {
                     color = '#00FFFF'; // Cyan
@@ -121,7 +116,7 @@ class PoseDetectionService {
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.strokeStyle = color;
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 4;
                 ctx.stroke();
             }
         }
@@ -133,9 +128,9 @@ class PoseDetectionService {
             const y = landmark.y * height;
 
             // Inner color
-            let color = '#0000FF'; // Blue default
+            let color = '#FFFFFF';
             if (i % 2 !== 0) color = '#00FFFF'; // Cyan
-            else color = '#FFA500'; // Orange
+            else if (i % 2 === 0) color = '#FFA500'; // Orange
 
             // Draw circle
             ctx.beginPath();

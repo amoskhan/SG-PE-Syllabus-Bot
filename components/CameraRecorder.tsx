@@ -73,7 +73,7 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onVideoRecorded, onClos
                 if (now - lastFpsTimeRef.current >= 1000) {
                     const fps = Math.round(frameCountRef.current * 1000 / (now - lastFpsTimeRef.current));
                     // Update debug status only once per second to avoid re-renders
-                    setDebugStatus(`FPS: ${fps} | Model: Heavy`);
+                    setDebugStatus(`FPS: ${fps} | Model: Full (CPU)`);
                     frameCountRef.current = 0;
                     lastFpsTimeRef.current = now;
                 }
