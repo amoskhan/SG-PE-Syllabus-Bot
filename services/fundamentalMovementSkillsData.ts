@@ -125,3 +125,41 @@ Performance Criteria / Critical Features:
 5. Flex dominant wrist and extend elbow in the same downward direction as the ball
 6. Contact ball using finger pads at waist level or below
 `;
+
+export const PROFICIENCY_RUBRIC = `
+**PROFICIENCY RUBRIC (4 LEVELS)**
+
+**1. Beginning (Emerging)**
+- **Criteria**: Meets fewer than 50% of the critical features.
+- **Characteristics**: Movement is disjointed, uncoordinated, or incorrect. Significant gaps in understanding the skill.
+- **Feedback Focus**: Correcting fundamental errors (e.g., wrong foot forward).
+
+**2. Developing**
+- **Criteria**: Meets most criteria (approx. 50-80%) but misses 1-2 key points.
+- **Characteristics**: Good attempt, but movement may be segmented or lack smooth flow. "Almost there".
+- **Feedback Focus**: Refining specific missed checkpoints (e.g., "Step bigger", "Follow through more").
+
+**3. Competent (Proficient)**
+- **Criteria**: Meets **ALL** critical features in the checklist.
+- **Characteristics**: Text-book execution. Fluid, coordinated, and correct biomechanics.
+- **Feedback Focus**: Maintaining consistency.
+
+**4. Excellent**
+- **Criteria**: Meets all criteria **AND** demonstrates superior quality.
+- **Characteristics**: "Wow" factor. Exceptional smoothness, power, dynamic balance, or consistency. Looks natural and effortless.
+- **Feedback Focus**: Advanced refinements or variations.
+- **Visual Comparison**: The movement should closely mirror the form shown in the provided textbook reference image.
+`;
+
+export const SKILL_REFERENCE_IMAGES: Record<string, string> = {
+    "Underhand Throw": "/assets/reference_images/underhand_throw.jpg",
+    "Underhand Roll": "/assets/reference_images/underhand_roll.jpg",
+    "Overhand Throw": "/assets/reference_images/overhand_throw.jpg",
+    "Kick": "/assets/reference_images/kick.jpg",
+    "Dribble with hands": "/assets/reference_images/dribble_hands.jpg",
+    "Dribble with feet": "/assets/reference_images/dribble_feet.jpg",
+    "Chest Pass": "/assets/reference_images/chest_pass.jpg",
+    "Catch above waist": "/assets/reference_images/catch_above_waist.jpg",
+    "Bounce pass": "/assets/reference_images/bounce_pass.jpg",
+    "Bounce": "/assets/reference_images/bounce.jpg"
+};

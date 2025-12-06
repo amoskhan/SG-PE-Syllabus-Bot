@@ -26,7 +26,7 @@ const App: React.FC = () => {
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  }, [messages.length, isLoading]);
 
   // Helper to load image from URL
   const loadImageFromUrl = (url: string): Promise<HTMLImageElement> => {
@@ -50,15 +50,21 @@ const App: React.FC = () => {
   };
 
   // Helper function to process media files
-  const processMediaFiles = async (files: File[]): Promise<{ attachments: MediaAttachment[], poseData: PoseData[], analysisFrames: MediaData[], debugFrames: string[] }> => {
+  const processMediaFiles = async (
+    files: File[],
+    metadata?: { startTime?: number; endTime?: number }
+  ): Promise<{ attachments: MediaAttachment[], poseData: PoseData[], analysisFrames: MediaData[], debugFrames: string[] }> => {
     const attachments: MediaAttachment[] = [];
-    const poseData: PoseData[] = [];
+    let poseData: PoseData[] = [];
     const analysisFrames: MediaData[] = [];
     const debugFrames: string[] = [];
 
+    // Store images for post-processing drawing
+    const processedImages: { img: HTMLImageElement, pose: any, ball: any, timestamp: number }[] = [];
+
     for (const file of files) {
       if (file.type.startsWith('image/')) {
-        // Process image
+        // ... (image processing remains same)
         const base64 = await fileToBase64(file);
         attachments.push({
           id: Date.now().toString() + Math.random(),
@@ -68,57 +74,69 @@ const App: React.FC = () => {
           fileName: file.name
         });
 
-        // Add to analysis frames
-        analysisFrames.push({
-          mimeType: file.type,
-          data: base64
-        });
-
-        // Detect pose from image
         const img = await loadImageFromUrl(base64);
         const pose = await poseDetectionService.detectPoseFromImage(img);
+
+        // For single images, static usage isn't applicable, but we keep consistency
+        const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
+
         if (pose) {
-          poseData.push(pose);
-          // Generate debug frame with skeleton
-          const debugFrame = await poseDetectionService.drawPoseToImage(img, pose);
-          if (debugFrame) debugFrames.push(debugFrame);
+          processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0 });
         }
+
       } else if (file.type.startsWith('video/')) {
-        // Process video - extract frames
-        // Increase frame count to 12 for better kinetic chain analysis
-        const frames = await extractVideoFrames(file, 12);
-        // Use Blob URL for efficient playback instead of Base64
+        // Process video - extract frames respecting trim range
+        const frames = await extractVideoFrames(file, 24, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
 
-        // Store video for playback
         attachments.push({
           id: Date.now().toString() + Math.random(),
           type: 'video',
           mimeType: file.type,
-          data: videoUrl, // Use Blob URL
+          data: videoUrl,
           fileName: file.name,
           thumbnailData: frames[0]
         });
 
-        // Add extracted frames to analysis payload (instead of full video)
-        frames.forEach(frame => {
-          analysisFrames.push({
-            mimeType: 'image/jpeg',
-            data: frame
-          });
-        });
-
-        // Detect poses from each frame
         for (let i = 0; i < frames.length; i++) {
           const img = await loadImageFromUrl(frames[i]);
+
+          // PHASE 1: Detect Pose FIRST
           const pose = await poseDetectionService.detectPoseFromImage(img);
+
+          // PHASE 2: Detect Ball
+          const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
+
           if (pose) {
-            poseData.push({ ...pose, timestamp: i });
-            // Generate debug frame with skeleton
-            const debugFrame = await poseDetectionService.drawPoseToImage(img, pose);
-            if (debugFrame) debugFrames.push(debugFrame);
+            processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
           }
         }
+      }
+    }
+
+    // PHASE 3: Post-Process Filtering (Static Object Suppression) - REMOVED per user request
+    // User wants manual control and better detection logic instead of brute-force filtering.
+    let rawPoseData = processedImages.map(p => ({ ...p.pose, timestamp: p.timestamp, ball: p.ball }));
+    poseData = rawPoseData;
+
+    // PHASE 4: Generate Debug/Analysis Frames using Filtered Data
+    for (let i = 0; i < processedImages.length; i++) {
+      const data = processedImages[i];
+      // Find the filtered version of this pose
+      const filteredPose = poseData[i];
+
+      // Add to main list
+      // Note: poseData is already populated by the filter function return
+
+      // Draw using the UPDATED ball status/validity
+      const debugFrame = await poseDetectionService.drawPoseToImage(data.img, filteredPose, filteredPose.ball);
+
+      if (debugFrame) {
+        debugFrames.push(debugFrame);
+        analysisFrames.push({
+          mimeType: 'image/jpeg', // Assuming jpeg
+          data: debugFrame
+        });
       }
     }
 
@@ -126,7 +144,12 @@ const App: React.FC = () => {
   };
 
   // Extract frames from video
-  const extractVideoFrames = (file: File, numFrames: number = 12): Promise<string[]> => {
+  const extractVideoFrames = (
+    file: File,
+    numFrames: number = 12,
+    startTime?: number,
+    endTime?: number
+  ): Promise<string[]> => {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       const canvas = document.createElement('canvas');
@@ -139,7 +162,13 @@ const App: React.FC = () => {
       video.onloadedmetadata = () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        const duration = video.duration;
+
+        // Determine trim range
+        const start = startTime !== undefined ? startTime : 0;
+        const end = endTime !== undefined ? endTime : video.duration;
+        const duration = Math.max(0, end - start);
+
+        // Interval calculation
         const interval = duration / (numFrames + 1);
         let currentFrame = 0;
 
@@ -150,13 +179,20 @@ const App: React.FC = () => {
             return;
           }
 
-          const time = interval * (currentFrame + 1);
-          video.currentTime = time;
+          // Seek to: start time + (interval * step)
+          // We add interval to avoid just getting the very first frame repeatedly if interval is small? 
+          // Actually standard sampling: start + interval * (i+0.5) is center, or start + interval * (i)
+          // Let's do start + interval * (currentFrame + 0.5) for centered sampling
+          const time = start + (interval * (currentFrame + 0.5));
+
+          video.currentTime = Math.min(time, end);
         };
 
         video.onseeked = () => {
-          ctx!.drawImage(video, 0, 0, canvas.width, canvas.height);
-          frames.push(canvas.toDataURL('image/jpeg', 0.8));
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            frames.push(canvas.toDataURL('image/jpeg', 0.8));
+          }
           currentFrame++;
           captureFrame();
         };
@@ -167,7 +203,11 @@ const App: React.FC = () => {
     });
   };
 
-  const handleSendMessage = async (text: string, files?: File[]) => {
+  const handleSendMessage = async (
+    text: string,
+    files?: File[],
+    metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean }
+  ) => {
     // Process media files if present
     let mediaAttachments: MediaAttachment[] | undefined;
     let poseData: PoseData[] | undefined;
@@ -175,7 +215,7 @@ const App: React.FC = () => {
     let debugFrames: string[] | undefined;
 
     if (files && files.length > 0) {
-      const processed = await processMediaFiles(files);
+      const processed = await processMediaFiles(files, metadata);
       mediaAttachments = processed.attachments;
       poseData = processed.poseData;
       analysisFrames = processed.analysisFrames;
@@ -199,23 +239,19 @@ const App: React.FC = () => {
       let response;
 
       if (selectedModel === 'gemini') {
-        // Convert internal message format to Gemini Content format
         const history: Content[] = messages.map(m => ({
           role: m.sender === Sender.USER ? 'user' : 'model',
           parts: [{ text: m.text } as Part]
         }));
 
-        // Add the new user message to history
         history.push({
           role: 'user',
           parts: [{ text: newMessage.text }]
         });
 
-        // Find the most recent pose data from this conversation
-        // (either from the current message or a previous one in this session)
+        // Context finding for pose data
         let contextPoseData = poseData;
         if (!contextPoseData) {
-          // Look backwards through messages to find the most recent pose data
           for (let i = messages.length - 1; i >= 0; i--) {
             if (messages[i].poseData && messages[i].poseData!.length > 0) {
               contextPoseData = messages[i].poseData;
@@ -225,9 +261,9 @@ const App: React.FC = () => {
           }
         }
 
-        response = await sendMessageToGemini(history, newMessage.text, contextPoseData, analysisFrames);
+        // Pass isVerified from metadata (default undefined/false)
+        response = await sendMessageToGemini(history, newMessage.text, contextPoseData, analysisFrames, metadata?.skillName, metadata?.isVerified);
       } else {
-        // Bedrock uses a simpler format
         const history = messages.map(m => ({
           role: m.sender === Sender.USER ? 'user' : 'assistant',
           content: m.text
@@ -241,17 +277,19 @@ const App: React.FC = () => {
         text: response.text,
         sender: Sender.BOT,
         timestamp: new Date(),
-        groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined
+        groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined,
+        referenceImageURI: selectedModel === 'gemini' ? response.referenceImageURI : undefined
       };
 
-      // Check for predicted skill in response
-      const skillMatch = response.text.match(/I believe this is a \*\*([^*]+)\*\*/i);
+      // Check for predicted skill in response (Supports both formats)
+      // 1. "I believe this is a **Skill**" (Standard)
+      // 2. "this looks like a **Skill**" (Verification Mode)
+      const skillMatch = response.text.match(/(?:I believe this is a|this looks like a) \*\*([^*]+)\*\*/i);
       const detectedSkill = skillMatch ? skillMatch[1] : undefined;
 
       setMessages((prev) => {
         const updatedMessages = [...prev];
 
-        // If skill detected, update the last user message with video
         if (detectedSkill) {
           for (let i = updatedMessages.length - 1; i >= 0; i--) {
             if (updatedMessages[i].sender === Sender.USER && updatedMessages[i].media?.some(m => m.type === 'video')) {
@@ -264,10 +302,24 @@ const App: React.FC = () => {
 
         return [...updatedMessages, botMessage];
       });
+
     } catch (error) {
+      console.error("Error generating response:", error);
+      let errorText = `Error: ${error instanceof Error ? error.message : String(error)}`;
+
+      const errorMsgLower = errorText.toLowerCase();
+      if (
+        errorMsgLower.includes('429') ||
+        errorMsgLower.includes('quota') ||
+        errorMsgLower.includes('limit') ||
+        errorMsgLower.includes('resource exhausted')
+      ) {
+        errorText = "⚠️ Usage limit reached. The AI is a bit tired. Please wait a minute before trying again.";
+      }
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        text: errorText,
         sender: Sender.BOT,
         timestamp: new Date(),
         isError: true
@@ -280,6 +332,21 @@ const App: React.FC = () => {
 
   const handleChipClick = (topic: string) => {
     handleSendMessage(`Tell me about ${topic}`);
+  };
+
+  const handleAnalyzeConfirm = (message: Message) => {
+    // When user confirms, we send the UPDATED pose data (from message state) back to AI
+    // We treat this as a text command "Analyze [Skill]" but attach the existing data context
+
+    // 1. Find the skill name if present in message or inferred
+    const skillName = message.predictedSkill || "Movement";
+
+    // 2. Trigger analysis with isVerified = true
+    handleSendMessage(
+      "Analyze Now",
+      undefined,
+      { skillName: skillName, isVerified: true }
+    );
   };
 
   return (
@@ -340,7 +407,14 @@ const App: React.FC = () => {
           )}
 
           {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
+            <ChatMessage
+              key={msg.id}
+              message={msg}
+              onUpdateMessage={(updatedMsg) => {
+                setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
+              }}
+              onAnalyze={handleAnalyzeConfirm}
+            />
           ))}
 
           {isLoading && (

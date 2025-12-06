@@ -31,6 +31,8 @@ export interface Message {
   poseData?: any[]; // Store pose data for conversation context
   predictedSkill?: string; // Store predicted skill for video overlay
   analysisFrames?: string[]; // Visual proof of analysis (images with skeletons)
+  referenceImageURI?: string; // URI of the textbook reference image used
+  isAmbiguous?: boolean; // Flag if AI is unsure and needs teacher review
 }
 
 export interface ChatState {

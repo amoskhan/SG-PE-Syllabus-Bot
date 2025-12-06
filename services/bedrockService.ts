@@ -113,6 +113,11 @@ export const sendMessageToBedrock = async (
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Bedrock API error response:', errorText);
+
+            if (response.status === 429) {
+                throw new Error("Bedrock usage limit exceeded (429). Please try again later.");
+            }
+
             throw new Error(`Bedrock API error (${response.status}): ${errorText}`);
         }
 

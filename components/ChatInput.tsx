@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import CameraRecorder from './CameraRecorder';
+import VideoFrameSelector from './VideoFrameSelector';
 
 interface ChatInputProps {
-  onSendMessage: (message: string, files?: File[]) => void;
+  onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string }) => void;
   isLoading: boolean;
 }
 
@@ -10,15 +11,28 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
   const [input, setInput] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showCamera, setShowCamera] = useState(false);
+  const [vidStartTime, setVidStartTime] = useState<number | undefined>(undefined);
+  const [vidEndTime, setVidEndTime] = useState<number | undefined>(undefined);
+  const [skillName, setSkillName] = useState('');
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if ((input.trim() || selectedFiles.length > 0) && !isLoading) {
-      onSendMessage(input, selectedFiles.length > 0 ? selectedFiles : undefined);
+      const metadata = selectedFiles.some(f => f.type.startsWith('video/'))
+        ? { startTime: vidStartTime, endTime: vidEndTime, skillName: skillName.trim() || undefined }
+        : undefined;
+
+      onSendMessage(input, selectedFiles.length > 0 ? selectedFiles : undefined, metadata);
+
+      // Cleanup
       setInput('');
       setSelectedFiles([]);
+      setSkillName('');
+      setVidStartTime(undefined);
+      setVidEndTime(undefined);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -50,6 +64,11 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleRangeChange = (start: number, end: number) => {
+    setVidStartTime(start);
+    setVidEndTime(end);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -64,6 +83,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
     }
   }, [input]);
 
+  const hasVideo = selectedFiles.some(f => f.type.startsWith('video/'));
+
   return (
     <>
       <form
@@ -72,34 +93,62 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
       >
         {/* File Preview Area */}
         {selectedFiles.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {selectedFiles.map((file, index) => (
-              <div key={index} className="relative group">
-                <div className="w-16 h-16 rounded-lg border-2 border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
-                  {file.type.startsWith('image/') ? (
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-center">
-                      <svg className="w-6 h-6 text-slate-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      <span className="text-[8px] text-slate-400">Video</span>
-                    </div>
-                  )}
+          <div className="mb-3 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {selectedFiles.map((file, index) => (
+                <div key={index} className="relative group">
+                  <div className="w-16 h-16 rounded-lg border-2 border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+                    {file.type.startsWith('image/') ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-center">
+                        <svg className="w-6 h-6 text-slate-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-[8px] text-slate-400">Video</span>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(index)}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 transition-colors z-20"
+                  >
+                    ×
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFile(index)}
-                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
-                >
-                  ×
-                </button>
+              ))}
+            </div>
+
+            {/* Video Tools: Range Selector & Skill Name */}
+            {hasVideo && (
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                {/* 1. Skill Name Input */}
+                <div className="mb-3">
+                  <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wider">Target Skill (Optional)</label>
+                  <input
+                    type="text"
+                    value={skillName}
+                    onChange={(e) => setSkillName(e.target.value)}
+                    placeholder="e.g. Underhand Throw (Skip to let AI guess)"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">If provided, AI will skip "Guessing" and grade specifically for this skill.</p>
+                </div>
+
+                {/* 2. Frame Selector for the FIRST video found */}
+                {selectedFiles.find(f => f.type.startsWith('video/')) && (
+                  <VideoFrameSelector
+                    file={selectedFiles.find(f => f.type.startsWith('video/'))!}
+                    onRangeChange={handleRangeChange}
+                  />
+                )}
               </div>
-            ))}
+            )}
           </div>
         )}
 

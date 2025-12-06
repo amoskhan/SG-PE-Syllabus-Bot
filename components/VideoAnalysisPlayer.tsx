@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { poseDetectionService } from '../services/poseDetectionService';
+import { poseDetectionService, BallData } from '../services/poseDetectionService';
 
 interface VideoAnalysisPlayerProps {
     src: string;
@@ -20,6 +20,9 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
     const [fps, setFps] = useState(0);
     const frameCountRef = useRef(0);
     const lastFpsTimeRef = useRef(0);
+
+    // Ball Trajectory State
+    const ballTrajectoryRef = useRef<{ x: number; y: number; frame: number }[]>([]);
 
     const handlePlay = () => {
         setIsPlaying(true);
@@ -60,15 +63,103 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
                 // Detect and Draw
                 // Use detectPoseFrame (Image Mode) for robust playback tracking
                 // This bypasses strict timestamp requirements which can break on loops/seeking
+                // Detect Pose & Ball
+                // Serialized to allow proximity filtering (Ball depends on Pose)
                 const pose = await poseDetectionService.detectPoseFrame(video);
+                const ball = await poseDetectionService.detectBallFrame(video, pose || undefined);
+
+                // Velocity & Holding Logic
+                let detectedBall = ball;
+                const MIN_VELOCITY = 5; // pixels per frame
+                const HOLDING_RADIUS = 150; // pixels (generous radius around wrist)
+
+                if (detectedBall && ballTrajectoryRef.current.length > 0) {
+                    const lastPos = ballTrajectoryRef.current[ballTrajectoryRef.current.length - 1];
+                    const dist = Math.hypot(detectedBall.center.x - lastPos.x, detectedBall.center.y - lastPos.y);
+                    const isMoving = dist > MIN_VELOCITY;
+
+                    let isHeld = false;
+                    if (pose && pose.landmarks) {
+                        // Check Right Wrist (16) and Left Wrist (15)
+                        const width = canvas.width;
+                        const height = canvas.height;
+                        const rw = pose.landmarks[16];
+                        const lw = pose.landmarks[15];
+
+                        const distRW = Math.hypot(detectedBall.center.x - (rw.x * width), detectedBall.center.y - (rw.y * height));
+                        const distLW = Math.hypot(detectedBall.center.x - (lw.x * width), detectedBall.center.y - (lw.y * height));
+
+                        isHeld = distRW < HOLDING_RADIUS || distLW < HOLDING_RADIUS;
+                    }
+
+                    // FILTER: If NOT moving AND NOT held -> Ignore (likely background noise)
+                    if (!isMoving && !isHeld) {
+                        detectedBall = null;
+                        // Optional: if it was previously tracked, maybe we keep showing the last valid position?
+                        // For now, let's hide it to remove the "yellow marker on static object"
+                    }
+                }
+
+                // Update Trajectory
+                if (detectedBall) {
+                    ballTrajectoryRef.current.push({
+                        x: detectedBall.center.x,
+                        y: detectedBall.center.y,
+                        frame: frameCountRef.current // Approximate frame for now
+                    });
+                    // Keep last 15 frames for "Comet Tail"
+                    if (ballTrajectoryRef.current.length > 15) {
+                        ballTrajectoryRef.current.shift();
+                    }
+                } else {
+                    // Ball lost or filtered out
+                    if (ballTrajectoryRef.current.length > 0) {
+                        ballTrajectoryRef.current.shift();
+                    }
+                }
 
                 // Clear and draw
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 if (pose) {
                     poseDetectionService.drawPose(ctx, pose);
-                    setStatus('Tracking - Pose Found');
+                    setStatus(detectedBall ? 'Tracking - Pose + Ball' : 'Tracking - Pose Found');
                 } else {
-                    setStatus('Tracking - No Pose');
+                    setStatus(detectedBall ? 'Tracking - Ball Only' : 'Tracking - No Pose');
+                }
+
+                // Draw Ball Trajectory (Comet Tail)
+                if (ballTrajectoryRef.current.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(ballTrajectoryRef.current[0].x, ballTrajectoryRef.current[0].y);
+
+                    // Draw smooth curve or line
+                    for (let i = 1; i < ballTrajectoryRef.current.length; i++) {
+                        const p = ballTrajectoryRef.current[i];
+                        ctx.lineTo(p.x, p.y);
+                    }
+
+                    // Neon Style
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.strokeStyle = '#FFFF00'; // Yellow core
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+
+                    // Glow
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
+                    ctx.lineWidth = 10;
+                    ctx.stroke();
+                }
+
+                // Draw Current Ball Position
+                if (ball) {
+                    ctx.beginPath();
+                    ctx.arc(ball.center.x, ball.center.y, 6, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#FFFF00';
+                    ctx.fill();
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
                 }
             } catch (err) {
                 setStatus('Error detecting pose');
@@ -89,7 +180,7 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
     };
 
     return (
-        <div className="relative rounded-lg overflow-hidden bg-black max-w-sm group">
+        <div className="relative rounded-lg overflow-hidden bg-black w-full group">
             <video
                 ref={videoRef}
                 src={src}

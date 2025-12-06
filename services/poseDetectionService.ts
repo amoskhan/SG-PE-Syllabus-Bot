@@ -1,22 +1,37 @@
-import { PoseLandmarker, FilesetResolver, type NormalizedLandmark } from '@mediapipe/tasks-vision';
+import { PoseLandmarker, FilesetResolver, type NormalizedLandmark, ObjectDetector, type Detection } from '@mediapipe/tasks-vision';
 
 export interface PoseData {
     landmarks: NormalizedLandmark[];
     worldLandmarks: NormalizedLandmark[];
     timestamp?: number;
+    ball?: BallData;
 }
 
 export interface MovementAnalysis {
     detectedSkill?: string;
     keyAngles: { joint: string; angle: number }[];
     poseSummary: string;
+    ballAnalysis?: {
+        trajectory: { x: number; y: number; frame: number }[];
+        releaseFrame?: number;
+        releaseHeightInfo?: string; // e.g., "Above Waist, Below Shoulder"
+    };
+}
+
+export interface BallData {
+    center: { x: number; y: number };
+    box: { originX: number; originY: number; width: number; height: number };
+    isValid?: boolean; // True if it passes smart filters (proximity/movement)
+    status?: string;   // Reason for validity (e.g., "Proximity Match", "Static Ignored", "Too Far")
 }
 
 class PoseDetectionService {
     private imageLandmarker: PoseLandmarker | null = null;
     private videoLandmarker: PoseLandmarker | null = null;
+    private objectDetector: ObjectDetector | null = null;
     private initPromiseImage: Promise<void> | null = null;
     private initPromiseVideo: Promise<void> | null = null;
+    private initPromiseObject: Promise<void> | null = null;
 
     // Helper to load vision tasks
     private async createVision() {
@@ -66,6 +81,27 @@ class PoseDetectionService {
         return this.initPromiseVideo;
     }
 
+    async initializeObjectDetector() {
+        if (this.initPromiseObject) return this.initPromiseObject;
+
+        this.initPromiseObject = (async () => {
+            console.log('⚽ Initializing MediaPipe Object Detector...');
+            const vision = await this.createVision();
+            this.objectDetector = await ObjectDetector.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite2/float16/1/efficientdet_lite2.tflite',
+                    delegate: 'CPU'
+                },
+                scoreThreshold: 0.15, // Lower threshold for better recall
+                runningMode: 'IMAGE',
+                // categoryAllowlist: ['sports ball'] // Removed to allow manual filtering of misclassifications
+            });
+            console.log('✅ MediaPipe Object Detector initialized');
+        })();
+
+        return this.initPromiseObject;
+    }
+
     async detectPoseFromImage(imageElement: HTMLImageElement): Promise<PoseData | null> {
         if (!this.imageLandmarker) await this.initializeImageMode();
 
@@ -102,6 +138,7 @@ class PoseDetectionService {
         }
         return null;
     }
+
 
     async detectPoseFromVideo(videoElement: HTMLVideoElement, timestamp: number): Promise<PoseData | null> {
         if (!this.videoLandmarker) await this.initializeVideoMode();
@@ -255,7 +292,7 @@ class PoseDetectionService {
         return `Right arm: ${rightArmPosition}, Left arm: ${leftArmPosition}, Body: ${bodyAlignment}`;
     }
 
-    async drawPoseToImage(imageElement: HTMLImageElement, pose: PoseData): Promise<string> {
+    async drawPoseToImage(imageElement: HTMLImageElement, pose: PoseData, ball?: BallData): Promise<string> {
         const canvas = document.createElement('canvas');
         canvas.width = imageElement.naturalWidth;
         canvas.height = imageElement.naturalHeight;
@@ -269,9 +306,229 @@ class PoseDetectionService {
         // Draw pose on top
         this.drawPose(ctx, pose);
 
+        // Draw Ball if present
+        if (ball) {
+            ctx.beginPath();
+            ctx.arc(ball.center.x, ball.center.y, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = '#FFFF00';
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = '#FFFF00';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText('BALL', ball.center.x + 10, ball.center.y);
+        }
+
         // Return base64
         return canvas.toDataURL('image/jpeg', 0.8);
+    }
+
+    async detectBallFrame(videoElement: HTMLVideoElement, pose?: PoseData): Promise<BallData | null> {
+        if (!this.objectDetector) await this.initializeObjectDetector();
+
+        try {
+            const result = this.objectDetector!.detect(videoElement);
+            // Video dimensions are inherent in the element
+            return this.processBallDetectionResult(result, { width: videoElement.videoWidth, height: videoElement.videoHeight }, pose);
+        } catch (error) {
+            // silent fail
+        }
+        return null;
+    }
+
+    async detectBallFromImage(imageElement: HTMLImageElement, pose?: PoseData): Promise<BallData | null> {
+        if (!this.objectDetector) await this.initializeObjectDetector();
+
+        try {
+            const result = this.objectDetector!.detect(imageElement);
+            return this.processBallDetectionResult(result, { width: imageElement.naturalWidth, height: imageElement.naturalHeight }, pose);
+        } catch (error) {
+            console.error('Ball detection error (Image):', error);
+        }
+        return null;
+    }
+
+    private processBallDetectionResult(
+        result: { detections: import('@mediapipe/tasks-vision').Detection[] },
+        imageSize: { width: number, height: number },
+        pose?: PoseData
+    ): BallData | null {
+        // Expanded list to catch white soccer balls (often 'clock'/'bowl'/'frisbee')
+        const validCategories = ['sports ball', 'apple', 'orange', 'baseball', 'tennis ball', 'clock', 'bowl', 'frisbee'];
+
+        const candidates = result.detections.filter(d => validCategories.includes(d.categories[0].categoryName));
+
+        if (candidates.length === 0) return null;
+
+        let bestMatch = candidates[0];
+
+        // INTELLIGENT SORTING: Prioritize candidates close to the skeleton
+        if (pose && pose.landmarks) {
+            const scoredCandidates = candidates.map(candidate => {
+                const box = candidate.boundingBox!;
+                const center = {
+                    x: box.originX + (box.width / 2),
+                    y: box.originY + (box.height / 2)
+                };
+
+                const rw = pose.landmarks[16]; // Right Wrist
+                const lw = pose.landmarks[15]; // Left Wrist
+                const rk = pose.landmarks[26]; // Right Knee
+                const lk = pose.landmarks[25]; // Left Knee
+                const rf = pose.landmarks[28]; // Right Ankle/Foot
+                const lf = pose.landmarks[27]; // Left Ankle/Foot
+
+                const getDist = (lm: import('@mediapipe/tasks-vision').NormalizedLandmark) => {
+                    return Math.hypot(center.x - (lm.x * imageSize.width), center.y - (lm.y * imageSize.height));
+                };
+
+                // Find closest joint distance
+                const minDist = Math.min(getDist(rw), getDist(lw), getDist(rk), getDist(lk), getDist(rf), getDist(lf));
+
+                // Normalized Proximity Score (0 to 1, where 1 is touching)
+                // Assuming max reasonable distance is image width
+                const proximityScore = Math.max(0, 1 - (minDist / (imageSize.width * 0.5)));
+
+                const labelScore = candidate.categories[0].categoryName === 'sports ball' ? 1.0 : 0.5;
+                const confidence = candidate.categories[0].score;
+
+                // WEIGHTED SCORE:
+                // Proximity is King (User Req: "Constantly close to performer")
+                // Weight: Proximity (60%) + Label (20%) + Confidence (20%)
+                const totalScore = (proximityScore * 3.0) + (labelScore * 1.0) + confidence;
+
+                return { candidate, score: totalScore, minDist };
+            });
+
+            // Sort by total score descending
+            scoredCandidates.sort((a, b) => b.score - a.score);
+            bestMatch = scoredCandidates[0].candidate;
+        } else {
+            // Fallback if no pose: Confidence and Label only
+            candidates.sort((a, b) => {
+                const aScore = a.categories[0].categoryName === 'sports ball' ? 10 : 0;
+                const bScore = b.categories[0].categoryName === 'sports ball' ? 10 : 0;
+                return (b.categories[0].score + bScore) - (a.categories[0].score + aScore);
+            });
+            bestMatch = candidates[0];
+        }
+
+
+        if (bestMatch && bestMatch.boundingBox) {
+            const box = bestMatch.boundingBox;
+            const center = {
+                x: box.originX + (box.width / 2),
+                y: box.originY + (box.height / 2)
+            };
+
+            let isValid = true;
+            let status = "Detected";
+
+            // Validation Logic: Proximity (Again, for final Pass/Fail)
+            if (pose && pose.landmarks) {
+                // Re-calculate min dist for the winner
+                const rw = pose.landmarks[16];
+                const lw = pose.landmarks[15];
+                const rk = pose.landmarks[26];
+                const lk = pose.landmarks[25];
+                const rf = pose.landmarks[28];
+                const lf = pose.landmarks[27];
+
+                const getDist = (lm: import('@mediapipe/tasks-vision').NormalizedLandmark) => {
+                    return Math.hypot(center.x - (lm.x * imageSize.width), center.y - (lm.y * imageSize.height));
+                };
+
+                const minDist = Math.min(getDist(rw), getDist(lw), getDist(rk), getDist(lk), getDist(rf), getDist(lf));
+
+                // Threshold: Relaxed slightly to 30% of width to allow for tosses
+                const THRESHOLD = Math.max(imageSize.width * 0.3, 250);
+
+                if (minDist > THRESHOLD) {
+                    if (bestMatch.categories[0].score > 0.85 && bestMatch.categories[0].categoryName === 'sports ball') {
+                        status = "In Flight (High Confidence)";
+                    } else {
+                        isValid = false;
+                        status = `Too far from body (${Math.round(minDist)}px)`;
+                    }
+                } else {
+                    status = "Proximity Confirmed"; // Likely the one we sorted to the top
+                }
+            }
+
+            return {
+                center: center,
+                box: box,
+                isValid: isValid,
+                status: status
+            };
+        }
+        return null;
+    }
+
+    analyzeBallTrajectory(ballT: { x: number; y: number; frame: number }[], poseT: { pose: PoseData; frame: number }[]): { releaseFrame?: number; releaseHeightInfo?: string } {
+        return { releaseFrame: undefined, releaseHeightInfo: "Analysis Pending Integration" };
+    }
+
+    // NEW: Post-process filter to remove objects that never move (e.g. floor markers)
+    // This is called by App.tsx after collecting all frames
+    filterStaticObjects(poseData: PoseData[]): PoseData[] {
+        // Collect all valid ball centers
+        const ballPositions: { x: number; y: number; index: number }[] = [];
+
+        poseData.forEach((p, idx) => {
+            if (p.ball && p.ball.isValid) {
+                ballPositions.push({ x: p.ball.center.x, y: p.ball.center.y, index: idx });
+            }
+        });
+
+        if (ballPositions.length < 2) return poseData; // Needs movement to compare
+
+        // Calculate max distance moved
+        let maxDist = 0;
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        ballPositions.forEach(pos => {
+            minX = Math.min(minX, pos.x);
+            maxX = Math.max(minX, pos.x); // Wait, maxX calculation was bugged in thought process, fixing:
+            maxX = Math.max(maxX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxY = Math.max(maxY, pos.y);
+        });
+
+        // Use bounding box of movement
+        const moveX = maxX - minX;
+        const moveY = maxY - minY;
+        const totalMovement = Math.hypot(moveX, moveY);
+
+        // THRESHOLD: If the object moved less than 30 pixels total across the entire video, it's a marker.
+        // (Assuming standard 640x480 analysis or similar). 
+        // 30px is conservative but safe for floor markers.
+        const STATIC_THRESHOLD = 30;
+
+        if (totalMovement < STATIC_THRESHOLD) {
+            console.log(`🧹 Filtered Static Object: Moved only ${totalMovement.toFixed(1)}px (Threshold: ${STATIC_THRESHOLD}px)`);
+            return poseData.map(p => {
+                if (p.ball) {
+                    return {
+                        ...p,
+                        ball: {
+                            ...p.ball,
+                            isValid: false,
+                            status: `Static Object (Moved < ${STATIC_THRESHOLD}px)`
+                        }
+                    };
+                }
+                return p;
+            });
+        }
+
+        return poseData;
     }
 }
 
 export const poseDetectionService = new PoseDetectionService();
+
