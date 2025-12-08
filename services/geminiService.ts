@@ -517,11 +517,64 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       }
     }
 
+    // Helper to compress images for Vercel Payload Limits (4.5MB)
+    const compressBase64Image = async (base64: string, maxWidth = 640, quality = 0.6): Promise<string> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        // Ensure prefix
+        const src = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+        img.src = src;
+
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Resize if too big
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            resolve(base64.replace(/^data:image\/[a-z]+;base64,/, ''));
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataUrl.split(',')[1]);
+        };
+
+        img.onerror = () => {
+          // If compression fails, return original (but stripped)
+          resolve(base64.replace(/^data:image\/[a-z]+;base64,/, ''));
+        };
+      });
+    };
+
     if (mediaAttachments && mediaAttachments.length > 0) {
       console.log(`📎 Attaching ${mediaAttachments.length} images/frames to prompt`);
-      mediaAttachments.forEach(media => {
-        // Strip data URL prefix if present (e.g. "data:image/jpeg;base64,")
-        const base64Data = media.data.replace(/^data:image\/[a-z]+;base64,/, '');
+
+      // Process serially to be safe
+      for (const media of mediaAttachments) {
+        // Strip data URL prefix if present for logic, but compression needs it
+        let base64Data = media.data;
+
+        // ONLY Compress if we are sending to Server (VS PROD MODE)
+        // OR always compress to be safe? 
+        // Let's always compress video analysis frames as they can be huge (10 frames * 1MB = 10MB)
+        try {
+          console.log("Compressing frame for upload...");
+          base64Data = await compressBase64Image(media.data);
+        } catch (e) {
+          console.warn("Compression failed, sending original", e);
+          base64Data = media.data.replace(/^data:image\/[a-z]+;base64,/, '');
+        }
 
         parts.push({
           inlineData: {
@@ -529,7 +582,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
             data: base64Data
           }
         });
-      });
+      }
     }
 
     let result;
