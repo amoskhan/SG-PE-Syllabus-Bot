@@ -559,61 +559,41 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
       result = await chat.sendMessage({ message: parts as any });
       text = result.response.text();
-      groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      tokenUsage = result.response.usageMetadata?.totalTokenCount || 0;
-
-    } else {
-      console.log("🚀 PROD MODE: Using Secure Serverless Function");
-
-      const response = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          history: history,
-          message: parts, // Send the array of text/images
-          systemInstruction: systemInstruction,
-          tools: [{ googleSearch: {} }] // Request search tool
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Server Error: ${errorData.error || response.statusText}`);
-      }
-
-      const data = await response.json();
-      text = data.text;
-      groundingChunks = data.groundingChunks;
-      tokenUsage = data.tokenUsage;
+      const errorData = await response.json();
+      throw new Error(`Server Error: ${errorData.error || response.statusText}`);
     }
+
+    const data = await response.json();
+    text = data.text;
+    groundingChunks = data.groundingChunks;
+    tokenUsage = data.tokenUsage;
+  }
 
     // Check for DISPLAY_REFERENCE tag in text
     let finalReferenceURI = (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) ? SKILL_REFERENCE_IMAGES[activeSkillName] : undefined;
 
-    // Regex to find [[DISPLAY_REFERENCE: Skill Name]]
-    const referenceTagMatch = text.match(/\[\[DISPLAY_REFERENCE:\s*([^\]]+)\]\]/);
-    if (referenceTagMatch) {
-      const suggestedSkill = referenceTagMatch[1].trim();
-      if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
-        finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
-        console.log(`🖼️ AI triggered reference image for: ${suggestedSkill}`);
-      }
+  // Regex to find [[DISPLAY_REFERENCE: Skill Name]]
+  const referenceTagMatch = text.match(/\[\[DISPLAY_REFERENCE:\s*([^\]]+)\]\]/);
+  if (referenceTagMatch) {
+    const suggestedSkill = referenceTagMatch[1].trim();
+    if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
+      finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
+      console.log(`🖼️ AI triggered reference image for: ${suggestedSkill}`);
     }
-
-    // Clean the tag from the displayed text
-    const cleanText = text.replace(/\[\[DISPLAY_REFERENCE:\s*[^\]]+\]\]/g, '').trim();
-
-    return {
-      text: cleanText,
-      groundingChunks,
-      referenceImageURI: finalReferenceURI,
-      tokenUsage: tokenUsage
-    };
-
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    throw error;
   }
+
+  // Clean the tag from the displayed text
+  const cleanText = text.replace(/\[\[DISPLAY_REFERENCE:\s*[^\]]+\]\]/g, '').trim();
+
+  return {
+    text: cleanText,
+    groundingChunks,
+    referenceImageURI: finalReferenceURI,
+    tokenUsage: tokenUsage
+  };
+
+} catch (error) {
+  console.error("Gemini API Error:", error);
+  throw error;
+}
 };
