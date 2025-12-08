@@ -33,6 +33,7 @@ export interface Message {
   analysisFrames?: string[]; // Visual proof of analysis (images with skeletons)
   referenceImageURI?: string; // URI of the textbook reference image used
   isAmbiguous?: boolean; // Flag if AI is unsure and needs teacher review
+  tokenUsage?: number; // Estimated tokens used for this response
 }
 
 export interface ChatState {

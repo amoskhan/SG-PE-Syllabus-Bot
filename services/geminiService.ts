@@ -139,7 +139,7 @@ export const sendMessageToGemini = async (
   mediaAttachments?: MediaData[],
   skillName?: string,
   isVerified?: boolean
-): Promise<ChatResponse> => {
+): Promise<ChatResponse & { tokenUsage?: number }> => {
   try {
     let enhancedMessage = currentMessage;
     let poseDescription = '';
@@ -285,10 +285,15 @@ export const sendMessageToGemini = async (
         if (dominantHand === 'Right' && steppingFoot === 'Right') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Right Foot while throwing with Right Hand (Should be Left Foot)';
         if (dominantHand === 'Left' && steppingFoot === 'Left') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Left Foot while throwing with Left Hand (Should be Right Foot)';
 
-        // Wind-up Check (Depth)
-        let windUpCheck = '⚠️ No significant wind-up (Hand stayed high)';
-        if (dominantHand === 'Right' && minRightHandY > rightHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
-        if (dominantHand === 'Left' && minLeftHandY > leftHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
+        // Wind-up Check (Depth) - ONLY for skills where hand drops/swings back
+        let windUpCheck = 'N/A (Not required for this skill)';
+        const requiresWindUp = ['Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick'].some(s => skillName?.includes(s));
+
+        if (requiresWindUp) {
+          windUpCheck = '⚠️ No significant wind-up (Hand stayed high)';
+          if (dominantHand === 'Right' && minRightHandY > rightHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
+          if (dominantHand === 'Left' && minLeftHandY > leftHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
+        }
 
         // Excessive High Swing Check (Consistency)
         let highSwingCheck = '✅ Hand Height Controlled (Below Head Level)';
@@ -370,6 +375,9 @@ ${skillName ? '' : `4. Respond in this format: "Based on the pose data, I believ
     // Enhance system instruction when pose data is present - append dynamic data description
     let systemInstruction = '';
 
+    // Generate dynamic list of valid skills for the prompt
+    const validSkillsList = Object.keys(SKILL_REFERENCE_IMAGES).join(', ');
+
     if (poseData && poseData.length > 0) {
       if (!isVerified) {
         // PRE-ANALYSIS VERIFICATION MODE
@@ -381,18 +389,34 @@ I have captured pose data from ${poseData.length} keyframes extracted evenly acr
 ${poseDescription}${movementPattern}
 ${biomechanicsReport || ''}
 
-**YOUR TASK (VERIFICATION PHASE):**
-1. **Hypothesize**: Based on the pose data, what skill does this look like? (e.g. Underhand Throw, Kicking).
-2. **Setup**: The user needs to verify the computer vision data.
-3. **Response**: 
-   - State: "I see you've uploaded a video. Based on the movement, this looks like a **[Hypothesis Skill]**."
-   - Instruction: "Please review the frames above. Click on any frame to valid/omit the ball detection if the AI made a mistake."
-   - Call to Action: "Once you are happy with the detection, click the **'Analyze Now'** button below."
+**YOUR GOAL (VERIFICATION PHASE):**
+You must complete TWO phases before analysis can begin.
+**PHASE 1**: Identify the FMS Skill.
+**PHASE 2**: Verify the Computer Vision data (Ball detection).
+
+**VALID SKILLS LIST**: ${validSkillsList}
+
+**INSTRUCTIONS:**
+1. **Observe**: Look at the pose data and the visual input.
+2. **Validate**: Is this a valid FMS from the list above?
+   - If **NO** (e.g. Push Up, Squat, Random Movement):
+     - Response: "❌ **Unknown Movement**. This movement is not in the official FMS Checklist. Please upload a specific skill like ${Object.keys(SKILL_REFERENCE_IMAGES).slice(0, 3).join(', ')}."
+     - **DO NOT** proceed to Phase 2.
+   - If **YES** (e.g. Kick):
+     - Response: "Phase 1: I have detected a **[Skill Name]**."
+       (IMPORTANT: You MUST wrap the skill name in double asterisks like **Kick** so the system can read it).
+
+3. **Verify**: Ask the user to check the frames.
+   - Response: "Phase 2: Please review the frames below to verify the ball detection."
+
+4. **Call to Action**:
+   - Response: "Once you have confirmed the Skill and the Frames, click 'Analyze Now' to proceed to grading."
 
 **RESTRICTIONS:**
 - **DO NOT GRADE** the performance yet.
 - **DO NOT** output the FMS Rubric or Checklist.
-- Just confirm receipt and ask for verification.
+- **DO NOT** give feedback on knees, arms, or technique.
+- JUST Identify and Verify.
 `;
       } else {
         // FULL ANALYSIS MODE
@@ -415,6 +439,10 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 - **FAILURE EXPLANATION**: When marking a feature as ❌, you MUST cite the specific frame and state what you observed instead (e.g. "At Frame 8, Knee angle was 175° (Straight) instead of <170°"). Do NOT claim "no frames found" if you have data; point to the frame that shows the error.
 - Pay close attention to the \`biomechanicsReport\` for definitive pass/fail on Step and Wind-up.
 - **QUALITY CHECK**: If "Arm Height" is "ABOVE HEAD" for a low-skill like Underarm Roll, penalize it as "Excessive Movement".
+- **CAMERA ANGLE AWARENESS**:
+  - The video might be filmed from the **Front** OR the **Side**.
+  - **"Face Target"** means the user is looking towards *their* throwing direction.
+  - If the video is a **Side Profile**, "Facing Target" will look like "Looking Forward" (to the side of the screen). Do NOT penalize the user for not looking at the Camera.
 `;
       }
     } else {
@@ -542,7 +570,8 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
     return {
       text: cleanText,
       groundingChunks,
-      referenceImageURI: finalReferenceURI
+      referenceImageURI: finalReferenceURI,
+      tokenUsage: response.usageMetadata?.totalTokenCount
     };
 
   } catch (error) {

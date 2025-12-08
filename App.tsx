@@ -8,6 +8,8 @@ import ChatMessage from './components/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment } from './types';
 import { sendMessageToGemini, MediaData } from './services/geminiService';
 import { sendMessageToBedrock } from './services/bedrockService';
+import { sendMessageToDeepSeek } from './services/deepSeekService';
+import { sendMessageToAmazonNova } from './services/amazonNovaService';
 import { poseDetectionService, type PoseData } from './services/poseDetectionService';
 
 const App: React.FC = () => {
@@ -20,7 +22,7 @@ const App: React.FC = () => {
     }
   ]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock'>('gemini');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'deepseek' | 'nova'>('gemini');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom
@@ -238,38 +240,52 @@ const App: React.FC = () => {
     try {
       let response;
 
+      // Context finding for pose data
+      let contextPoseData = poseData;
+      if (!contextPoseData) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].poseData && messages[i].poseData!.length > 0) {
+            contextPoseData = messages[i].poseData;
+            console.log('📌 Using pose data from previous message for context');
+            break;
+          }
+        }
+      }
+
       if (selectedModel === 'gemini') {
         const history: Content[] = messages.map(m => ({
           role: m.sender === Sender.USER ? 'user' : 'model',
           parts: [{ text: m.text } as Part]
         }));
+        // Note: The new message is passed as a separate argument to sendMessageToGemini, 
+        // unlike Bedrock/DeepSeek/Nova which append it to history.
 
-        history.push({
-          role: 'user',
-          parts: [{ text: newMessage.text }]
-        });
-
-        // Context finding for pose data
-        let contextPoseData = poseData;
-        if (!contextPoseData) {
-          for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].poseData && messages[i].poseData!.length > 0) {
-              contextPoseData = messages[i].poseData;
-              console.log('📌 Using pose data from previous message for context');
-              break;
-            }
-          }
-        }
 
         // Pass isVerified from metadata (default undefined/false)
         response = await sendMessageToGemini(history, newMessage.text, contextPoseData, analysisFrames, metadata?.skillName, metadata?.isVerified);
-      } else {
+
+      } else if (selectedModel === 'bedrock') {
         const history = messages.map(m => ({
           role: m.sender === Sender.USER ? 'user' : 'assistant',
           content: m.text
         }));
 
         response = await sendMessageToBedrock(history, text);
+      } else if (selectedModel === 'deepseek') {
+        const history = messages.map(m => ({
+          role: m.sender === Sender.USER ? 'user' : 'assistant',
+          content: m.text
+        }));
+
+        response = await sendMessageToDeepSeek(history, text, contextPoseData, undefined, metadata?.skillName, metadata?.isVerified);
+      } else {
+        // Amazon Nova
+        const history = messages.map(m => ({
+          role: m.sender === Sender.USER ? 'user' : 'assistant',
+          content: m.text
+        }));
+
+        response = await sendMessageToAmazonNova(history, text, contextPoseData, undefined, metadata?.skillName, metadata?.isVerified);
       }
 
       const botMessage: Message = {
@@ -278,13 +294,15 @@ const App: React.FC = () => {
         sender: Sender.BOT,
         timestamp: new Date(),
         groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined,
-        referenceImageURI: selectedModel === 'gemini' ? response.referenceImageURI : undefined
+        referenceImageURI: selectedModel === 'gemini' ? response.referenceImageURI : undefined,
+        tokenUsage: response.tokenUsage
       };
 
       // Check for predicted skill in response (Supports both formats)
       // 1. "I believe this is a **Skill**" (Standard)
       // 2. "this looks like a **Skill**" (Verification Mode)
-      const skillMatch = response.text.match(/(?:I believe this is a|this looks like a) \*\*([^*]+)\*\*/i);
+      // 3. "I have detected a **Skill**" (Strict Phase 1 Mode)
+      const skillMatch = response.text.match(/(?:I believe this is a|this looks like a|I have detected a) \*\*([^*]+)\*\*/i);
       const detectedSkill = skillMatch ? skillMatch[1] : undefined;
 
       setMessages((prev) => {
@@ -369,6 +387,24 @@ const App: React.FC = () => {
                 🔷 Gemini
               </button>
               <button
+                onClick={() => setSelectedModel('nova')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'nova'
+                  ? 'bg-white text-teal-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
+              >
+                🟢 Nova
+              </button>
+              <button
+                onClick={() => setSelectedModel('deepseek')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'deepseek'
+                  ? 'bg-white text-purple-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
+              >
+                🟣 DeepSeek
+              </button>
+              <button
                 onClick={() => setSelectedModel('bedrock')}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'bedrock'
                   ? 'bg-white text-orange-600 shadow-sm'
@@ -380,7 +416,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <span className="text-xs text-slate-400">
-            {selectedModel === 'gemini' ? 'Google Gemini 2.5 Flash' : 'Claude 3.5 Sonnet'}
+            {selectedModel === 'gemini' ? 'Google Gemini 2.5 Flash' : selectedModel === 'bedrock' ? 'Claude 3.5 Sonnet' : selectedModel === 'deepseek' ? 'DeepSeek-R1-Chimera' : 'Amazon Nova 2 Lite'}
           </span>
         </div>
       </div>

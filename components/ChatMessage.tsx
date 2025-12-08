@@ -202,7 +202,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                             </div>
                           ) : (
                             <div className="absolute top-2 right-2 bg-amber-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-lg backdrop-blur-sm border border-amber-300 pointer-events-none">
-                              BALL OMITTED ⚠️
+                              BALL OMIT ⚠️
                             </div>
                           )
                         )}
@@ -261,6 +261,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
 
             <div className={`text-[10px] ${isBot ? 'text-slate-400 ml-1' : 'text-slate-300 mr-1 text-right'}`}>
               {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {message.tokenUsage && (
+                <span className="ml-2 font-mono opacity-70">
+                  ⚡ {message.tokenUsage.toLocaleString()} tokens
+                </span>
+              )}
             </div>
           </div>
 

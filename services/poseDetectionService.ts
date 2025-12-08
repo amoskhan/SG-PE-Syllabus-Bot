@@ -229,8 +229,9 @@ class PoseDetectionService {
 
     analyzePoseGeometry(pose: PoseData): MovementAnalysis {
         const landmarks = pose.landmarks;
+        const worldLandmarks = pose.worldLandmarks;
         const angles = this.calculateJointAngles(landmarks);
-        const summary = this.generatePoseSummary(landmarks);
+        const summary = this.generatePoseSummary(landmarks, worldLandmarks);
         return { detectedSkill: undefined, keyAngles: angles, poseSummary: summary };
     }
 
@@ -271,7 +272,14 @@ class PoseDetectionService {
         return angle;
     }
 
-    private generatePoseSummary(landmarks: NormalizedLandmark[]): string {
+    private generatePoseSummary(landmarks: NormalizedLandmark[], worldLandmarks: NormalizedLandmark[]): string {
+        // NOTE: We reverted to 2D-only summary because 3D depth logic assumes Camera = Target.
+        // In side-profile videos (common for biomechanics), "Facing Target" != "Facing Camera".
+        // We defer "Face Target" judgment to the AI's visual reasoning.
+        return this.generatePoseSummary2D(landmarks);
+    }
+
+    private generatePoseSummary2D(landmarks: NormalizedLandmark[]): string {
         const rightWrist = landmarks[15];
         const leftWrist = landmarks[16];
         const rightShoulder = landmarks[11];

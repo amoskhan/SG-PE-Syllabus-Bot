@@ -61,7 +61,7 @@ function decodeBedrockUrl(token: string): string {
 export const sendMessageToBedrock = async (
     history: { role: string; content: string }[],
     currentMessage: string
-): Promise<ChatResponse> => {
+): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         if (!BEDROCK_BEARER_TOKEN) {
             throw new Error("Bedrock bearer token not configured. Please add VITE_BEDROCK_BEARER_TOKEN to your .env.local file.");
@@ -72,6 +72,11 @@ export const sendMessageToBedrock = async (
         if (!fullPresignedUrl.startsWith('http')) {
             fullPresignedUrl = `https://${fullPresignedUrl}`;
         }
+
+        // Extract region from the signed URL (e.g. ap-southeast-1)
+        // Format checks for region in X-Amz-Credential OR host
+        // Default to ap-southeast-1 if finding fails, but usually signed URL has it.
+
 
         // Use the local proxy path instead of the direct URL to avoid CORS
         // Note: Can't modify the path as the AWS signature is tied to it
@@ -136,6 +141,7 @@ export const sendMessageToBedrock = async (
 
         return {
             text: text || "I couldn't generate a response. Please try again.",
+            tokenUsage: (data.usage?.inputTokens || 0) + (data.usage?.outputTokens || 0)
         };
     } catch (error) {
         console.error("Bedrock API Error:", error);
