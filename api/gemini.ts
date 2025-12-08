@@ -49,6 +49,7 @@ export default async function handler(req: any, res: any) {
         });
 
         // Send message (support text or parts for multimodal)
+        // Note: SDK usually expects 'message' for sendMessage to be string or Part[]
         const result = await chat.sendMessage({ message: message });
         const response = result;
 
