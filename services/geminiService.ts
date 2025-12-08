@@ -650,7 +650,8 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`Server Error: ${errorData.error || response.statusText}`);
+        // Include DETAILS so the user sees "Quota Exceeded" or "Timeout" instead of generic error
+        throw new Error(`Server Error: ${errorData.details || errorData.error || response.statusText}`);
       }
 
       const data = await response.json();
