@@ -336,6 +336,7 @@ const App: React.FC = () => {
       let errorText = `Error: ${error instanceof Error ? error.message : String(error)}`;
 
       const errorMsgLower = errorText.toLowerCase();
+      /*
       if (
         errorMsgLower.includes('429') ||
         errorMsgLower.includes('quota') ||
@@ -344,6 +345,7 @@ const App: React.FC = () => {
       ) {
         errorText = "⚠️ Usage limit reached. The AI is a bit tired. Please wait a minute before trying again.";
       }
+      */
 
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
