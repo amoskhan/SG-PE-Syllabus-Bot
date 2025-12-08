@@ -11,6 +11,15 @@ export interface GroundingChunk {
   };
 }
 
+export interface MediaAttachment {
+  id: string;
+  type: 'image' | 'video';
+  mimeType: string;
+  data: string; // base64 encoded
+  fileName: string;
+  thumbnailData?: string; // for video preview
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -18,6 +27,13 @@ export interface Message {
   timestamp: Date;
   isError?: boolean;
   groundingChunks?: GroundingChunk[];
+  media?: MediaAttachment[];
+  poseData?: any[]; // Store pose data for conversation context
+  predictedSkill?: string; // Store predicted skill for video overlay
+  analysisFrames?: string[]; // Visual proof of analysis (images with skeletons)
+  referenceImageURI?: string; // URI of the textbook reference image used
+  isAmbiguous?: boolean; // Flag if AI is unsure and needs teacher review
+  tokenUsage?: number; // Estimated tokens used for this response
 }
 
 export interface ChatState {

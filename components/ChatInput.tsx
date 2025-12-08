@@ -1,23 +1,72 @@
 import React, { useState, useRef, useEffect } from 'react';
+import CameraRecorder from './CameraRecorder';
+import VideoFrameSelector from './VideoFrameSelector';
 
 interface ChatInputProps {
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string }) => void;
   isLoading: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
   const [input, setInput] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [showCamera, setShowCamera] = useState(false);
+  const [vidStartTime, setVidStartTime] = useState<number | undefined>(undefined);
+  const [vidEndTime, setVidEndTime] = useState<number | undefined>(undefined);
+  const [skillName, setSkillName] = useState('');
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim() && !isLoading) {
-      onSendMessage(input);
+    if ((input.trim() || selectedFiles.length > 0) && !isLoading) {
+      const metadata = selectedFiles.some(f => f.type.startsWith('video/'))
+        ? { startTime: vidStartTime, endTime: vidEndTime, skillName: skillName.trim() || undefined }
+        : undefined;
+
+      onSendMessage(input, selectedFiles.length > 0 ? selectedFiles : undefined, metadata);
+
+      // Cleanup
       setInput('');
+      setSelectedFiles([]);
+      setSkillName('');
+      setVidStartTime(undefined);
+      setVidEndTime(undefined);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
     }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    const validFiles = files.filter((f: File) =>
+      f.type.startsWith('image/') || f.type.startsWith('video/')
+    );
+    setSelectedFiles(prev => [...prev, ...validFiles]);
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleVideoRecorded = (videoBlob: Blob) => {
+    // Convert blob to File
+    const file = new File([videoBlob], `recording-${Date.now()}.webm`, {
+      type: 'video/webm'
+    });
+    setSelectedFiles(prev => [...prev, file]);
+    setShowCamera(false);
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRangeChange = (start: number, end: number) => {
+    setVidStartTime(start);
+    setVidEndTime(end);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -34,41 +83,153 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
     }
   }, [input]);
 
+  const hasVideo = selectedFiles.some(f => f.type.startsWith('video/'));
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="p-4 bg-white border-t border-slate-200 max-w-4xl mx-auto w-full sticky bottom-0"
-    >
-      <div className="relative flex items-end gap-2 bg-slate-100 p-2 rounded-2xl border border-transparent focus-within:border-red-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-red-50 transition-all duration-200">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask me anything! (i.e. Design an activity for primary 4 net and barrier games...) "
-          className="w-full bg-transparent border-none focus:ring-0 resize-none max-h-32 min-h-[24px] py-2 px-2 text-slate-800 placeholder-slate-400"
-          rows={1}
-          disabled={isLoading}
+    <>
+      <form
+        onSubmit={handleSubmit}
+        className="p-4 bg-white border-t border-slate-200 max-w-4xl mx-auto w-full sticky bottom-0"
+      >
+        {/* File Preview Area */}
+        {selectedFiles.length > 0 && (
+          <div className="mb-3 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {selectedFiles.map((file, index) => (
+                <div key={index} className="relative group">
+                  <div className="w-16 h-16 rounded-lg border-2 border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+                    {file.type.startsWith('image/') ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-center">
+                        <svg className="w-6 h-6 text-slate-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-[8px] text-slate-400">Video</span>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(index)}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 transition-colors z-20"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Video Tools: Range Selector & Skill Name */}
+            {hasVideo && (
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                {/* 1. Skill Name Input */}
+                <div className="mb-3">
+                  <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wider">Target Skill (Optional)</label>
+                  <input
+                    type="text"
+                    value={skillName}
+                    onChange={(e) => setSkillName(e.target.value)}
+                    placeholder="e.g. Underhand Throw (Skip to let AI guess)"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">If provided, AI will skip "Guessing" and grade specifically for this skill.</p>
+                </div>
+
+                {/* 2. Frame Selector for the FIRST video found */}
+                {selectedFiles.find(f => f.type.startsWith('video/')) && (
+                  <VideoFrameSelector
+                    file={selectedFiles.find(f => f.type.startsWith('video/'))!}
+                    onRangeChange={handleRangeChange}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Input Area */}
+        <div className="flex items-end gap-2">
+          {/* Hidden File Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {/* Camera Button */}
+          <button
+            type="button"
+            onClick={() => setShowCamera(true)}
+            disabled={isLoading}
+            className="flex-shrink-0 p-2.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Record video"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </button>
+
+          {/* Attachment Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="flex-shrink-0 p-2.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Upload image or video"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+          </button>
+
+          {/* Text Input */}
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about PE syllabus or upload/record movement for analysis..."
+            disabled={isLoading}
+            className="flex-1 px-4 py-3 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px]"
+            rows={1}
+          />
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={(!input.trim() && selectedFiles.length === 0) || isLoading}
+            className="flex-shrink-0 p-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
+          >
+            {isLoading ? (
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </form>
+
+      {/* Camera Recorder Modal */}
+      {showCamera && (
+        <CameraRecorder
+          onVideoRecorded={handleVideoRecorded}
+          onClose={() => setShowCamera(false)}
         />
-        <button
-          type="submit"
-          disabled={!input.trim() || isLoading}
-          className={`p-2 rounded-xl flex-shrink-0 transition-all duration-200 ${input.trim() && !isLoading
-            ? 'bg-red-600 text-white hover:bg-red-700 shadow-md transform hover:scale-105'
-            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-            }`}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-          </svg>
-        </button>
-      </div>
-      <div className="text-center mt-2">
-        <p className="text-[10px] text-slate-400">
-          AI may display inaccurate information. Please verify with official MOE documents.
-        </p>
-      </div>
-    </form>
+      )}
+    </>
   );
 };
 

@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { GroundingChunk } from '../types';
-import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT } from './fundamentalMovementSkillsData';
+import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from './fundamentalMovementSkillsData';
 import { PE_SYLLABUS_TEXT } from './syllabusData';
 
 const MODEL_NAME = 'gemini-2.5-flash';
@@ -10,7 +10,7 @@ const MODEL_NAME = 'gemini-2.5-flash';
 // Note: In a real app, never expose keys on the client. This is for the generated demo environment.
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
-const SYSTEM_INSTRUCTION = `
+const FULL_SYSTEM_INSTRUCTION = `
 You are the Singapore PE Syllabus Assistant, an expert on the Physical Education (PE) syllabus provided by the Ministry of Education (MOE) Singapore.
 
 You have access to two primary sources of truth:
@@ -44,28 +44,506 @@ ${FUNDAMENTAL_MOVEMENT_SKILLS_TEXT}
 - Assessment (Holistic Development Profile).
 
 If you are unsure, state that it is not explicitly mentioned in the syllabus text and then use search to find supplementary info.
+
+**Displaying Reference Images:**
+If the user asks to see what a skill looks like (e.g., "Show me overhand throw", "visual for dragging"), you can trigger the display of the reference image by including this EXACT tag in your response:
+\`[[DISPLAY_REFERENCE: <Exact Skill Name>]]\`
+Example: \`[[DISPLAY_REFERENCE: Underhand Throw]]\`
+Valid Skill Names: ${Object.keys(SKILL_REFERENCE_IMAGES).join(', ')}
+Do not show this tag to the user in the final output.
+
+**STUDENT MODE (Show Me commands):**
+If the user's intent is just to SEE the skill (e.g., "Show me", "What does it look like"), and the user appears to be a student (Primary/Secondary):
+1. Use the \`[[DISPLAY_REFERENCE]]\` tag as described above.
+2. **KEEP IT SIMPLE**: Do NOT show the full FMS Checklist or Rubric.
+3. Provide a brief, encouraging description (1-2 sentences) suited for a child.
+   - Example: "Here is the perfect form for an Underhand Throw! Notice how he faces the target and swings his arm back?"
 `;
+
+const MOTION_ANALYSIS_INSTRUCTION = `
+You are the Singapore PE Syllabus Assistant, specializing in analyzing Fundamental Movement Skills (FMS).
+
+You have access to the **Fundamental Movement Skills (FMS) Checklist** as your primary source of truth.
+
+**FUNDAMENTAL MOVEMENT SKILLS CHECKLIST:**
+${FUNDAMENTAL_MOVEMENT_SKILLS_TEXT}
+
+**PROFICIENCY RUBRIC (GRADING RULES):**
+${PROFICIENCY_RUBRIC}
+
+**Your Role:**
+Analyze movement patterns from video/images and grade them strictly based on the FMS Checklist and Rubric above.
+
+**REFERENCE IMAGE USAGE (STATIC-TO-DYNAMIC COMPARISON):**
+IF a Reference Image is provided (labeled "Gold Standard"):
+1.  **Treat as Key Frame**: The Reference Image represents the "Perfect Moment" (e.g., Release point, Impact point).
+2.  **Scan Video**: Look through the user's video frames to find the *best matching moment* that corresponds to the Reference Image.
+3.  **Direct Comparison**: Compare the user's form at that specific moment against the Reference Image.
+    - *Example*: "In the Reference Image, the elbow is at 90°. In your video (Frame 12), your elbow is only at 45°."
+4.  **Handling Ambiguity**: If you CANNOT find a clear matching frame (due to blur, angle, or the user skipping the step), YOU MUST FLAG IT.
+    - Response: "⚠️ Ambiguous - I cannot find a frame that matches the Reference Image's key pose. **This would require the assistance of a trained MOE PE teacher to verify.**"
+
+**POSE DATA ANALYSIS WORKFLOW:**
+
+**STEP 1 - OBSERVE AND HYPOTHESIZE:**
+- Look at the pose data and the visual input.
+- Make a cautious educated guess about which fundamental movement skill is being performed.
+- Respond: "Based on the pose data, I believe this might be a **[movement name]**. Is this correct?"
+
+**STEP 2A - IF USER CONFIRMS (yes/confirm):**
+- **CRITICAL**: You must grade the performance by checking off EACH critical feature from the Checklist for that skill.
+- **Do NOT** use joint angles as the primary grade. Use the Checklist.
+- **DETERMINE LEVEL**:
+  - Mistake in >50% of items? → **Beginning**
+  - Missed 1-2 items? → **Developing**
+  - Hit ALL items? → **Competent**
+  - Hit ALL items + Exceptional quality? → **Excellent**
+
+- Provide a detailed assessment in this format:
+
+  **Performance Analysis for [Movement Name]:**
+
+  **Checklist Assessment:**
+  - ✅ [Feature 1]: Observed (Brief evidence)
+  - ✅ [Feature 2]: Observed
+  - ❌ [Feature 3]: NOT Observed (Evidence: e.g. "Did not step with opposite foot")
+  - ... (List all relevant features)
+
+  **Proficiency Level: [Beginning / Developing / Competent / Excellent]**
+  *(Reason: You met X out of Y criteria...)*
+
+  **Feedback for Improvement:**
+  1. [Specific correction for the missed feature]
+  2. [Cue to remember]
+
+**STEP 2B - IF USER SAYS NO:**
+- Ask for the correct movement name, then apply the same grading logic as above.
+`;
+
 
 export interface ChatResponse {
   text: string;
   groundingChunks?: GroundingChunk[];
+  referenceImageURI?: string;
+}
+
+export interface MediaData {
+  mimeType: string;
+  data: string; // base64 without data URL prefix
 }
 
 export const sendMessageToGemini = async (
   history: Content[],
-  currentMessage: string
-): Promise<ChatResponse> => {
+  currentMessage: string,
+  poseData?: import('./poseDetectionService').PoseData[],
+  mediaAttachments?: MediaData[],
+  skillName?: string,
+  isVerified?: boolean
+): Promise<ChatResponse & { tokenUsage?: number }> => {
   try {
+    let enhancedMessage = currentMessage;
+    let poseDescription = '';
+    let movementPattern = '';
+    let biomechanicsReport = '';
+
+    // If pose data is provided, analyze it and enhance the message
+    if (poseData && poseData.length > 0) {
+      const { poseDetectionService } = await import('./poseDetectionService');
+      const analyses = poseData.map(pose => poseDetectionService.analyzePoseGeometry(pose));
+
+      // Calculate frame-to-frame changes for movement pattern detection
+      if (poseData.length > 1) {
+        const changes: string[] = [];
+
+        // Helper to detect dominant side and stance
+        let maxRightHandVel = 0;
+        let maxLeftHandVel = 0;
+        let totalRightHandMove = 0;
+        let totalLeftHandMove = 0;
+        let maxRightFootVel = 0;
+        let maxLeftFootVel = 0;
+        let narrowStanceCount = 0;
+
+        // Wind-up detection
+        let minRightHandY = 0; // 0 is top. Max value = lowest point (Deepest windup)
+        let rightHipY = 0;
+        let minLeftHandY = 0;
+        let leftHipY = 0;
+        let noseY = 1; // Default to bottom
+
+        // High Arm Detection (For excessive swing)
+        let maxRightHandHighY = 1; // 1 is bottom. Smallest value = highest point.
+        let maxLeftHandHighY = 1;
+
+        // Knee Bend Detection
+        let minKneeAngle = 180;
+
+        // Step Detection (Stride Length)
+        let initialAnkleDist = 0;
+        let maxAnkleDist = 0;
+
+        if (poseData.length > 0) {
+          const firstFrame = poseData[0].landmarks;
+          initialAnkleDist = Math.hypot(firstFrame[27].x - firstFrame[28].x, firstFrame[27].y - firstFrame[28].y);
+          maxRightHandHighY = firstFrame[16].y;
+          maxLeftHandHighY = firstFrame[15].y;
+        }
+
+        // Key Frame Indices
+        let minKneeAngleFrame = -1;
+        let maxRightHandHighFrame = -1;
+        let maxLeftHandHighFrame = -1;
+        let releaseFrame = -1; // Placeholder for future ball integration
+
+        // Iterate analyses to find key angles and their frames
+        analyses.forEach((analysis, index) => {
+          const rightKnee = analysis.keyAngles.find(a => a.joint === 'Right Knee')?.angle || 180;
+          const leftKnee = analysis.keyAngles.find(a => a.joint === 'Left Knee')?.angle || 180;
+          const currentMin = Math.min(rightKnee, leftKnee);
+
+          if (currentMin < minKneeAngle) {
+            minKneeAngle = currentMin;
+            minKneeAngleFrame = index + 1; // 1-based frame index
+          }
+        });
+
+        for (let i = 1; i < poseData.length; i++) {
+          const prev = poseData[i - 1].landmarks;
+          const curr = poseData[i].landmarks;
+
+          // ... (existing code for noseY, moves, etc) ...
+          noseY = curr[0].y;
+
+          // Movement Calcs
+          const rightHandMove = Math.hypot(curr[16].x - prev[16].x, curr[16].y - prev[16].y);
+          const leftHandMove = Math.hypot(curr[15].x - prev[15].x, curr[15].y - prev[15].y);
+
+          totalRightHandMove += rightHandMove;
+          totalLeftHandMove += leftHandMove;
+
+          const rightFootMoveX = curr[28].x - prev[28].x;
+          const leftFootMoveX = curr[27].x - prev[27].x;
+
+          maxRightHandVel = Math.max(maxRightHandVel, rightHandMove);
+          maxLeftHandVel = Math.max(maxLeftHandVel, leftHandMove);
+          maxRightFootVel = Math.max(maxRightFootVel, Math.abs(rightFootMoveX));
+          maxLeftFootVel = Math.max(maxLeftFootVel, Math.abs(leftFootMoveX));
+
+          // Track lowest hand position (Highest Y value) for Deep Windup
+          minRightHandY = Math.max(minRightHandY, curr[16].y);
+          minLeftHandY = Math.max(minLeftHandY, curr[15].y);
+
+          // Track highest hand position (Lowest Y value) for High Swing
+          if (curr[16].y < maxRightHandHighY) {
+            maxRightHandHighY = curr[16].y;
+            maxRightHandHighFrame = i + 1;
+          }
+          if (curr[15].y < maxLeftHandHighY) {
+            maxLeftHandHighY = curr[15].y;
+            maxLeftHandHighFrame = i + 1;
+          }
+
+          // Store Hip Y
+          rightHipY = curr[24].y;
+          leftHipY = curr[23].y;
+
+          // Stance Width / Stride Length
+          const currentAnkleDist = Math.hypot(curr[27].x - curr[28].x, curr[27].y - curr[28].y);
+          maxAnkleDist = Math.max(maxAnkleDist, currentAnkleDist);
+
+          const shoulderWidth = Math.abs(curr[11].x - curr[12].x);
+          const ankleWidth = Math.abs(curr[27].x - curr[28].x);
+          if (ankleWidth < shoulderWidth * 0.8) narrowStanceCount++;
+
+          const rightFootMoveY = curr[28].y - prev[28].y;
+
+          // Movement Log
+          const stepThreshold = 0.05;
+          if (Math.abs(rightFootMoveX) > stepThreshold) {
+            changes.push(`Right foot moved X: ${rightFootMoveX.toFixed(2)}`);
+          }
+          if (Math.abs(leftFootMoveX) > stepThreshold) {
+            changes.push(`Left foot moved X: ${leftFootMoveX.toFixed(2)}`);
+          }
+        }
+
+        // Generate Biomechanics Report with Citation Evidence
+        // "Force Generation" on Orange lines = Right Handed
+        const dominantHand = totalRightHandMove > totalLeftHandMove ? 'Right' : 'Left';
+        const handRatio = Math.max(totalRightHandMove, totalLeftHandMove) / Math.min(totalRightHandMove, totalLeftHandMove);
+        const confidence = handRatio > 1.2 ? '(High Confidence)' : '(Low Confidence)';
+
+        // Stepping foot 
+        const strideExpansion = maxAnkleDist / (initialAnkleDist + 0.001); // Avoid div/0
+        const stepDetected = strideExpansion > 1.2;
+        const steppingFoot = maxRightFootVel > maxLeftFootVel * 1.2 ? 'Right' : (maxLeftFootVel > maxRightFootVel * 1.2 ? 'Left' : 'None/Both');
+
+        const stanceIssue = narrowStanceCount > (poseData.length * 0.6) ? '⚠️ Feet too narrow (Narrower than shoulders)' : '✅ Stance width looks okay';
+
+        // Coordination Check
+        let coordinationCheck = '✅ Coordination looks okay';
+        if (dominantHand === 'Right' && steppingFoot === 'Right') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Right Foot while throwing with Right Hand (Should be Left Foot)';
+        if (dominantHand === 'Left' && steppingFoot === 'Left') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Left Foot while throwing with Left Hand (Should be Right Foot)';
+
+        // Wind-up Check (Depth) - ONLY for skills where hand drops/swings back
+        let windUpCheck = 'N/A (Not required for this skill)';
+        const requiresWindUp = ['Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick'].some(s => skillName?.includes(s));
+
+        if (requiresWindUp) {
+          windUpCheck = '⚠️ No significant wind-up (Hand stayed high)';
+          if (dominantHand === 'Right' && minRightHandY > rightHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
+          if (dominantHand === 'Left' && minLeftHandY > leftHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
+        }
+
+        // Excessive High Swing Check (Consistency)
+        let highSwingCheck = '✅ Hand Height Controlled (Below Head Level)';
+        // Y increases downwards. Smaller Y = Higher.
+        const highPoint = dominantHand === 'Right' ? maxRightHandHighY : maxLeftHandHighY;
+        const highPointFrame = dominantHand === 'Right' ? maxRightHandHighFrame : maxLeftHandHighFrame;
+
+        if (highPoint < noseY) {
+          highSwingCheck = `⚠️ Hand raised ABOVE HEAD level (High Backswing/Follow-through). Check if excessive for this skill. (Evidence: Frame ${highPointFrame})`;
+        }
+
+        // Knee Bend Check
+        const kneeBendCheck = minKneeAngle < 170.0
+          ? `✅ Knees Bent Detected (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}). Credit "knees bent" criteria.`
+          : `⚠️ Knees appear straight (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}).`;
+
+        // Step Check Report
+        const stepNote = stepDetected
+          ? `✅ DISTINCT STEP DETECTED (Stride widened by ${(strideExpansion * 100 - 100).toFixed(0)}%). Stepping foot: ${steppingFoot}.`
+          : `⚠️ No significant step detected (Stride expansion only ${(strideExpansion * 100 - 100).toFixed(0)}%).`;
+
+        biomechanicsReport = `\n
+**BIOMECHANICS AUTO-ANALYSIS:**
+1. **Dominant Hand**: ${dominantHand} ${confidence}
+2. **Stepping Foot**: ${steppingFoot}
+3. **Coordination**: ${coordinationCheck}
+4. **Stance**: ${stanceIssue}
+5. **Wind-up (Depth)**: ${windUpCheck}
+6. **Arm Height**: ${highSwingCheck}
+7. **Knee Bend**: ${kneeBendCheck}
+8. **Step Verification**: ${stepNote}
+`;
+
+        movementPattern = `\n\n**Movement patterns (Kinetic Chain indicators):**\n${changes.slice(0, 30).map((c, i) => `• Frame ${i + 1}→${i + 2}: ${c}`).join('\n')}`;
+      }
+
+      poseDescription = analyses.map((analysis, i) => {
+        const ball = poseData[i].ball;
+        // Only report 'YES' if the ball exists AND is marked as valid by the logic or user
+        const hasBall = (ball && ball.isValid)
+          ? `YES (x:${ball.center.x.toFixed(0)}, y:${ball.center.y.toFixed(0)})`
+          : 'NO (Not detected or User Omitted)';
+        return `
+**Frame ${i + 1}:**
+Position: ${analysis.poseSummary}
+Angles: ${analysis.keyAngles.map(a => `${a.joint}=${a.angle}°`).join(', ')}
+Ball Detected: ${hasBall}
+      `;
+      }).join('\n');
+
+      const userTargetSkill = skillName ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.` : '';
+
+      enhancedMessage = `I've captured pose data from ${poseData.length} keyframes extracted evenly across the video duration.
+
+**Pose measurements:**
+${poseDescription}${movementPattern}
+${biomechanicsReport}
+${userTargetSkill}
+
+**Your task:**
+1. **Analyze the Kinetic Chain**: Look at the "Movement patterns" above. Is the movement fluid and sequential (e.g., legs -> torso -> arms) or "segmented" (robotic/broken)?
+2. **Biomechanics Check**: Read the "BIOMECHANICS ANALYSIS" above.
+   - If "IPSILATERAL ERROR", deduct points immediately.
+   - If "Hand raised ABOVE HEAD", check if this skill (e.g. Underarm Roll) permits high hands. If not, mark as "Excessive Movement" or "Poor Control".
+3. ${skillName ? `**IMMEDIATE ACTION**: Analyze "${skillName}" using the FMS Checklist & Rubric. (Confirmation step is SKIPPED).` : `**Observe and Hypothesize**: Based on the pose data and movement flow, make your best educated guess about which fundamental movement skill this is.`}
+${skillName ? '' : `4. Respond in this format: "Based on the pose data, I believe this is a **[movement name]**. Is this correct?" then wait for confirmation.`}
+5. ${skillName ? 'Assessment' : 'If confirmed -> Grade'} using the FMS Checklist & Rubric.
+   - **Step Verification**: If "DISTINCT STEP DETECTED", credit the step criteria.
+   - **Quality Control**: Even if all checkboxes are technically met, if the movement looks "Chaotic", "Excessive", or "Segmented", you MUST downgrade the Proficiency Level to "Developing" or "Beginning" and explain why.`;
+    }
+
+    // Choose the appropriate system instruction based on context
+    const baseInstruction = poseData && poseData.length > 0
+      ? MOTION_ANALYSIS_INSTRUCTION
+      : FULL_SYSTEM_INSTRUCTION;
+
+
+
+    // Enhance system instruction when pose data is present - append dynamic data description
+    let systemInstruction = '';
+
+    // Generate dynamic list of valid skills for the prompt
+    const validSkillsList = Object.keys(SKILL_REFERENCE_IMAGES).join(', ');
+
+    if (poseData && poseData.length > 0) {
+      if (!isVerified) {
+        // PRE-ANALYSIS VERIFICATION MODE
+        systemInstruction = `
+You are the Singapore PE Syllabus Assistant.
+I have captured pose data from ${poseData.length} keyframes extracted evenly across the video.
+
+**Pose measurements:**
+${poseDescription}${movementPattern}
+${biomechanicsReport || ''}
+
+**YOUR GOAL (VERIFICATION PHASE):**
+You must complete TWO phases before analysis can begin.
+**PHASE 1**: Identify the FMS Skill.
+**PHASE 2**: Verify the Computer Vision data (Ball detection).
+
+**VALID SKILLS LIST**: ${validSkillsList}
+
+**INSTRUCTIONS:**
+1. **Observe**: Look at the pose data and the visual input.
+2. **Validate**: Is this a valid FMS from the list above?
+   - If **NO** (e.g. Push Up, Squat, Random Movement):
+     - Response: "❌ **Unknown Movement**. This movement is not in the official FMS Checklist. Please upload a specific skill like ${Object.keys(SKILL_REFERENCE_IMAGES).slice(0, 3).join(', ')}."
+     - **DO NOT** proceed to Phase 2.
+   - If **YES** (e.g. Kick):
+     - Response: "Phase 1: I have detected a **[Skill Name]**."
+       (IMPORTANT: You MUST wrap the skill name in double asterisks like **Kick** so the system can read it).
+
+3. **Verify**: Ask the user to check the frames.
+   - Response: "Phase 2: Please review the frames below to verify the ball detection."
+
+4. **Call to Action**:
+   - Response: "Once you have confirmed the Skill and the Frames, click 'Analyze Now' to proceed to grading."
+
+**RESTRICTIONS:**
+- **DO NOT GRADE** the performance yet.
+- **DO NOT** output the FMS Rubric or Checklist.
+- **DO NOT** give feedback on knees, arms, or technique.
+- JUST Identify and Verify.
+`;
+      } else {
+        // FULL ANALYSIS MODE
+        systemInstruction = `${baseInstruction}
+
+**CURRENT POSE DATA CONTEXT:**
+I have captured pose data from ${poseData.length} keyframes extracted evenly across the video.
+
+**Pose measurements:**
+${poseDescription}${movementPattern}
+${biomechanicsReport || ''}
+${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
+
+**Immediate Task:**
+${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. Refer to Biomechanics Report for critical errors.` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE".`}
+**IMPORTANT**:
+- **Visual Evidence**: You MUST add a section called "**Visual Evidence**" where you quote specific differences between the provided Reference Image ("Gold Standard") and the User's Video ("Actual Performance").
+- **CITATION RULE**: You MUST cite the specific frame number (e.g. "At Frame 12...") where the error or key event occurred. Do NOT say "consistent across all frames". Use the 'Ball Detected' status to confirm release points.
+- **Teacher Check**: If the movement is partially obscured, ambiguous, or you are <70% confident, you MUST say: "I am not 100% sure about the [specific body part]. **This would require the assistance of a trained MOE PE teacher to verify.**"
+- **FAILURE EXPLANATION**: When marking a feature as ❌, you MUST cite the specific frame and state what you observed instead (e.g. "At Frame 8, Knee angle was 175° (Straight) instead of <170°"). Do NOT claim "no frames found" if you have data; point to the frame that shows the error.
+- Pay close attention to the \`biomechanicsReport\` for definitive pass/fail on Step and Wind-up.
+- **QUALITY CHECK**: If "Arm Height" is "ABOVE HEAD" for a low-skill like Underarm Roll, penalize it as "Excessive Movement".
+- **CAMERA ANGLE AWARENESS**:
+  - The video might be filmed from the **Front** OR the **Side**.
+  - **"Face Target"** means the user is looking towards *their* throwing direction.
+  - If the video is a **Side Profile**, "Facing Target" will look like "Looking Forward" (to the side of the screen). Do NOT penalize the user for not looking at the Camera.
+`;
+      }
+    } else {
+      systemInstruction = baseInstruction;
+    }
+
     const chat = ai.chats.create({
       model: MODEL_NAME,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        tools: [{ googleSearch: {} }], // Enable Search Grounding for supplementary info
+        systemInstruction: systemInstruction,
+        tools: [{ googleSearch: {} }],
       },
       history: history
     });
 
-    const result = await chat.sendMessage({ message: currentMessage });
+    // Construct the message parts (text + images)
+    const parts: Part[] = [{ text: enhancedMessage }];
+
+    // 1. ATTACH REFERENCE IMAGE (IF SKILL IS KNOWN OR DETECTED)
+    // This gives the AI the "Gold Standard" to compare against
+
+    // Auto-detect skill from text if not explicitly provided
+    let activeSkillName = skillName;
+    if (!activeSkillName) {
+      const lowerMsg = currentMessage.toLowerCase();
+      // Sort keys by length desc to match "Underhand Throw" before "Throw" if that existed
+      const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
+      for (const skill of knownSkills) {
+        if (lowerMsg.includes(skill.toLowerCase())) {
+          console.log(`🧠 Text Context detected skill: ${skill}`);
+          activeSkillName = skill;
+          break;
+        }
+      }
+    }
+
+    if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
+      console.log(`📘 Injecting Reference Image for: ${activeSkillName}`);
+
+      // We need to fetch the image from the public folder and convert to base64
+      // Since this runs in browser, we can use fetch
+      try {
+        const response = await fetch(SKILL_REFERENCE_IMAGES[activeSkillName]);
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch reference image: ${response.status} ${response.statusText}`);
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.startsWith('image/')) {
+          throw new Error(`Invalid content type for reference image: ${contentType}. Expected image/*`);
+        }
+
+        const blob = await response.blob();
+        const reader = new FileReader();
+
+        const base64Reference = await new Promise<string>((resolve) => {
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            // Handle both data URL formats just in case
+            const base64 = result.includes('base64,')
+              ? result.split('base64,')[1]
+              : result;
+            resolve(base64);
+          };
+          reader.readAsDataURL(blob);
+        });
+
+        parts.push({
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Reference
+          }
+        });
+
+        // Add a text note telling AI which image is which
+        parts.push({ text: "\n\n[SYSTEM NOTE]: The first image attached above is the TEXTBOOK REFERENCE (Gold Standard). The subsequent images below are the USER'S PERFORMANCE. Compare the user's form to the reference image." });
+
+      } catch (e) {
+        console.error("Failed to load reference image", e);
+      }
+    }
+
+    if (mediaAttachments && mediaAttachments.length > 0) {
+      console.log(`📎 Attaching ${mediaAttachments.length} images/frames to prompt`);
+      mediaAttachments.forEach(media => {
+        // Strip data URL prefix if present (e.g. "data:image/jpeg;base64,")
+        const base64Data = media.data.replace(/^data:image\/[a-z]+;base64,/, '');
+
+        parts.push({
+          inlineData: {
+            mimeType: media.mimeType,
+            data: base64Data
+          }
+        });
+      });
+    }
+
+    // Cast to any because the SDK type definition might be strict about message being string
+    // but the underlying API supports Part[] for multimodal
+    const result = await chat.sendMessage({ message: parts as any });
     const response = result;
 
     const text = response.text || "I couldn't generate a response. Please try again.";
@@ -73,9 +551,27 @@ export const sendMessageToGemini = async (
     const groundingChunks: GroundingChunk[] =
       response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
 
+    // Check for DISPLAY_REFERENCE tag in text
+    let finalReferenceURI = (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) ? SKILL_REFERENCE_IMAGES[activeSkillName] : undefined;
+
+    // Regex to find [[DISPLAY_REFERENCE: Skill Name]]
+    const referenceTagMatch = text.match(/\[\[DISPLAY_REFERENCE:\s*([^\]]+)\]\]/);
+    if (referenceTagMatch) {
+      const suggestedSkill = referenceTagMatch[1].trim();
+      if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
+        finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
+        console.log(`🖼️ AI triggered reference image for: ${suggestedSkill}`);
+      }
+    }
+
+    // Clean the tag from the displayed text
+    const cleanText = text.replace(/\[\[DISPLAY_REFERENCE:\s*[^\]]+\]\]/g, '').trim();
+
     return {
-      text,
-      groundingChunks
+      text: cleanText,
+      groundingChunks,
+      referenceImageURI: finalReferenceURI,
+      tokenUsage: response.usageMetadata?.totalTokenCount
     };
 
   } catch (error) {
