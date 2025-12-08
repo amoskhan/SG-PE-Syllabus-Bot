@@ -162,8 +162,18 @@ const App: React.FC = () => {
       video.src = URL.createObjectURL(file);
 
       video.onloadedmetadata = () => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        // Resize large videos to prevent Mobile Safari crashes / OOM
+        const MAX_WIDTH = 640;
+        let width = video.videoWidth;
+        let height = video.videoHeight;
+
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
 
         // Determine trim range
         const start = startTime !== undefined ? startTime : 0;
