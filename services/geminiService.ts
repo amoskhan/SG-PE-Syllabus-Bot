@@ -8,7 +8,7 @@ const MODEL_NAME = 'gemini-2.5-flash';
 
 // Initialize the client
 // Note: In a real app, never expose keys on the client. This is for the generated demo environment.
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+// const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 const FULL_SYSTEM_INSTRUCTION = `
 You are the Singapore PE Syllabus Assistant, an expert on the Physical Education (PE) syllabus provided by the Ministry of Education (MOE) Singapore.
@@ -449,15 +449,6 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       systemInstruction = baseInstruction;
     }
 
-    const chat = ai.chats.create({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: systemInstruction,
-        tools: [{ googleSearch: {} }],
-      },
-      history: history
-    });
-
     // Construct the message parts (text + images)
     const parts: Part[] = [{ text: enhancedMessage }];
 
@@ -541,15 +532,62 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       });
     }
 
-    // Cast to any because the SDK type definition might be strict about message being string
-    // but the underlying API supports Part[] for multimodal
-    const result = await chat.sendMessage({ message: parts as any });
-    const response = result;
+    let result;
+    let text = "";
+    let groundingChunks: GroundingChunk[] = [];
+    let tokenUsage = 0;
 
-    const text = response.text || "I couldn't generate a response. Please try again.";
+    // --- HYBRID EXECUTOR ---
+    // If LOCAL (DEV) -> Use Direct Client Key (Fast, no server setup needed)
+    // If PROD -> Use Serverless Proxy (Secure, hides key)
+    if (import.meta.env.DEV) {
+      console.log("🔧 DEV MODE: Using direct Client-Side API Key");
 
-    const groundingChunks: GroundingChunk[] =
-      response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("VITE_GEMINI_API_KEY is missing in .env.local");
+
+      const ai = new GoogleGenAI({ apiKey });
+
+      const chat = ai.chats.create({
+        model: MODEL_NAME,
+        config: {
+          systemInstruction: systemInstruction,
+          tools: [{ googleSearch: {} }],
+        },
+        history: history
+      });
+
+      result = await chat.sendMessage({ message: parts as any });
+      text = result.response.text();
+      groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      tokenUsage = result.response.usageMetadata?.totalTokenCount || 0;
+
+    } else {
+      console.log("🚀 PROD MODE: Using Secure Serverless Function");
+
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          history: history,
+          message: parts, // Send the array of text/images
+          systemInstruction: systemInstruction,
+          tools: [{ googleSearch: {} }] // Request search tool
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Server Error: ${errorData.error || response.statusText}`);
+      }
+
+      const data = await response.json();
+      text = data.text;
+      groundingChunks = data.groundingChunks;
+      tokenUsage = data.tokenUsage;
+    }
 
     // Check for DISPLAY_REFERENCE tag in text
     let finalReferenceURI = (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) ? SKILL_REFERENCE_IMAGES[activeSkillName] : undefined;
@@ -571,7 +609,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       text: cleanText,
       groundingChunks,
       referenceImageURI: finalReferenceURI,
-      tokenUsage: response.usageMetadata?.totalTokenCount
+      tokenUsage: tokenUsage
     };
 
   } catch (error) {
