@@ -1,8 +1,8 @@
 
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
-import { GroundingChunk } from '../types';
-import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from './fundamentalMovementSkillsData';
-import { PE_SYLLABUS_TEXT } from './syllabusData';
+import { GroundingChunk } from '../../types';
+import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from '../../data/fundamentalMovementSkillsData';
+import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -135,7 +135,7 @@ export interface MediaData {
 export const sendMessageToGemini = async (
   history: Content[],
   currentMessage: string,
-  poseData?: import('./poseDetectionService').PoseData[],
+  poseData?: import('../vision/poseDetectionService').PoseData[],
   mediaAttachments?: MediaData[],
   skillName?: string,
   isVerified?: boolean
@@ -148,7 +148,7 @@ export const sendMessageToGemini = async (
 
     // If pose data is provided, analyze it and enhance the message
     if (poseData && poseData.length > 0) {
-      const { poseDetectionService } = await import('./poseDetectionService');
+      const { poseDetectionService } = await import('../vision/poseDetectionService');
       const analyses = poseData.map(pose => poseDetectionService.analyzePoseGeometry(pose));
 
       // Calculate frame-to-frame changes for movement pattern detection

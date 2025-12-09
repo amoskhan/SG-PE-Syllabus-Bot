@@ -1,6 +1,6 @@
 
-import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from './fundamentalMovementSkillsData';
-import { PE_SYLLABUS_TEXT } from './syllabusData';
+import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from '../../data/fundamentalMovementSkillsData';
+import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 import { MediaData } from './geminiService';
 
 // Note: Using the shared OpenRouter API Key
@@ -57,6 +57,15 @@ ${PROFICIENCY_RUBRIC}
 **Your Role:**
 Analyze movement patterns based on the provided POSE DATA textual description and grade them strictly based on the FMS Checklist and Rubric above.
 
+**REFERENCE IMAGE USAGE (STATIC-TO-DYNAMIC COMPARISON):**
+IF a Reference Image is provided (labeled "Gold Standard"):
+1.  **Treat as Key Frame**: The Reference Image represents the "Perfect Moment" (e.g., Release point, Impact point).
+2.  **Scan Video**: Look through the user's video frames to find the *best matching moment* that corresponds to the Reference Image.
+3.  **Direct Comparison**: Compare the user's form at that specific moment against the Reference Image.
+    - *Example*: "In the Reference Image, the elbow is at 90°. In your video (Frame 12), your elbow is only at 45°."
+4.  **Handling Ambiguity**: If you CANNOT find a clear matching frame (due to blur, angle, or the user skipping the step), YOU MUST FLAG IT.
+    - Response: "⚠️ Ambiguous - I cannot find a frame that matches the Reference Image's key pose. **This would require the assistance of a trained MOE PE teacher to verify.**"
+
 **POSE DATA ANALYSIS WORKFLOW:**
 
 **STEP 1 - OBSERVE AND HYPOTHESIZE:**
@@ -95,15 +104,17 @@ Analyze movement patterns based on the provided POSE DATA textual description an
 
 export interface ChatResponse {
     text: string;
+    referenceImageURI?: string;
 }
 
-export const sendMessageToAmazonNova = async (
+export const sendMessageToOpenRouter = async (
     history: { role: string; content: string }[],
     currentMessage: string,
-    poseData?: import('./poseDetectionService').PoseData[],
+    poseData?: import('../vision/poseDetectionService').PoseData[],
     mediaAttachments?: MediaData[],
     skillName?: string,
-    isVerified?: boolean
+    isVerified?: boolean,
+    modelId?: 'nova' | 'nemotron' | 'gemini-exp'
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         if (!OPENROUTER_API_KEY) {
@@ -118,10 +129,11 @@ export const sendMessageToAmazonNova = async (
         // If pose data is provided, analyze it and enhance the message
         // ONLY if this is the first turn (History is empty) OR if the user is explicitly asking to analyze
         // AND there are no media attachments (because if we have video, the model can SEE it, so pose data is just backup context)
-        const isFirstMessage = history.length === 0;
+        // NOTE: We check for 0 or 1 message if the first one is 'assistant' (Welcome message)
+        const isFirstMessage = history.length === 0 || (history.length === 1 && history[0].role === 'assistant');
 
         if (poseData && poseData.length > 0 && isFirstMessage) {
-            const { poseDetectionService } = await import('./poseDetectionService');
+            const { poseDetectionService } = await import('../vision/poseDetectionService');
             const analyses = poseData.map(pose => poseDetectionService.analyzePoseGeometry(pose));
 
             // Calculate frame-to-frame changes for movement pattern detection
@@ -166,7 +178,7 @@ export const sendMessageToAmazonNova = async (
                 let minKneeAngleFrame = -1;
                 let maxRightHandHighFrame = -1;
                 let maxLeftHandHighFrame = -1;
-                let releaseFrame = -1; // Placeholder for future ball integration
+                // let releaseFrame = -1; // Placeholder for future ball integration
 
                 // Iterate analyses to find key angles and their frames
                 analyses.forEach((analysis, index) => {
@@ -228,7 +240,7 @@ export const sendMessageToAmazonNova = async (
                     const ankleWidth = Math.abs(curr[27].x - curr[28].x);
                     if (ankleWidth < shoulderWidth * 0.8) narrowStanceCount++;
 
-                    const rightFootMoveY = curr[28].y - prev[28].y;
+                    // const rightFootMoveY = curr[28].y - prev[28].y;
 
                     // Movement Log
                     const stepThreshold = 0.05;
@@ -303,26 +315,43 @@ export const sendMessageToAmazonNova = async (
                 movementPattern = `\n\n**Movement patterns (Kinetic Chain indicators):**\n${changes.slice(0, 30).map((c, i) => `• Frame ${i + 1}→${i + 2}: ${c}`).join('\n')}`;
             }
 
-            poseDescription = analyses.map((analysis, i) => {
-                const ball = poseData[i].ball;
-                // Only report 'YES' if the ball exists AND is marked as valid by the logic or user
-                const hasBall = (ball && ball.isValid)
-                    ? `YES (x:${ball.center.x.toFixed(0)}, y:${ball.center.y.toFixed(0)})`
-                    : 'NO (Not detected or User Omitted)';
-                return `
+            if (false) { // Disabled compression for Nemotron - sending full data
+                // LIGHTWEIGHT CONTEXT FOR NEMOTRON
+                // We create a "Minified" Pose Log to save tokens but still provide evidence.
+                poseDescription = `**Compressed Frame Data (Evidence):**\n` + analyses.map((a, i) => {
+                    // Extract key angles for brevity
+                    const rElbow = a.keyAngles.find(k => k.joint === 'Right Elbow')?.angle || 0;
+                    const rKnee = a.keyAngles.find(k => k.joint === 'Right Knee')?.angle || 0;
+                    const lKnee = a.keyAngles.find(k => k.joint === 'Left Knee')?.angle || 0;
+
+                    // Summarize Arm position from text
+                    const rArm = a.poseSummary.includes('Right arm: raised') ? 'RArm:HIGH' : (a.poseSummary.includes('lowered') ? 'RArm:LOW' : 'RArm:MID');
+
+                    return `F${i + 1}: ${rArm}. R.Elbow:${rElbow}. Knees:${Math.min(rKnee, lKnee)}.`;
+                }).join('\n');
+            } else {
+                poseDescription = analyses.map((analysis, i) => {
+                    const ball = poseData[i].ball;
+                    // Only report 'YES' if the ball exists AND is marked as valid by the logic or user
+                    const hasBall = (ball && ball.isValid)
+                        ? `YES (x:${ball.center.x.toFixed(0)}, y:${ball.center.y.toFixed(0)})`
+                        : 'NO (Not detected or User Omitted)';
+                    return `
                 **Frame ${i + 1}:**
                 Position: ${analysis.poseSummary}
                 Angles: ${analysis.keyAngles.map(a => `${a.joint}=${a.angle}°`).join(', ')}
                 Ball Detected: ${hasBall}
             `;
-            }).join('\n');
+                }).join('\n');
+            }
 
             const userTargetSkill = skillName ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.` : '';
 
             enhancedMessage = `I've captured pose data from ${poseData.length} keyframes extracted evenly across the video duration.
 
             **Pose measurements (Textual Description):**
-            ${poseDescription}${movementPattern}
+            ${poseDescription}
+            ${modelId === 'nemotron' ? '' : movementPattern}
             ${biomechanicsReport}
             ${userTargetSkill}
 
@@ -342,64 +371,78 @@ export const sendMessageToAmazonNova = async (
             ? MOTION_ANALYSIS_INSTRUCTION
             : FULL_SYSTEM_INSTRUCTION;
 
-        const validSkillsList = Object.keys(SKILL_REFERENCE_IMAGES).join(', ');
-
         if (poseData && poseData.length > 0 && isFirstMessage) {
             if (!isVerified) {
-                // PRE-ANALYSIS VERIFICATION MODE (Text Only)
+                // PRE-ANALYSIS VERIFICATION MODE (Phase 1: Identification ONLY)
                 systemInstruction = `
                 You are the Singapore PE Syllabus Assistant.
-                I have captured pose data from ${poseData.length} keyframes extracted evenly across the video.
-
-                **Pose measurements:**
-                ${poseDescription}${movementPattern}
-                ${biomechanicsReport || ''}
-
-                **YOUR GOAL (VERIFICATION PHASE):**
-                You must complete TWO phases before analysis can begin.
-                **PHASE 1**: Identify the FMS Skill.
-                **PHASE 2**: Verify the Computer Vision data (Ball detection).
-
-                **VALID SKILLS LIST**: ${validSkillsList}
-
-                **INSTRUCTIONS:**
-                1. **Listen to Context**: Check if the user is CORRECTING a previous guess (e.g., "No, it's a kick", "Underhand Roll").
-                   - If **User Corrects**: Accept their label immediately. Response: "Phase 1: I have detected a **[User's Skill Name]**."
                 
-                2. **Observe (If no user correction)**: Look at the text pose data provided.
-                3. **Validate**: Is this a valid FMS from the list above?
-                - If **NO** (e.g. Push Up, Squat, Random Movement):
-                    - Response: "❌ **Unknown Movement**. This movement is not in the official FMS Checklist."
-                    - **DO NOT** proceed to Phase 2.
-                - If **YES** (e.g. Kick):
-                    - Response: "Phase 1: I have detected a **[Skill Name]**."
-                    (IMPORTANT: You MUST wrap the skill name in double asterisks like **Kick** so the system can read it).
+                **IMMEDIATE TASK (PHASE 1)**:
+                Identify the specific Fundamental Movement Skill (FMS) in the video/images.
+                
+                **VALID FMS SKILLS**: 
+                Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble (Hand), Dribble (Foot), Chest Pass, Catch, Bounce Pass, Vertical Jump.
 
-                3. **Verify**: Ask the user to check the frames.
-                - Response: "Phase 2: Please verify the ball detection in the viewer."
+                **INSTRUCTIONS**:
+                1. Look at the visual evidence and pose data.
+                2. Identify the skill.
+                3. **STOP**. Do NOT grade it yet.
+                
+                **REQUIRED OUTPUT FORMAT**:
+                "Phase 1: I have detected a **[Skill Name]**."
 
-                4. **Call to Action**:
-                - Response: "Once you have confirmed the Skill, click 'Analyze Now' to proceed to grading."
-
-                **RESTRICTIONS:**
-                - **DO NOT GRADE** the performance yet.
-                - **DO NOT** output the FMS Rubric or Checklist.
-                - **DO NOT** give feedback on knees, arms, or technique.
-                - JUST Identify and Verify.
+                Example: "Phase 1: I have detected a **Kick**."
+                
+                If the movement is random or unclear:
+                "❌ **Unknown Movement**. Please demonstrate a standard PE skill."
                 `;
             } else {
-                systemInstruction = `${baseInstruction}
+                // ANALYSIS MODE (Phase 2: Grading)
+                systemInstruction = `
+                You are the PE Syllabus Assistant.
+                
+                **TASK**: Compare the User's Video (Visual Evidence) against the Gold Standard (Reference Image) using the FMS Checklist.
 
-                **CURRENT POSE DATA CONTEXT:**
-                I have captured pose data from ${poseData.length} keyframes extracted evenly across the video.
+                **INPUTS:**
+                1. **IMAGE 1 (Reference)**: The "Gold Standard" textbook form.
+                2. **IMAGES 2+ (User)**: The user's actual performance.
+                3. **POSE DATA**: Biomechanical stats (Angles, Velocities) to support your visual findings.
 
-                **Pose measurements:**
+                **CRITICAL RULES:**
+                1. **LOOK AT THE IMAGES**. Do not just rely on pose data. Compare the user's arm angles, leg positions, and posture to the Reference Image.
+                2. **STRICT FORMATTING (CLEAN TEXT)**:
+                   - **NO** Markdown Headers (Do not use #, ##, ###).
+                   - **NO** Tables (Do not use | | |).
+                   - **NO** Horizontal Rules (Do not use ---).
+                   - Use CAPS or **Bold** for section titles.
+                   - Use simple dashed lists (-) for items.
+
+                **REQUIRED OUTPUT FORMAT:**
+
+                DETECTED SKILL: [Skill Name]
+
+                COMPARISON TO GOLD STANDARD
+                [1-2 sentences comparing the visual form. E.g., "In the Reference Image, the arm is fully extended. In your video, the arm is bent..."]
+
+                CHECKLIST ASSESSMENT
+                [Go through the OFFICIAL CRITERIA for this skill from the FMS Data provided below. Do NOT invent criteria.]
+                - [Criterion 1]: ✅ Observed (Frame X)
+                - [Criterion 2]: ❌ Not Observed [Brief specific tip]
+                (List all ~5-8 criteria)
+
+                PROFICIENCY LEVEL: [Beginning / Developing / Competent / Excellent]
+                [Brief reasoning: "You met 7/8 criteria..."]
+
+                FEEDBACK
+                [1 specific, actionable correction based on the biggest error]
+
+                **CONTEXT DATA (FMS CHECKLISTS):**
+                ${FUNDAMENTAL_MOVEMENT_SKILLS_TEXT}
+                
+                **POSE DATA:**
                 ${poseDescription}${movementPattern}
                 ${biomechanicsReport || ''}
                 ${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
-
-                **Immediate Task:**
-                ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. Refer to Biomechanics Report for critical errors.` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE".`}
                 `;
             }
         } else {
@@ -411,21 +454,128 @@ export const sendMessageToAmazonNova = async (
         // Note: OpenRouter supports content as an array for multimodal messages:
         // { role: "user", content: [ { type: "text", text: "..." }, { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } } ] }
 
+        // Sanitize history: The first message after system MUST be 'user' for some models (like Nova/Claude)
+        // If the first message in history is 'assistant' (e.g. Welcome message), remove it.
+        let sanitizedHistory = [...history];
+        while (sanitizedHistory.length > 0 && sanitizedHistory[0].role !== 'user') {
+            sanitizedHistory.shift();
+        }
+
         const openRouterMessages: any[] = [
             { role: "system", content: systemInstruction },
-            ...history // Existing history is just text for now
+            ...sanitizedHistory
         ];
 
         // Construct the CURRENT user message
+        let finalMessageContent = enhancedMessage;
+
+        // CRITICAL: For Nemotron/Nova (Smaller models), they often forget the System Instruction "Phase 1" rule
+        // because the Pose Data context is so large. We must REMIND them at the END of the prompt.
+        // HOWEVER: 
+        // 1. If a specific skillName is provided by the system/user (meaning it's trusted), we do NOT force Phase 1.
+        // 2. If there is NO visual data (text-only query), we do NOT force Phase 1.
+        const hasVisualContext = (mediaAttachments && mediaAttachments.length > 0) || (poseData && poseData.length > 0);
+
+        if (hasVisualContext && !isVerified && (modelId === 'nemotron' || modelId === 'nova') && !skillName) {
+            finalMessageContent += `
+            
+            ⚠️ **URGENT INSTRUCTION:**
+            **STOP!** Do NOT analyze or grade yet.
+            Your ONLY goal right now is to **IDENTIFY** the skill from the visual evidence.
+            Answer in this EXACT format: "Phase 1: I have detected a **[Skill Name]**. Is this correct?."
+            If unsure, say "Unknown".`;
+        }
+
         const userContent: any[] = [
-            { type: "text", text: enhancedMessage }
+            { type: "text", text: finalMessageContent }
         ];
+
+        // 1. ATTACH REFERENCE IMAGE (ONLY IF VERIFIED)
+        // This gives the AI the "Gold Standard" to compare against, but ONLY after Phase 1 (Identification) is complete.
+        let finalReferenceURI: string | undefined = undefined;
+
+        if (isVerified) {
+            // Auto-detect skill from text if not explicitly provided
+            let activeSkillName = skillName;
+            if (!activeSkillName) {
+                const lowerMsg = currentMessage.toLowerCase();
+                // Sort keys by length desc to prevent partial matches
+                const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
+                for (const skill of knownSkills) {
+                    if (lowerMsg.includes(skill.toLowerCase())) {
+                        activeSkillName = skill;
+                        break;
+                    }
+                }
+            }
+
+            if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
+                console.log(`📘 [OpenRouter] Injecting Reference Image for: ${activeSkillName}`);
+                finalReferenceURI = SKILL_REFERENCE_IMAGES[activeSkillName];
+
+                try {
+                    const response = await fetch(SKILL_REFERENCE_IMAGES[activeSkillName]);
+                    if (!response.ok) throw new Error("Failed to fetch reference image");
+
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    const base64Reference = await new Promise<string>((resolve) => {
+                        reader.onloadend = () => {
+                            const result = reader.result as string;
+                            // Strip prefix if present, though OpenRouter might handle it? 
+                            // safely sending full data URL usually works better with 'url' field
+                            resolve(result);
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+
+                    // Add Reference Image FIRST (Context)
+                    userContent.push({
+                        type: "image_url",
+                        image_url: {
+                            url: base64Reference
+                        }
+                    });
+
+                    // Add a text note telling AI which image is which
+                    userContent.push({
+                        type: "text",
+                        text: "\n\n[SYSTEM NOTE]: The IMAGE ATTACHED ABOVE is the TEXTBOOK REFERENCE (Gold Standard). The images BELOW (if any) are the USER'S PERFORMANCE. Compare the user's form to the reference image."
+                    });
+
+                } catch (e) {
+                    console.error("Failed to load reference image for OpenRouter", e);
+                }
+            }
+        }
 
         // If we have media attachments (images/frames), attach them for the model to SEE
         if (mediaAttachments && mediaAttachments.length > 0) {
-            mediaAttachments.forEach(media => {
+            let processedAttachments = mediaAttachments;
+
+            // Nemotron has a strict 10-image limit per prompt
+            // If we are in verification mode, we use 1 slot for the Reference Image, so we only have 9 slots left.
+            const maxUserFrames = (modelId === 'nemotron' && isVerified) ? 9 : 10;
+
+            if (modelId === 'nemotron' && mediaAttachments.length > maxUserFrames) {
+                console.log(`⚠️ Nemotron Limit: Downsampling ${mediaAttachments.length} frames to ${maxUserFrames} (isVerified=${isVerified}).`);
+                const step = (mediaAttachments.length - 1) / (maxUserFrames - 1);
+                processedAttachments = [];
+                for (let i = 0; i < maxUserFrames; i++) {
+                    const idx = Math.min(Math.round(i * step), mediaAttachments.length - 1);
+                    processedAttachments.push(mediaAttachments[idx]);
+                }
+                // Filter out potential duplicates if video is extremely short
+                processedAttachments = [...new Set(processedAttachments)];
+            }
+
+            processedAttachments.forEach(media => {
                 // Ensure data URL proper format
-                const dataUrl = `data:${media.mimeType};base64,${media.data}`;
+                // Check if it's already a data URL
+                const dataUrl = media.data.trim().startsWith('data:')
+                    ? media.data
+                    : `data:${media.mimeType};base64,${media.data}`;
+
                 userContent.push({
                     type: "image_url",
                     image_url: {
@@ -433,7 +583,7 @@ export const sendMessageToAmazonNova = async (
                     }
                 });
             });
-            console.log(`[AmazonNovaService -> Gemini2] Attached ${mediaAttachments.length} images for vision processing.`);
+            console.log(`[OpenRouterService] Attached ${processedAttachments.length} images for vision processing.`);
         }
 
         openRouterMessages.push({
@@ -441,7 +591,17 @@ export const sendMessageToAmazonNova = async (
             content: userContent
         });
 
-        // Using Google Gemini 2.0 Flash (Experimental) via OpenRouter
+        // Map internal model IDs to OpenRouter model strings
+        const modelMap: Record<string, string> = {
+            'nova': 'amazon/nova-2-lite-v1:free',
+            'nemotron': 'nvidia/nemotron-nano-12b-v2-vl:free',
+            'gemini-exp': 'google/gemini-2.0-flash-exp:free',
+        };
+
+        const targetModel = modelMap[modelId || 'nova'] || 'amazon/nova-2-lite-v1:free';
+
+        console.log(`🤖 Using OpenRouter Model: ${targetModel}`);
+
         // This is a TRUE MULTIMODAL model (Vision + Text)
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
@@ -452,26 +612,33 @@ export const sendMessageToAmazonNova = async (
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                "model": "amazon/nova-2-lite-v1",
+                "model": targetModel,
                 "messages": openRouterMessages,
-                "temperature": 0.7,
-                "max_tokens": 2000
+                "temperature": 0.5,
+                "max_tokens": 5000,
+                "transforms": ["middle-out"]
             })
         });
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('OpenRouter Amazon Nova API error response:', errorText);
-            throw new Error(`OpenRouter Amazon Nova API error (${response.status}): ${errorText}`);
+            console.error('OpenRouter API error response:', errorText);
+            throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
         }
 
         const data = await response.json();
-        const text = data.choices[0]?.message?.content || "I couldn't generate a response.";
+        console.log("🟢 OpenRouter Raw Response:", JSON.stringify(data, null, 2)); // Debug log
+
+        if (data.error) {
+            throw new Error(`API Error: ${data.error.message || JSON.stringify(data.error)}`);
+        }
+
+        const text = data.choices?.[0]?.message?.content || "I couldn't generate a response (No content received).";
         const tokenUsage = data.usage?.total_tokens;
 
-        return { text, tokenUsage };
+        return { text, tokenUsage, referenceImageURI: finalReferenceURI };
     } catch (error) {
-        console.error("Amazon Nova API Error:", error);
+        console.error("OpenRouter API Error:", error);
         throw error;
     }
 };
