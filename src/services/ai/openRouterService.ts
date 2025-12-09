@@ -572,7 +572,7 @@ export const sendMessageToOpenRouter = async (
         // 2. If there is NO visual data (text-only query), we do NOT force Phase 1.
         const hasVisualContext = (mediaAttachments && mediaAttachments.length > 0) || (poseData && poseData.length > 0);
 
-        if (!isVerified && (modelId === 'nemotron' || modelId === 'nova') && !activeSkillName) {
+        if (hasVisualContext && !isVerified && (modelId === 'nemotron' || modelId === 'nova') && !activeSkillName) {
             finalMessageContent += `
             
             ⚠️ **URGENT INSTRUCTION:**
