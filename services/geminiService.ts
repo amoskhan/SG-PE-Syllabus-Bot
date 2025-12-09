@@ -559,93 +559,114 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
     if (mediaAttachments && mediaAttachments.length > 0) {
       console.log(`📎 Attaching ${mediaAttachments.length} images/frames to prompt`);
+
+      // Process serially to be safe
+      for (const media of mediaAttachments) {
+        // Strip data URL prefix if present for logic, but compression needs it
+        let base64Data = media.data;
+
+        // ONLY Compress if we are sending to Server (VS PROD MODE)
+        // OR always compress to be safe? 
+        // Let's always compress video analysis frames as they can be huge (10 frames * 1MB = 10MB)
+        try {
+          console.log("Compressing frame for upload...");
+          base64Data = await compressBase64Image(media.data);
+        } catch (e) {
+          console.warn("Compression failed, sending original", e);
+          base64Data = media.data.replace(/^data:image\/[a-z]+;base64,/, '');
+        }
+
+        parts.push({
+          inlineData: {
+            mimeType: media.mimeType,
+            data: base64Data
+          }
+        });
+      }
     }
-  });
-}
+
+    let result;
+    let text = "";
+    let groundingChunks: GroundingChunk[] = [];
+    let tokenUsage = 0;
+
+    // --- HYBRID EXECUTOR ---
+    // If LOCAL (DEV) -> Use Direct Client Key (Fast, no server setup needed)
+    // If PROD -> Use Serverless Proxy (Secure, hides key)
+    if (import.meta.env.DEV) {
+      console.log("🔧 DEV MODE: Using direct Client-Side API Key");
+
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("VITE_GEMINI_API_KEY is missing in .env.local");
+
+      const ai = new GoogleGenAI({ apiKey });
+
+      const chat = ai.chats.create({
+        model: MODEL_NAME,
+        config: {
+          systemInstruction: systemInstruction,
+          tools: [{ googleSearch: {} }],
+        },
+        history: history
+      });
+
+      result = await chat.sendMessage({ message: parts as any });
+      text = result.response.text();
+      groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      tokenUsage = result.response.usageMetadata?.totalTokenCount || 0;
+
+    } else {
+      console.log("🚀 PROD MODE: Using Secure Serverless Function");
+
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          history: history,
+          message: parts, // Send the array of text/images
+          systemInstruction: systemInstruction,
+          tools: [{ googleSearch: {} }] // Request search tool
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Server Error: ${errorData.error || response.statusText}`);
+      }
+
+      const data = await response.json();
+      text = data.text;
+      groundingChunks = data.groundingChunks;
+      tokenUsage = data.tokenUsage;
     }
 
-let result;
-let text = "";
-let groundingChunks: GroundingChunk[] = [];
-let tokenUsage = 0;
+    // Check for DISPLAY_REFERENCE tag in text
+    let finalReferenceURI = (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) ? SKILL_REFERENCE_IMAGES[activeSkillName] : undefined;
 
-// --- HYBRID EXECUTOR ---
-// If LOCAL (DEV) -> Use Direct Client Key (Fast, no server setup needed)
-// If PROD -> Use Serverless Proxy (Secure, hides key)
-if (import.meta.env.DEV) {
-  console.log("🔧 DEV MODE: Using direct Client-Side API Key");
+    // Regex to find [[DISPLAY_REFERENCE: Skill Name]]
+    const referenceTagMatch = text.match(/\[\[DISPLAY_REFERENCE:\s*([^\]]+)\]\]/);
+    if (referenceTagMatch) {
+      const suggestedSkill = referenceTagMatch[1].trim();
+      if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
+        finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
+        console.log(`🖼️ AI triggered reference image for: ${suggestedSkill}`);
+      }
+    }
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) throw new Error("VITE_GEMINI_API_KEY is missing in .env.local");
+    // Clean the tag from the displayed text
+    const cleanText = text.replace(/\[\[DISPLAY_REFERENCE:\s*[^\]]+\]\]/g, '').trim();
 
-  const ai = new GoogleGenAI({ apiKey });
-
-  const chat = ai.chats.create({
-    model: MODEL_NAME,
-    config: {
-      systemInstruction: systemInstruction,
-      tools: [{ googleSearch: {} }],
-    },
-    history: history
-  });
-
-  result = await chat.sendMessage({ message: parts as any });
-  text = result.response.text();
-  groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-  tokenUsage = result.response.usageMetadata?.totalTokenCount || 0;
-
-} else {
-  console.log("🚀 PROD MODE: Using Secure Serverless Function");
-
-  const response = await fetch('/api/gemini', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      history: history,
-      message: parts, // Send the array of text/images
-      systemInstruction: systemInstruction,
-      tools: [{ googleSearch: {} }] // Request search tool
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`Server Error: ${errorData.error || response.statusText}`);
-  }
-
-  const data = await response.json();
-  text = data.text;
-  groundingChunks = data.groundingChunks;
-  tokenUsage = data.tokenUsage;
-}
-
-// Check for DISPLAY_REFERENCE tag in text
-let finalReferenceURI = (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) ? SKILL_REFERENCE_IMAGES[activeSkillName] : undefined;
-
-// Regex to find [[DISPLAY_REFERENCE: Skill Name]]
-const referenceTagMatch = text.match(/\[\[DISPLAY_REFERENCE:\s*([^\]]+)\]\]/);
-if (referenceTagMatch) {
-  const suggestedSkill = referenceTagMatch[1].trim();
-  if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
-    finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
-    console.log(`🖼️ AI triggered reference image for: ${suggestedSkill}`);
-  }
-}
-
-// Clean the tag from the displayed text
-const cleanText = text.replace(/\[\[DISPLAY_REFERENCE:\s*[^\]]+\]\]/g, '').trim();
-
-return {
-  text: cleanText,
-  groundingChunks,
-  referenceImageURI: finalReferenceURI,
-  tokenUsage: tokenUsage
-};
+    return {
+      text: cleanText,
+      groundingChunks,
+      referenceImageURI: finalReferenceURI,
+      tokenUsage: tokenUsage
+    };
 
   } catch (error) {
-  console.error("Gemini API Error:", error);
-  throw error;
-}
+    console.error("Gemini API Error:", error);
+    throw error;
+  }
 };
