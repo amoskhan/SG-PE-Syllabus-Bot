@@ -611,6 +611,12 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       });
 
       result = await chat.sendMessage({ message: parts as any });
+
+      // Safety check - ensure we have a valid response
+      if (!result || !result.response) {
+        throw new Error("Gemini API returned an empty response. This is usually due to Safety Filters or Quota Limits.");
+      }
+
       text = result.response.text();
       groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
       tokenUsage = result.response.usageMetadata?.totalTokenCount || 0;

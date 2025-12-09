@@ -332,7 +332,8 @@ const App: React.FC = () => {
         errorMsgLower.includes('limit') ||
         errorMsgLower.includes('resource exhausted')
       ) {
-        errorText = "⚠️ Usage limit reached. The AI is a bit tired. Please wait a minute before trying again.";
+        const modelName = selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1);
+        errorText = `⚠️ ${modelName} API usage limit reached. It attempted to generate a response but was stopped. Please wait a minute before trying again.`;
       }
 
       const errorMessage: Message = {
