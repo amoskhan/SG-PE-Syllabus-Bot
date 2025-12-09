@@ -20,6 +20,7 @@ export interface MovementAnalysis {
 
 export interface BallData {
     center: { x: number; y: number };
+    centerNormalized?: { x: number; y: number }; // Normalized (0-1) coordinates for AI analysis
     box: { originX: number; originY: number; width: number; height: number };
     isValid?: boolean; // True if it passes smart filters (proximity/movement)
     status?: string;   // Reason for validity (e.g., "Proximity Match", "Static Ignored", "Too Far")
@@ -468,6 +469,10 @@ class PoseDetectionService {
 
             return {
                 center: center,
+                centerNormalized: {
+                    x: center.x / imageSize.width,
+                    y: center.y / imageSize.height
+                },
                 box: box,
                 isValid: isValid,
                 status: status

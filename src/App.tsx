@@ -349,8 +349,10 @@ const App: React.FC = () => {
       // 1. "I believe this is a **Skill**" (Standard)
       // 2. "this looks like a **Skill**" (Verification Mode)
       // 3. "I have detected a **Skill**" (Strict Phase 1 Mode)
-      const skillMatch = response.text.match(/(?:I believe this is a|this looks like a|I have detected a) \*\*([^*]+)\*\*/i);
-      const detectedSkill = skillMatch ? skillMatch[1] : undefined;
+      // 4. "Performance Analysis for **Skill**" (Phase 2 Reporting Mode)
+      // Regex simplified: Look for one of the prefixes, then capture the text until the next * or : or newline
+      const skillMatch = response.text.match(/(?:I believe this is a|this looks like a|I have detected a|Performance Analysis for) (?:\*\*|)?([^*:\n]+)(?:\*\*|:)?/i);
+      const detectedSkill = skillMatch ? skillMatch[1].trim() : undefined;
 
       setMessages((prev) => {
         const updatedMessages = [...prev];
