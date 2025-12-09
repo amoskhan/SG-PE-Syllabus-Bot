@@ -520,23 +520,17 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
     // Helper to compress images for Vercel Payload Limits (4.5MB)
     const compressBase64Image = async (base64: string, maxWidth = 640, quality = 0.6): Promise<string> => {
       return new Promise((resolve) => {
-        // 1. Separate Header (if present) from Data
-        const parts = base64.split(',');
-        const header = parts.length > 1 ? parts[0] + ',' : 'data:image/jpeg;base64,';
-        let data = parts.length > 1 ? parts[1] : parts[0];
+        // SANITIZE: Remove all whitespace (newlines, spaces) which crash Mobile Safari
+        let cleanBase64 = base64.replace(/\s/g, '');
 
-        // 2. SANITIZE: Remove all whitespace from DATA only
-        data = data.replace(/\s/g, '');
-
-        // 3. PAD: Ensure DATA length is multiple of 4
-        while (data.length % 4 !== 0) {
-          data += '=';
+        // PAD: Ensure length is mutiple of 4
+        while (cleanBase64.length % 4 !== 0) {
+          cleanBase64 += '=';
         }
 
-        const cleanBase64 = header + data;
         const img = new Image();
         // Ensure prefix
-        const src = cleanBase64;
+        const src = cleanBase64.startsWith('data:') ? cleanBase64 : `data:image/jpeg;base64,${cleanBase64}`;
 
         img.onerror = () => {
           console.warn("Image compression failed (Load Error). Returning original (risky).");
