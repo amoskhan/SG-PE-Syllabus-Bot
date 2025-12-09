@@ -88,7 +88,7 @@ const App: React.FC = () => {
 
       } else if (file.type.startsWith('video/')) {
         // Process video - extract frames respecting trim range
-        const frames = await extractVideoFrames(file, 12, metadata?.startTime, metadata?.endTime);
+        const frames = await extractVideoFrames(file, 24, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
 
         attachments.push({
