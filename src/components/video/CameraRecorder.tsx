@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { poseDetectionService } from '../services/poseDetectionService';
+import { poseDetectionService } from '../../services/vision/poseDetectionService';
 
 interface CameraRecorderProps {
     onVideoRecorded: (videoBlob: Blob) => void;

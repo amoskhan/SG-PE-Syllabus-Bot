@@ -1,5 +1,5 @@
-import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT } from './fundamentalMovementSkillsData';
-import { PE_SYLLABUS_TEXT } from './syllabusData';
+import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT } from '../../data/fundamentalMovementSkillsData';
+import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 
 // Get bearer token from environment - this is actually a base64-encoded pre-signed URL
 const BEDROCK_BEARER_TOKEN = import.meta.env.VITE_BEDROCK_BEARER_TOKEN || "";

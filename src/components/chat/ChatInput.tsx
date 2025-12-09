@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import CameraRecorder from './CameraRecorder';
-import VideoFrameSelector from './VideoFrameSelector';
+import CameraRecorder from '../video/CameraRecorder';
+import VideoFrameSelector from '../video/VideoFrameSelector';
 
 interface ChatInputProps {
   onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string }) => void;

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Message, Sender } from '../types';
+import { Message, Sender } from '../../types';
 import MarkdownRenderer from './MarkdownRenderer';
-import VideoAnalysisPlayer from './VideoAnalysisPlayer';
+import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 
 interface ChatMessageProps {
   message: Message;

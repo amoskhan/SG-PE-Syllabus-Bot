@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { poseDetectionService, BallData } from '../services/poseDetectionService';
+import { poseDetectionService, BallData } from '../../services/vision/poseDetectionService';
 
 interface VideoAnalysisPlayerProps {
     src: string;

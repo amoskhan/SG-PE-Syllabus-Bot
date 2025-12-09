@@ -1,16 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Content, Part } from '@google/genai';
 import { Analytics } from "@vercel/analytics/react";
-import Header from './components/Header';
-import ChatInput from './components/ChatInput';
-import ChatMessage from './components/ChatMessage';
+import Header from './components/layout/Header';
+import ChatInput from './components/chat/ChatInput';
+import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment } from './types';
-import { sendMessageToGemini, MediaData } from './services/geminiService';
-import { sendMessageToBedrock } from './services/bedrockService';
-import { sendMessageToDeepSeek } from './services/deepSeekService';
-import { sendMessageToAmazonNova } from './services/amazonNovaService';
-import { poseDetectionService, type PoseData } from './services/poseDetectionService';
+import { MediaData } from './services/ai/geminiService';
+import { getAIService } from './services/ai/aiServiceRegistry';
+import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -22,7 +19,7 @@ const App: React.FC = () => {
     }
   ]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'deepseek' | 'nova'>('gemini');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'nemotron' | 'gemini-exp'>('nemotron');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom
@@ -88,7 +85,10 @@ const App: React.FC = () => {
 
       } else if (file.type.startsWith('video/')) {
         // Process video - extract frames respecting trim range
-        const frames = await extractVideoFrames(file, 24, metadata?.startTime, metadata?.endTime);
+        // Dynamic Frame Count: Nemotron (Small model) gets 10 frames to match API limit & Visual Vetting.
+        // Gemini/Bedrock (Frontier models) get 24 frames for higher temporal resolution.
+        const frameCount = selectedModel === 'nemotron' ? 10 : 24;
+        const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
 
         attachments.push({
@@ -210,6 +210,40 @@ const App: React.FC = () => {
     files?: File[],
     metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean }
   ) => {
+    // Smart Verification Check: If user types "yes" to a confirmation, treat it as verified.
+    let isVerifying = metadata?.isVerified;
+    let skillContext = metadata?.skillName;
+
+    if (!isVerifying && text) {
+      const lowerText = text.toLowerCase().trim();
+
+      // 1. Check for explicit verification words
+      const confirmationWords = ['yes', 'correct', 'yup', 'yeah', 'sure', 'confirm'];
+      const isConfirmation = confirmationWords.some(w => lowerText === w || lowerText.startsWith(w + ' '));
+
+      // 2. Check for explicit Skill Name Correction (e.g. "it's underhand roll", "underhand roll")
+      const knownSkills = [
+        'underhand throw', 'underhand roll', 'overhand throw', 'kick',
+        'dribble with feet', 'dribble with hands', 'chest pass', 'bounce pass', 'bounce', 'above the waist catch',
+      ];
+      // Find if user text contains a skill name. We sort by length desc to match "Underhand Roll" before "Roll"
+      const matchedSkill = knownSkills.sort((a, b) => b.length - a.length).find(skill => lowerText.includes(skill));
+
+      // Check if the LAST message was a Bot Phase 1 detection
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg && lastMsg.sender === Sender.BOT && lastMsg.text.includes("Phase 1")) {
+        if (isConfirmation) {
+          console.log("✅ Auto-detecting verification from text: 'yes'");
+          isVerifying = true;
+          const skillMatch = lastMsg.text.match(/\*\*(.*?)\*\*/);
+          if (skillMatch && !skillContext) skillContext = skillMatch[1];
+        } else if (matchedSkill) {
+          console.log(`✅ Auto-detecting Skill Correction: '${matchedSkill}'`);
+          isVerifying = true; // Treat correction as verification of the NEW skill
+          skillContext = matchedSkill; // OVERRIDE the context with user input
+        }
+      }
+    }
     // Process media files if present
     let mediaAttachments: MediaAttachment[] | undefined;
     let poseData: PoseData[] | undefined;
@@ -242,51 +276,64 @@ const App: React.FC = () => {
 
       // Context finding for pose data
       let contextPoseData = poseData;
-      if (!contextPoseData) {
+      // Context finding for visual frames (CRITICAL for "Analyze Now" button)
+      let contextAnalysisFrames = analysisFrames;
+
+      if (!contextPoseData || !contextAnalysisFrames) {
         for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].poseData && messages[i].poseData!.length > 0) {
+          // 1. Find Pose Data
+          if (!contextPoseData && messages[i].poseData && messages[i].poseData!.length > 0) {
             contextPoseData = messages[i].poseData;
             console.log('📌 Using pose data from previous message for context');
-            break;
           }
+
+          // 2. Find Visual Frames (Reconstruct from history)
+          if (!contextAnalysisFrames) {
+            // Try used analysis frames (Debug frames)
+            if (messages[i].analysisFrames && messages[i].analysisFrames!.length > 0) {
+              console.log(`📌 Reusing ${messages[i].analysisFrames!.length} visual frames from history.`);
+              contextAnalysisFrames = messages[i].analysisFrames!.map(f => ({
+                mimeType: f.match(/^data:([^;]+);/)?.[1] || 'image/jpeg',
+                data: f
+              }));
+            }
+            // Fallback: Try raw media attachments (e.g. single upload)
+            else if (messages[i].media && messages[i].media!.length > 0) {
+              const images = messages[i].media!.filter(m => m.type === 'image');
+              if (images.length > 0) {
+                console.log(`📌 Reusing ${images.length} raw images from history.`);
+                contextAnalysisFrames = images.map(img => ({
+                  mimeType: img.mimeType,
+                  data: img.data
+                }));
+              }
+            }
+          }
+
+          if (contextPoseData && contextAnalysisFrames) break;
         }
       }
 
-      if (selectedModel === 'gemini') {
-        const history: Content[] = messages.map(m => ({
-          role: m.sender === Sender.USER ? 'user' : 'model',
-          parts: [{ text: m.text } as Part]
-        }));
-        // Note: The new message is passed as a separate argument to sendMessageToGemini, 
-        // unlike Bedrock/DeepSeek/Nova which append it to history.
+      // Standardize history for all models (OpenAI style)
+      // The registry wrapper handles conversion to specific formats (e.g. Google Content)
+      const standardHistory = messages.map(m => ({
+        role: m.sender === Sender.USER ? 'user' : 'assistant',
+        content: m.text
+      }));
 
+      // Get appropriate service function from registry
+      const aiService = getAIService(selectedModel);
 
-        // Pass isVerified from metadata (default undefined/false)
-        response = await sendMessageToGemini(history, newMessage.text, contextPoseData, analysisFrames, metadata?.skillName, metadata?.isVerified);
-
-      } else if (selectedModel === 'bedrock') {
-        const history = messages.map(m => ({
-          role: m.sender === Sender.USER ? 'user' : 'assistant',
-          content: m.text
-        }));
-
-        response = await sendMessageToBedrock(history, text);
-      } else if (selectedModel === 'deepseek') {
-        const history = messages.map(m => ({
-          role: m.sender === Sender.USER ? 'user' : 'assistant',
-          content: m.text
-        }));
-
-        response = await sendMessageToDeepSeek(history, text, contextPoseData, undefined, metadata?.skillName, metadata?.isVerified);
-      } else {
-        // Amazon Nova
-        const history = messages.map(m => ({
-          role: m.sender === Sender.USER ? 'user' : 'assistant',
-          content: m.text
-        }));
-
-        response = await sendMessageToAmazonNova(history, text, contextPoseData, undefined, metadata?.skillName, metadata?.isVerified);
-      }
+      // Call the service with standard arguments
+      // Note: Bedrock service wrapper ignores extra args
+      response = await aiService(
+        standardHistory,
+        newMessage.text,
+        contextPoseData,
+        contextAnalysisFrames, // Use the context-aware frames
+        skillContext, // Use detected or metadata skill
+        isVerifying // Use detected or metadata verification status
+      );
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -294,7 +341,7 @@ const App: React.FC = () => {
         sender: Sender.BOT,
         timestamp: new Date(),
         groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined,
-        referenceImageURI: selectedModel === 'gemini' ? response.referenceImageURI : undefined,
+        referenceImageURI: response.referenceImageURI,
         tokenUsage: response.tokenUsage
       };
 
@@ -332,7 +379,8 @@ const App: React.FC = () => {
         errorMsgLower.includes('limit') ||
         errorMsgLower.includes('resource exhausted')
       ) {
-        errorText = "⚠️ Usage limit reached. The AI is a bit tired. Please wait a minute before trying again.";
+        const modelName = selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1);
+        errorText = `⚠️ ${modelName} API usage limit reached. It attempted to generate a response but was stopped. Please wait a minute before trying again.`;
       }
 
       const errorMessage: Message = {
@@ -376,37 +424,37 @@ const App: React.FC = () => {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-slate-600">AI Model:</span>
-            <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50">
+            <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50 flex-wrap gap-1">
               <button
-                onClick={() => setSelectedModel('gemini')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'gemini'
+                onClick={() => setSelectedModel('gemini-exp')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'gemini-exp'
                   ? 'bg-white text-blue-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
-                🔷 Gemini
+                ⚡ Gemini 2.0
               </button>
               <button
-                onClick={() => setSelectedModel('nova')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'nova'
-                  ? 'bg-white text-teal-600 shadow-sm'
+                onClick={() => setSelectedModel('gemini')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'gemini'
+                  ? 'bg-white text-indigo-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
-                🟢 Nova
+                🔷 Gemini 2.5 Flash
               </button>
               <button
-                onClick={() => setSelectedModel('deepseek')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'deepseek'
-                  ? 'bg-white text-purple-600 shadow-sm'
+                onClick={() => setSelectedModel('nemotron')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'nemotron'
+                  ? 'bg-white text-green-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
-                🟣 DeepSeek
+                🎮 Nemotron
               </button>
               <button
                 onClick={() => setSelectedModel('bedrock')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'bedrock'
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'bedrock'
                   ? 'bg-white text-orange-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
                   }`}
@@ -415,8 +463,11 @@ const App: React.FC = () => {
               </button>
             </div>
           </div>
-          <span className="text-xs text-slate-400">
-            {selectedModel === 'gemini' ? 'Google Gemini 2.5 Flash' : selectedModel === 'bedrock' ? 'Claude 3.5 Sonnet' : selectedModel === 'deepseek' ? 'DeepSeek-R1-Chimera' : 'Amazon Nova 2 Lite'}
+          <span className="text-xs text-slate-400 hidden sm:block">
+            {selectedModel === 'gemini-exp' ? 'Gemini 2.0 Flash Experimental' :
+              selectedModel === 'gemini' ? 'Google Gemini 2.5 Flash' :
+                selectedModel === 'nemotron' ? 'Nvidia Nemotron 12B' :
+                  'Claude 3.5 Sonnet'}
           </span>
         </div>
       </div>
@@ -472,7 +523,7 @@ const App: React.FC = () => {
 
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       <Analytics />
-    </div>
+    </div >
   );
 };
 
