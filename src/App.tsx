@@ -13,14 +13,24 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome-1',
-      text: "Hello! I am your **Singapore PE Syllabus Assistant**. I can help you with anything related to the **PE Syllabus (2024)** and **Fundamental Movement Skills** (e.g., overhand throw, kick). How can I help you today?",
+      text: "Hello! I am your **Singapore PE Syllabus Bot**. \n\nI can help you with:\n1. **Syllabus Questions**: Ask about the 2024 PE Syllabus, learning outcomes, or goals.\n2. **AI Movement Analysis**: Upload a video or use your camera to record a skill (e.g., Overhand Throw). I will analyze your form frame-by-frame! 🏃‍♂️📹\n\nTry asking a question or uploading a video!",
       sender: Sender.BOT,
       timestamp: new Date(),
     }
   ]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'nemotron' | 'gemini-exp'>('nemotron');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'nemotron' | 'nova'>('nova');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Toggle Dark Mode
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -87,7 +97,7 @@ const App: React.FC = () => {
         // Process video - extract frames respecting trim range
         // Dynamic Frame Count: Nemotron (Small model) gets 10 frames to match API limit & Visual Vetting.
         // Gemini/Bedrock (Frontier models) get 24 frames for higher temporal resolution.
-        const frameCount = selectedModel === 'nemotron' ? 10 : 24;
+        const frameCount = selectedModel === 'nemotron' ? 10 : (selectedModel === 'nova' ? 16 : 24);
         const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
 
@@ -349,8 +359,10 @@ const App: React.FC = () => {
       // 1. "I believe this is a **Skill**" (Standard)
       // 2. "this looks like a **Skill**" (Verification Mode)
       // 3. "I have detected a **Skill**" (Strict Phase 1 Mode)
-      const skillMatch = response.text.match(/(?:I believe this is a|this looks like a|I have detected a) \*\*([^*]+)\*\*/i);
-      const detectedSkill = skillMatch ? skillMatch[1] : undefined;
+      // 4. "Performance Analysis for **Skill**" (Phase 2 Reporting Mode)
+      // Regex simplified: Look for one of the prefixes, then capture the text until the next * or : or newline
+      const skillMatch = response.text.match(/(?:I believe this is a|this looks like a|I have detected a|Performance Analysis for) (?:\*\*|)?([^*:\n]+)(?:\*\*|:)?/i);
+      const detectedSkill = skillMatch ? skillMatch[1].trim() : undefined;
 
       setMessages((prev) => {
         const updatedMessages = [...prev];
@@ -416,63 +428,31 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      <Header />
-
-      {/* Model Selector */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3 shadow-sm">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-600">AI Model:</span>
-            <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50 flex-wrap gap-1">
-              <button
-                onClick={() => setSelectedModel('gemini-exp')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'gemini-exp'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-                  }`}
-              >
-                ⚡ Gemini 2.0
-              </button>
-              <button
-                onClick={() => setSelectedModel('gemini')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'gemini'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-                  }`}
-              >
-                🔷 Gemini 2.5 Flash
-              </button>
-              <button
-                onClick={() => setSelectedModel('nemotron')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'nemotron'
-                  ? 'bg-white text-green-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-                  }`}
-              >
-                🎮 Nemotron
-              </button>
-              <button
-                onClick={() => setSelectedModel('bedrock')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${selectedModel === 'bedrock'
-                  ? 'bg-white text-orange-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-                  }`}
-              >
-                🟠 Bedrock
-              </button>
-            </div>
+    <div className="max-w-4xl mx-auto h-full flex flex-col bg-white dark:bg-slate-900 shadow-xl rounded-none sm:rounded-2xl overflow-hidden transition-colors duration-200 border-x border-slate-200 dark:border-slate-800">
+      {/* Header */}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-4 sm:p-5 flex items-center justify-between shrink-0 transition-colors duration-200">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 dark:shadow-none">
+            <span className="text-2xl">🤸‍♂️</span>
           </div>
-          <span className="text-xs text-slate-400 hidden sm:block">
-            {selectedModel === 'gemini-exp' ? 'Gemini 2.0 Flash Experimental' :
-              selectedModel === 'gemini' ? 'Google Gemini 2.5 Flash' :
-                selectedModel === 'nemotron' ? 'Nvidia Nemotron 12B' :
-                  'Claude 3.5 Sonnet'}
-          </span>
+          <div>
+            <h1 className="font-bold text-xl text-slate-800 dark:text-white">SG PE Syllabus Bot</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">AI Motion Analysis & Feedback</p>
+          </div>
         </div>
+
+        {/* Theme Toggle */}
+        <button
+          onClick={() => setIsDarkMode(!isDarkMode)}
+          className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-400"
+          title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+        >
+          {isDarkMode ? '☀️' : '🌙'}
+        </button>
       </div>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
+      {/* Main Chat Area - Flex Grow to take available space */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth bg-slate-50 dark:bg-slate-900/50">
         <div className="max-w-4xl mx-auto">
 
           {/* Welcome Chips (Only show if history is short) */}
@@ -484,7 +464,7 @@ const App: React.FC = () => {
                   <button
                     key={idx}
                     onClick={() => handleChipClick(topic)}
-                    className="px-4 py-2 bg-white border border-slate-200 rounded-full text-sm text-slate-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition-all shadow-sm"
+                    className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-sm text-slate-700 dark:text-slate-200 hover:bg-red-50 dark:hover:bg-red-900/40 hover:border-red-200 dark:hover:border-red-800 hover:text-red-700 dark:hover:text-red-300 transition-all shadow-sm"
                   >
                     {topic}
                   </button>
@@ -507,10 +487,10 @@ const App: React.FC = () => {
           {isLoading && (
             <div className="flex justify-start mb-6 animate-pulse">
               <div className="flex flex-row items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                  <div className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                 </div>
-                <div className="bg-white px-4 py-3 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm text-slate-500 text-sm flex items-center gap-1">
+                <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-2xl rounded-tl-none border border-slate-100 dark:border-slate-700 shadow-sm text-slate-500 dark:text-slate-400 text-sm flex items-center gap-1">
                   Thinking <span className="typing-dot">.</span><span className="typing-dot">.</span><span className="typing-dot">.</span>
                 </div>
               </div>
@@ -521,9 +501,66 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      {/* Footer Area: Model Selector & Input */}
+      <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 transition-colors duration-200">
+        <div className="flex justify-between items-center mb-3 px-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-400">AI Model:</span>
+            <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 p-1 bg-slate-50 dark:bg-slate-950 flex-wrap gap-1">
+              <button
+                onClick={() => setSelectedModel('nova')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${selectedModel === 'nova'
+                  ? 'bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
+                  }`}
+              >
+                <img src="/assets/model-icons/nova.png" alt="Nova" className="w-6 h-6 object-contain" />
+                Amazon Nova
+              </button>
+              <button
+                onClick={() => setSelectedModel('gemini')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${selectedModel === 'gemini'
+                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
+                  }`}
+              >
+                <img src="/assets/model-icons/gemini.png" alt="Gemini" className="w-6 h-6 object-contain" />
+                Gemini 2.5 Flash
+              </button>
+              <button
+                onClick={() => setSelectedModel('nemotron')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${selectedModel === 'nemotron'
+                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
+                  }`}
+              >
+                <img src="/assets/model-icons/nvidia.png" alt="Nemotron" className="w-6 h-6 object-contain" />
+                Nvidia Nemotron
+              </button>
+              <button
+                onClick={() => setSelectedModel('bedrock')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${selectedModel === 'bedrock'
+                  ? 'bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
+                  }`}
+              >
+                <img src="/assets/model-icons/bedrock.png" alt="Bedrock" className="w-6 h-6 object-contain" />
+                Bedrock
+              </button>
+            </div>
+          </div>
+          <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:block">
+            {selectedModel === 'nova' ? 'Amazon Nova 2 Lite (Free)' :
+              selectedModel === 'gemini' ? 'Google Gemini 2.5 Flash' :
+                selectedModel === 'nemotron' ? 'Nvidia Nemotron 12B' :
+                  'Claude 3.5 Sonnet'}
+          </span>
+        </div>
+
+        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      </div>
       <Analytics />
-    </div >
+    </div>
   );
 };
 

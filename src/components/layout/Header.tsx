@@ -14,7 +14,7 @@ const Header: React.FC = () => {
       </div>
       <div className="hidden md:block">
         <span className="px-3 py-1 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
-          Powered by Gemini 2.5
+          Powered by AI
         </span>
       </div>
     </header>

@@ -1,5 +1,6 @@
 
-import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from '../../data/fundamentalMovementSkillsData';
+import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist } from '../../data/fundamentalMovementSkillsData';
+import { getFewShotExamples } from '../../data/skillExamples';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 import { MediaData } from './geminiService';
 
@@ -75,20 +76,25 @@ IF a Reference Image is provided (labeled "Gold Standard"):
 
 **STEP 2A - IF USER CONFIRMS (yes/confirm):**
 - **CRITICAL**: You must grade the performance by checking off EACH critical feature from the Checklist for that skill.
+- **SMOOTHNESS CHECK (THE "ROBOT" RULE)**:
+  - If all technical points are met BUT the movement is "Segmented", "Robotic", or lacks "Flow" -> **DOWNGRADE to 'Developing'**.
+  - **Competent** requires BOTH technical accuracy AND fluid kinetic chain.
+
 - **DETERMINE LEVEL**:
   - Mistake in >50% of items? → **Beginning**
-  - Missed 1-2 items? → **Developing**
-  - Hit ALL items? → **Competent**
+  - Missed 1-2 items OR Robotic/Segmented? → **Developing**
+  - Hit ALL items + Fluid Motion? → **Competent**
   - Hit ALL items + Exceptional quality? → **Excellent**
 
-- Provide a detailed assessment in this format:
+- Provide a detailed assessment in this format.
+  **REQUIRED OUTPUT FORMAT (START RESPONSE WITH THIS HEADER):**
 
   **Performance Analysis for [Movement Name]:**
 
   **Checklist Assessment:**
-  - ✅ [Feature 1]: Observed (Brief evidence from data)
-  - ✅ [Feature 2]: Observed
-  - ❌ [Feature 3]: NOT Observed (Evidence: e.g. "Did not step with opposite foot")
+  - ✅ [Feature 1]: Observed (Evidence: "At Frame 3, Knee Angle was **135°**...")
+  - ✅ [Feature 2]: Observed (Evidence: "Hand velocity increased to **Max** in Frame 6")
+  - ❌ [Feature 3]: NOT Observed (Evidence: "Elbow was **locked at 180°**, expected bent")
   - ... (List all relevant features)
 
   **Proficiency Level: [Beginning / Developing / Competent / Excellent]**
@@ -114,7 +120,7 @@ export const sendMessageToOpenRouter = async (
     mediaAttachments?: MediaData[],
     skillName?: string,
     isVerified?: boolean,
-    modelId?: 'nova' | 'nemotron' | 'gemini-exp'
+    modelId?: 'nova' | 'nemotron'
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         if (!OPENROUTER_API_KEY) {
@@ -131,6 +137,21 @@ export const sendMessageToOpenRouter = async (
         // AND there are no media attachments (because if we have video, the model can SEE it, so pose data is just backup context)
         // NOTE: We check for 0 or 1 message if the first one is 'assistant' (Welcome message)
         const isFirstMessage = history.length === 0 || (history.length === 1 && history[0].role === 'assistant');
+
+        // Try to identify skill name if not provided but we are in verification mode or have pose data
+        let activeSkillName = skillName;
+        if (!activeSkillName && (poseData || isVerified)) {
+            const lowerMsg = currentMessage.toLowerCase();
+            // Sort keys by length desc to prevent partial matches
+            const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
+            for (const skill of knownSkills) {
+                if (lowerMsg.includes(skill.toLowerCase())) {
+                    activeSkillName = skill;
+                    break;
+                }
+            }
+        }
+
 
         if (poseData && poseData.length > 0 && isFirstMessage) {
             const { poseDetectionService } = await import('../vision/poseDetectionService');
@@ -315,7 +336,7 @@ export const sendMessageToOpenRouter = async (
                 movementPattern = `\n\n**Movement patterns (Kinetic Chain indicators):**\n${changes.slice(0, 30).map((c, i) => `• Frame ${i + 1}→${i + 2}: ${c}`).join('\n')}`;
             }
 
-            if (false) { // Disabled compression for Nemotron - sending full data
+            if (modelId === 'nemotron') { // Enable compression for Nemotron - sending summarized data
                 // LIGHTWEIGHT CONTEXT FOR NEMOTRON
                 // We create a "Minified" Pose Log to save tokens but still provide evidence.
                 poseDescription = `**Compressed Frame Data (Evidence):**\n` + analyses.map((a, i) => {
@@ -327,7 +348,49 @@ export const sendMessageToOpenRouter = async (
                     // Summarize Arm position from text
                     const rArm = a.poseSummary.includes('Right arm: raised') ? 'RArm:HIGH' : (a.poseSummary.includes('lowered') ? 'RArm:LOW' : 'RArm:MID');
 
-                    return `F${i + 1}: ${rArm}. R.Elbow:${rElbow}. Knees:${Math.min(rKnee, lKnee)}.`;
+                    // Check Ball Validity (Respect User Omit) AND Calculate Trajectory
+                    const ball = poseData[i].ball;
+                    let bTag = 'Ball:N';
+
+                    if (ball && ball.isValid) {
+                        // Default to YES if calc fails
+                        bTag = 'Ball:Y';
+
+                        if (ball.centerNormalized) {
+                            const b = ball.centerNormalized;
+                            const lm = poseData[i].landmarks; // Normalized Landmarks
+
+                            // 1. Calculate Release (Distance from Wrists)
+                            const rWrist = lm[16];
+                            const lWrist = lm[15];
+                            // Distance formula
+                            const distR = Math.hypot(b.x - rWrist.x, b.y - rWrist.y);
+                            const distL = Math.hypot(b.x - lWrist.x, b.y - lWrist.y);
+                            const minDist = Math.min(distR, distL);
+
+                            // Threshold: 0.15 is roughly 15% of screen width (approx arm length radius)
+                            const isReleased = minDist > 0.15;
+                            const status = isReleased ? 'REL' : 'HELD';
+
+                            // 2. Calculate Height Zone (Y coordinate: 0 is top, 1 is bottom)
+                            // Compare Ball Y to body parts
+                            const noseY = lm[0].y;
+                            const shoulderY = (lm[11].y + lm[12].y) / 2;
+                            const hipY = (lm[23].y + lm[24].y) / 2;
+                            const kneeY = (lm[25].y + lm[26].y) / 2;
+
+                            let zone = 'LOW'; // Ground level
+                            if (b.y < noseY) zone = 'OVERHEAD';
+                            else if (b.y < shoulderY) zone = 'HEAD';
+                            else if (b.y < hipY) zone = 'CHEST';
+                            else if (b.y < kneeY) zone = 'WAIST';
+                            else zone = 'KNEE_LOW';
+
+                            bTag = `Ball:${status}@${zone}`;
+                        }
+                    }
+
+                    return `F${i + 1}: ${rArm}. R.Elbow:${rElbow}. Knees:${Math.min(rKnee, lKnee)}. ${bTag}.`;
                 }).join('\n');
             } else {
                 poseDescription = analyses.map((analysis, i) => {
@@ -358,20 +421,36 @@ export const sendMessageToOpenRouter = async (
             **Your task:**
             1. **Analyze the Kinetic Chain**: Look at the "Movement patterns" above. Is the movement fluid and sequential (e.g., legs -> torso -> arms) or "segmented" (robotic/broken)?
             2. **Biomechanics Check**: Read the "BIOMECHANICS ANALYSIS" above.
-            3. ${skillName ? `**IMMEDIATE ACTION**: Analyze "${skillName}" using the FMS Checklist & Rubric. (Confirmation step is SKIPPED).` : `**Observe and Hypothesize**: Based on the pose data and movement flow, make your best educated guess about which fundamental movement skill this is.`}
-            ${skillName ? '' : `4. Respond in this format: "Based on the pose data, I believe this is a **[movement name]**. Is this correct?" then wait for confirmation.`}
-            5. ${skillName ? 'Assessment' : 'If confirmed -> Grade'} using the FMS Checklist & Rubric.
+            3. ${activeSkillName ? `**IMMEDIATE ACTION**: Analyze "${activeSkillName}" using the FMS Checklist & Rubric. (Confirmation step is SKIPPED).` : `**Observe and Hypothesize**: Based on the pose data and movement flow, make your best educated guess about which fundamental movement skill this is.`}
+            ${activeSkillName ? '' : `4. Respond in this format: "Based on the pose data, I believe this is a **[movement name]**. Is this correct?" then wait for confirmation.`}
+            5. ${activeSkillName ? 'Assessment' : 'If confirmed -> Grade'} using the FMS Checklist & Rubric.
             - **Step Verification**: If "DISTINCT STEP DETECTED", credit the step criteria.
             - **Quality Control**: Even if all checkboxes are technically met, if the movement looks "Chaotic", "Excessive", or "Segmented", you MUST downgrade the Proficiency Level to "Developing" or "Beginning" and explain why.`;
         }
 
         // Choose appropriate system instruction
         let systemInstruction = '';
+
+
+
+        let specificChecklistText = FUNDAMENTAL_MOVEMENT_SKILLS_TEXT;
+        if (activeSkillName) {
+            const checklist = getSkillChecklist(activeSkillName);
+            if (checklist.length > 0) {
+                specificChecklistText = `*** OFFICIAL CHECKLIST FOR ${activeSkillName} ***
+                 You MUST evaluate EACH of the following ${checklist.length} criteria. DO NOT SKIP ANY/MERGE ANY.
+                 
+                 ${checklist.join('\n')}
+                 
+                 (END OF CHECKLIST)`;
+            }
+        }
+
         const baseInstruction = poseData && poseData.length > 0
             ? MOTION_ANALYSIS_INSTRUCTION
             : FULL_SYSTEM_INSTRUCTION;
 
-        if (poseData && poseData.length > 0 && isFirstMessage) {
+        if (poseData && poseData.length > 0 && (isFirstMessage || isVerified)) {
             if (!isVerified) {
                 // PRE-ANALYSIS VERIFICATION MODE (Phase 1: Identification ONLY)
                 systemInstruction = `
@@ -379,13 +458,18 @@ export const sendMessageToOpenRouter = async (
                 
                 **IMMEDIATE TASK (PHASE 1)**:
                 Identify the specific Fundamental Movement Skill (FMS) in the video/images.
-                
-                **VALID FMS SKILLS**: 
-                Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble (Hand), Dribble (Foot), Chest Pass, Catch, Bounce Pass, Vertical Jump.
+                            
+                **VALID FMS SKILLS (STRICT WHITELIST)**: 
+                Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble (Hand), Dribble (Foot), Chest Pass, Catch above waist, Bounce pass, Bounce.
 
+                **CRITICAL RULES:**
+                1. You must ONLY classify the movement as one of the exact keys above.
+                2. Do not use synonyms (e.g. NEVER say "Free Throw", say "Underhand Throw" or "Chest Pass" if it matches one of those patterns, otherwise "Unknown").
+                3. If the movement does not match any of the above skills, output "❌ **Unknown Movement**".
+                
                 **INSTRUCTIONS**:
                 1. Look at the visual evidence and pose data.
-                2. Identify the skill.
+                2. Identify the skill from the WHITELIST.
                 3. **STOP**. Do NOT grade it yet.
                 
                 **REQUIRED OUTPUT FORMAT**:
@@ -393,6 +477,13 @@ export const sendMessageToOpenRouter = async (
 
                 Example: "Phase 1: I have detected a **Kick**."
                 
+                ${activeSkillName ? `
+                **USER OVERRIDE**:
+                The user has explicitly stated this is a **${activeSkillName}**.
+                Unless the video clearly contradicts it (e.g. user says "Kick" but video shows "Throw"), you should CONFIRM this skill.
+                Output: "Phase 1: I have detected a **${activeSkillName}**."
+                ` : ''}
+
                 If the movement is random or unclear:
                 "❌ **Unknown Movement**. Please demonstrate a standard PE skill."
                 `;
@@ -402,6 +493,9 @@ export const sendMessageToOpenRouter = async (
                 You are the PE Syllabus Assistant.
                 
                 **TASK**: Compare the User's Video (Visual Evidence) against the Gold Standard (Reference Image) using the FMS Checklist.
+
+                **VALID SKILLS ONLY**: Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble (Hand), Dribble (Foot), Chest Pass, Catch above waist, Bounce pass, Bounce.
+                (If the movement is "Free Throw", "Shooting", etc., classify it as the CLOSEST VALID SKILL or "Unknown").
 
                 **INPUTS:**
                 1. **IMAGE 1 (Reference)**: The "Gold Standard" textbook form.
@@ -414,35 +508,34 @@ export const sendMessageToOpenRouter = async (
                    - **NO** Markdown Headers (Do not use #, ##, ###).
                    - **NO** Tables (Do not use | | |).
                    - **NO** Horizontal Rules (Do not use ---).
-                   - Use CAPS or **Bold** for section titles.
+                   - Use **Bold** for section titles.
                    - Use simple dashed lists (-) for items.
 
                 **REQUIRED OUTPUT FORMAT:**
 
-                DETECTED SKILL: [Skill Name]
+                **Performance Analysis for [Movement Name]:**
 
-                COMPARISON TO GOLD STANDARD
-                [1-2 sentences comparing the visual form. E.g., "In the Reference Image, the arm is fully extended. In your video, the arm is bent..."]
+                **Checklist Assessment:**
+                (For each criterion, cite the Frame Number where you observed the evidence)
+                - ✅ [Criterion 1]: Observed (Evidence: "In **Frame 3**, knees bent to 90 deg")
+                - ❌ [Criterion 2]: NOT Observed (Evidence: "Looking at **Frame 5-7**, step was with same foot")
+                (List ALL criteria items from the checklist below)
 
-                CHECKLIST ASSESSMENT
-                [Go through the OFFICIAL CRITERIA for this skill from the FMS Data provided below. Do NOT invent criteria.]
-                - [Criterion 1]: ✅ Observed (Frame X)
-                - [Criterion 2]: ❌ Not Observed [Brief specific tip]
-                (List all ~5-8 criteria)
+                **Proficiency Level: [Beginning / Developing / Competent / Excellent]**
+                *(Reason: You met X out of Y criteria...)*
 
-                PROFICIENCY LEVEL: [Beginning / Developing / Competent / Excellent]
-                [Brief reasoning: "You met 7/8 criteria..."]
-
-                FEEDBACK
-                [1 specific, actionable correction based on the biggest error]
+                **Feedback for Improvement:**
+                1. [Specific correction for the missed feature]
+                2. [Cue to remember]
 
                 **CONTEXT DATA (FMS CHECKLISTS):**
-                ${FUNDAMENTAL_MOVEMENT_SKILLS_TEXT}
+                ${specificChecklistText}
+                ${activeSkillName ? getFewShotExamples(activeSkillName) : ''}
                 
                 **POSE DATA:**
                 ${poseDescription}${movementPattern}
                 ${biomechanicsReport || ''}
-                ${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
+                ${activeSkillName ? `\n**TARGET SKILL**: ${activeSkillName}` : ''}
                 `;
             }
         } else {
@@ -469,6 +562,13 @@ export const sendMessageToOpenRouter = async (
         // Construct the CURRENT user message
         let finalMessageContent = enhancedMessage;
 
+        // [DEV TOOL] Log the full prompt data so we can copy it for Few-Shot Learning examples
+        if (poseData && poseData.length > 0) {
+            console.log("👇👇 COPY FROM HERE (FEW-SHOT DATA) 👇👇");
+            console.log(enhancedMessage);
+            console.log("👆👆 COPY TO HERE 👆👆");
+        }
+
         // CRITICAL: For Nemotron/Nova (Smaller models), they often forget the System Instruction "Phase 1" rule
         // because the Pose Data context is so large. We must REMIND them at the END of the prompt.
         // HOWEVER: 
@@ -476,13 +576,14 @@ export const sendMessageToOpenRouter = async (
         // 2. If there is NO visual data (text-only query), we do NOT force Phase 1.
         const hasVisualContext = (mediaAttachments && mediaAttachments.length > 0) || (poseData && poseData.length > 0);
 
-        if (hasVisualContext && !isVerified && (modelId === 'nemotron' || modelId === 'nova') && !skillName) {
+        if (hasVisualContext && !isVerified && (modelId === 'nemotron' || modelId === 'nova') && !activeSkillName) {
             finalMessageContent += `
             
             ⚠️ **URGENT INSTRUCTION:**
             **STOP!** Do NOT analyze or grade yet.
             Your ONLY goal right now is to **IDENTIFY** the skill from the visual evidence.
             Answer in this EXACT format: "Phase 1: I have detected a **[Skill Name]**. Is this correct?."
+            (The Skill Name must be one of: Underhand Throw, Overhand Throw, Chest Pass, etc. Do NOT use synonymous names like 'Free Throw').
             If unsure, say "Unknown".`;
         }
 
@@ -496,20 +597,8 @@ export const sendMessageToOpenRouter = async (
 
         if (isVerified) {
             // Auto-detect skill from text if not explicitly provided
-            let activeSkillName = skillName;
-            if (!activeSkillName) {
-                const lowerMsg = currentMessage.toLowerCase();
-                // Sort keys by length desc to prevent partial matches
-                const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
-                for (const skill of knownSkills) {
-                    if (lowerMsg.includes(skill.toLowerCase())) {
-                        activeSkillName = skill;
-                        break;
-                    }
-                }
-            }
-
             if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
+
                 console.log(`📘 [OpenRouter] Injecting Reference Image for: ${activeSkillName}`);
                 finalReferenceURI = SKILL_REFERENCE_IMAGES[activeSkillName];
 
@@ -595,7 +684,6 @@ export const sendMessageToOpenRouter = async (
         const modelMap: Record<string, string> = {
             'nova': 'amazon/nova-2-lite-v1:free',
             'nemotron': 'nvidia/nemotron-nano-12b-v2-vl:free',
-            'gemini-exp': 'google/gemini-2.0-flash-exp:free',
         };
 
         const targetModel = modelMap[modelId || 'nova'] || 'amazon/nova-2-lite-v1:free';
@@ -615,8 +703,7 @@ export const sendMessageToOpenRouter = async (
                 "model": targetModel,
                 "messages": openRouterMessages,
                 "temperature": 0.5,
-                "max_tokens": 5000,
-                "transforms": ["middle-out"]
+                "max_tokens": 5000
             })
         });
 

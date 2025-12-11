@@ -2,20 +2,47 @@
 <img width="1200" height="475" alt="GHBanner" src="https://gcdnb.pbrd.co/images/lXuae0hOdxJ8.png?o=1" />
 </div>
 
-# Run and deploy your AI Studio app
+# 🏃‍♂️ SG PE Syllabus Bot
 
-- The SG PE Syllabus Bot is a specialized AI tool created to support Physical Education teachers in navigating and implementing the PE syllabus effectively. Built to save educators time and enhance instructional quality, this bot serves as an intelligent co-pilot for:
+**The Intelligent Co-Pilot for Physical Education Teachers in Singapore** 🇸🇬
 
-- Curriculum Design: Instantly generating lesson ideas and unit plans that align with specific learning outcomes.
+The **SG PE Syllabus Bot** is a cutting-edge AI assistant designed to bridge the gap between policy and practice. It combines **Computer Vision** with **Large Language Models** to help educators navigate the 2024 PE Syllabus and analyze student performance in real-time.
 
-- Lesson Planning: Crafting detailed, stage-appropriate activities and progressions for various sports and physical activities.
+---
 
-- Syllabus Navigation: Providing quick, accurate references to syllabus requirements, safety guidelines, and assessment criteria.
+## ✨ Key Capabilities
 
-- Prompting & Ideation: Helping teachers overcome creative blocks by offering tailored prompts for differentiated instruction and student engagement strategies.
+### 1. 🤖 AI Motion Analysis (Computer Vision)
+Upload a video or use your camera to receive instant, frame-by-frame feedback on Fundamental Movement Skills (FMS).
+- **Real-time Skeleton Tracking**: Powered by MediaPipe.
+- **Frame-by-Frame Breakdown**: The AI inspects key frames to detect errors (e.g., "Knees not bent", "Wrong release point").
+- **Multi-Model Support**: Switch between **Amazon Nova**, **Gemini 2.5 Flash**, **Nvidia Nemotron**, and **Claude 3.5 Sonnet** for analysis.
 
-- By bridging the gap between policy documentation and practical application, the SG PE Syllabus Bot empowers teachers to focus less on administrative planning and more on delivering high-quality physical education.
+### 2. 📚 Syllabus Expert (RAG)
+Stop searching through PDFs. Just ask:
+- *"What are the learning outcomes for Primary 4 Gymnastics?"*
+- *"Give me a lesson plan for teaching the overhand throw."*
+- *"What are the safety guidelines for outdoor education?"*
 
-- You may view the latest MOE PE Syllabus here: https://www.moe.gov.sg/primary/curriculum/syllabus
+### 3. 🎨 Modern & Responsive UI
+- **Dark/Light Mode**: Fully themed interface.
+- **Mobile Optimized**: Works perfectly on tablets and phones for field usage.
+- **Fast & Interactive**: Built with React + Vite for lightning-fast performance.
 
-- Created by Amos Khan
+---
+
+## 🛠️ Tech Stack
+- **Frontend**: React, TypeScript, Vite
+- **Styling**: Tailwind CSS (with Dark Mode)
+- **AI/LLM**: Google Gemini, Amazon Nova, Nvidia Nemotron (via OpenRouter), AWS Bedrock
+- **Computer Vision**: Google MediaPipe Pose Detection
+- **Deployment**: Vercel
+
+---
+
+### 🔗 Resources
+- [MOE PE Syllabus (2024)](https://www.moe.gov.sg/primary/curriculum/syllabus)
+
+<div align="center">
+  <sub>Created by Amos Khan</sub>
+</div>

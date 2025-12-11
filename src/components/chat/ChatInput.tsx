@@ -89,7 +89,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
     <>
       <form
         onSubmit={handleSubmit}
-        className="p-4 bg-white border-t border-slate-200 max-w-4xl mx-auto w-full sticky bottom-0"
+        className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 max-w-4xl mx-auto w-full sticky bottom-0 transition-colors duration-200"
       >
         {/* File Preview Area */}
         {selectedFiles.length > 0 && (
@@ -97,7 +97,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             <div className="flex flex-wrap gap-2">
               {selectedFiles.map((file, index) => (
                 <div key={index} className="relative group">
-                  <div className="w-16 h-16 rounded-lg border-2 border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+                  <div className="w-16 h-16 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
                     {file.type.startsWith('image/') ? (
                       <img
                         src={URL.createObjectURL(file)}
@@ -126,16 +126,16 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
 
             {/* Video Tools: Range Selector & Skill Name */}
             {hasVideo && (
-              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
                 {/* 1. Skill Name Input */}
                 <div className="mb-3">
-                  <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wider">Target Skill (Optional)</label>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Target Skill (Optional)</label>
                   <input
                     type="text"
                     value={skillName}
                     onChange={(e) => setSkillName(e.target.value)}
                     placeholder="e.g. Underhand Throw (Skip to let AI guess)"
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none placeholder-slate-400 dark:placeholder-slate-500"
                   />
                   <p className="text-[10px] text-slate-400 mt-1">If provided, AI will skip "Guessing" and grade specifically for this skill.</p>
                 </div>
@@ -169,7 +169,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             type="button"
             onClick={() => setShowCamera(true)}
             disabled={isLoading}
-            className="flex-shrink-0 p-2.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-shrink-0 p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Record video"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -182,7 +182,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isLoading}
-            className="flex-shrink-0 p-2.5 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-shrink-0 p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Upload image or video"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -198,7 +198,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             onKeyDown={handleKeyDown}
             placeholder="Ask about PE syllabus or upload/record movement for analysis..."
             disabled={isLoading}
-            className="flex-1 px-4 py-3 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px]"
+            className="flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden"
             rows={1}
           />
 
@@ -206,7 +206,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
           <button
             type="submit"
             disabled={(!input.trim() && selectedFiles.length === 0) || isLoading}
-            className="flex-shrink-0 p-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
+            className="flex-shrink-0 p-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 disabled:from-slate-300 disabled:to-slate-600 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
           >
             {isLoading ? (
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">

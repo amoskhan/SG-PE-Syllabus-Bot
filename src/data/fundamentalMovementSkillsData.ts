@@ -163,3 +163,28 @@ export const SKILL_REFERENCE_IMAGES: Record<string, string> = {
     "Bounce pass": "/assets/reference_images/bounce_pass.jpg",
     "Bounce": "/assets/reference_images/bounce.jpg"
 };
+
+
+export const getSkillChecklist = (skillName: string): string[] => {
+    // Normalize skill name
+    const normalizedSkill = skillName.trim().toLowerCase();
+
+    // Split the text by "SKILL:" to isolate sections
+    const sections = FUNDAMENTAL_MOVEMENT_SKILLS_TEXT.split('SKILL:');
+
+    // Find the section that starts with our skill name
+    const matchingSection = sections.find(section => {
+        const lines = section.trim().split('\n');
+        return lines[0].trim().toLowerCase() === normalizedSkill;
+    });
+
+    if (!matchingSection) return [];
+
+    // Extract lines that start with a number (e.g., "1. Face Target")
+    const criteriaLines = matchingSection
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => /^\d+\./.test(line));
+
+    return criteriaLines;
+};
