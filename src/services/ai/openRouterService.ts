@@ -76,10 +76,14 @@ IF a Reference Image is provided (labeled "Gold Standard"):
 
 **STEP 2A - IF USER CONFIRMS (yes/confirm):**
 - **CRITICAL**: You must grade the performance by checking off EACH critical feature from the Checklist for that skill.
+- **SMOOTHNESS CHECK (THE "ROBOT" RULE)**:
+  - If all technical points are met BUT the movement is "Segmented", "Robotic", or lacks "Flow" -> **DOWNGRADE to 'Developing'**.
+  - **Competent** requires BOTH technical accuracy AND fluid kinetic chain.
+
 - **DETERMINE LEVEL**:
   - Mistake in >50% of items? → **Beginning**
-  - Missed 1-2 items? → **Developing**
-  - Hit ALL items? → **Competent**
+  - Missed 1-2 items OR Robotic/Segmented? → **Developing**
+  - Hit ALL items + Fluid Motion? → **Competent**
   - Hit ALL items + Exceptional quality? → **Excellent**
 
 - Provide a detailed assessment in this format.
@@ -88,9 +92,9 @@ IF a Reference Image is provided (labeled "Gold Standard"):
   **Performance Analysis for [Movement Name]:**
 
   **Checklist Assessment:**
-  - ✅ [Feature 1]: Observed (Brief evidence from data)
-  - ✅ [Feature 2]: Observed
-  - ❌ [Feature 3]: NOT Observed (Evidence: e.g. "Did not step with opposite foot")
+  - ✅ [Feature 1]: Observed (Evidence: "At Frame 3, Knee Angle was **135°**...")
+  - ✅ [Feature 2]: Observed (Evidence: "Hand velocity increased to **Max** in Frame 6")
+  - ❌ [Feature 3]: NOT Observed (Evidence: "Elbow was **locked at 180°**, expected bent")
   - ... (List all relevant features)
 
   **Proficiency Level: [Beginning / Developing / Competent / Excellent]**
@@ -699,8 +703,7 @@ export const sendMessageToOpenRouter = async (
                 "model": targetModel,
                 "messages": openRouterMessages,
                 "temperature": 0.5,
-                "max_tokens": 5000,
-                "transforms": ["middle-out"]
+                "max_tokens": 5000
             })
         });
 

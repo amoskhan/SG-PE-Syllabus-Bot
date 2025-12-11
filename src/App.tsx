@@ -97,7 +97,7 @@ const App: React.FC = () => {
         // Process video - extract frames respecting trim range
         // Dynamic Frame Count: Nemotron (Small model) gets 10 frames to match API limit & Visual Vetting.
         // Gemini/Bedrock (Frontier models) get 24 frames for higher temporal resolution.
-        const frameCount = selectedModel === 'nemotron' ? 10 : 24;
+        const frameCount = selectedModel === 'nemotron' ? 10 : (selectedModel === 'nova' ? 16 : 24);
         const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
 
