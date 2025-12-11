@@ -31,7 +31,7 @@ const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseDat
 };
 
 // Start with a registry that returns the FUNCTION
-export const getAIService = (modelId: 'gemini' | 'bedrock' | 'nemotron' | 'gemini-exp'): AIServiceFunction => {
+export const getAIService = (modelId: 'gemini' | 'bedrock' | 'nemotron' | 'nova'): AIServiceFunction => {
     switch (modelId) {
         case 'gemini':
             return geminiWrapper;
@@ -39,9 +39,9 @@ export const getAIService = (modelId: 'gemini' | 'bedrock' | 'nemotron' | 'gemin
             return bedrockWrapper;
         case 'nemotron':
             return (h, m, p, med, s, v) => sendMessageToOpenRouter(h, m, p, med, s, v, 'nemotron');
-        case 'gemini-exp':
-            return (h, m, p, med, s, v) => sendMessageToOpenRouter(h, m, p, med, s, v, 'gemini-exp');
+        case 'nova':
+            return (h, m, p, med, s, v) => sendMessageToOpenRouter(h, m, p, med, s, v, 'nova');
         default:
-            return (h, m, p, med, s, v) => sendMessageToOpenRouter(h, m, p, med, s, v, 'gemini-exp');
+            return (h, m, p, med, s, v) => sendMessageToOpenRouter(h, m, p, med, s, v, 'nova');
     }
 };

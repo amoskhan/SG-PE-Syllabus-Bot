@@ -116,7 +116,7 @@ export const sendMessageToOpenRouter = async (
     mediaAttachments?: MediaData[],
     skillName?: string,
     isVerified?: boolean,
-    modelId?: 'nova' | 'nemotron' | 'gemini-exp'
+    modelId?: 'nova' | 'nemotron'
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         if (!OPENROUTER_API_KEY) {
@@ -680,7 +680,6 @@ export const sendMessageToOpenRouter = async (
         const modelMap: Record<string, string> = {
             'nova': 'amazon/nova-2-lite-v1:free',
             'nemotron': 'nvidia/nemotron-nano-12b-v2-vl:free',
-            'gemini-exp': 'google/gemini-2.0-flash-exp:free',
         };
 
         const targetModel = modelMap[modelId || 'nova'] || 'amazon/nova-2-lite-v1:free';

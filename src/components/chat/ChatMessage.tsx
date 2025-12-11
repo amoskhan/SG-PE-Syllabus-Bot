@@ -58,7 +58,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
         <div className={`flex max-w-[90%] md:max-w-[80%] gap-3 ${isBot ? 'flex-row' : 'flex-row-reverse'}`}>
 
           {/* Avatar */}
-          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isBot ? 'bg-gradient-to-br from-red-500 to-red-600 text-white' : 'bg-slate-200 text-slate-600'
+          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isBot ? 'bg-gradient-to-br from-red-500 to-red-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
             }`}>
             {isBot ? (
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -74,9 +74,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
           {/* Content */}
           <div className={`flex flex-col gap-2 w-full`}>
             <div className={`px-4 py-3 rounded-2xl shadow-sm ${isError
-              ? 'bg-red-50 border border-red-200 text-red-800'
+              ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
               : isBot
-                ? 'bg-white border border-slate-100 text-slate-800'
+                ? 'bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-slate-200'
                 : 'bg-blue-600 text-white'
               } ${isBot ? 'rounded-tl-none' : 'rounded-tr-none'}`}>
 
@@ -88,8 +88,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
 
               {/* Reference Image Display (TEACHER VERIFICATION MODE) */}
               {isBot && message.referenceImageURI && (
-                <div className="mt-4 mb-2 p-3 bg-red-50 border border-red-100 rounded-lg flex flex-col sm:flex-row gap-4 items-center">
-                  <div className="flex-shrink-0 w-24 h-24 bg-white rounded border border-red-200 p-1">
+                <div className="mt-4 mb-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 rounded-lg flex flex-col sm:flex-row gap-4 items-center">
+                  <div className="flex-shrink-0 w-24 h-24 bg-white dark:bg-slate-700 rounded border border-red-200 dark:border-red-800 p-1">
                     <img
                       src={message.referenceImageURI}
                       alt="Textbook Reference"
@@ -97,7 +97,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                       onClick={() => setLightboxSrc(message.referenceImageURI!)}
                     />
                   </div>
-                  <div className="flex-1 text-sm text-red-900">
+                  <div className="flex-1 text-sm text-red-900 dark:text-red-200">
                     <p className="font-bold text-red-700 flex items-center gap-1">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
@@ -145,29 +145,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                     <span>Analysis Breakdown</span>
                     <span className="bg-green-100 text-green-700 px-1 rounded text-[9px]">AI DEBUG</span>
                   </div>
-                  {!isBot && onUpdateMessage && (
-                    <div className="flex items-center gap-3">
-                      {onAnalyze && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onAnalyze(message); }}
-                          className="text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded shadow-sm transition-colors flex items-center gap-1 animate-pulse"
-                          title="Submit these frames for grading"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                          </svg>
-                          Analyze
-                        </button>
-                      )}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); omitAllBalls(); }}
-                        className="text-[9px] text-red-500 hover:text-red-700 underline cursor-pointer"
-                        title="Ignore all detected balls for analysis"
-                      >
-                        Omit All Balls
-                      </button>
-                    </div>
-                  )}
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200">
                   {message.analysisFrames.map((frame, idx) => {
@@ -231,6 +208,32 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                     );
                   })}
                 </div>
+
+                {/* Actions Row (Bottom) */}
+                {!isBot && onUpdateMessage && (
+                  <div className="flex items-center justify-between mt-2 px-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); omitAllBalls(); }}
+                      className="text-xs text-red-500 hover:text-red-700 underline cursor-pointer"
+                      title="Ignore all detected balls for analysis"
+                    >
+                      Omit All Balls
+                    </button>
+
+                    {onAnalyze && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onAnalyze(message); }}
+                        className="text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow-md transition-all flex items-center gap-2 animate-pulse hover:scale-105 active:scale-95"
+                        title="Submit these frames for grading"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                        </svg>
+                        Analyze Now
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
