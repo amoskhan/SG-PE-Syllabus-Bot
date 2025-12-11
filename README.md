@@ -1,5 +1,5 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://gcdnb.pbrd.co/images/lXuae0hOdxJ8.png?o=1" />
+<img width="1200" height="475" alt="GHBanner" src="https://i.postimg.cc/yYmjH5cW/Screenshot-2025-12-11-183551.png" />
 </div>
 
 # 🏃‍♂️ SG PE Syllabus Bot
