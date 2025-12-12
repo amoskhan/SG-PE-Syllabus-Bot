@@ -425,7 +425,16 @@ export const sendMessageToOpenRouter = async (
             ${activeSkillName ? '' : `4. Respond in this format: "Based on the pose data, I believe this is a **[movement name]**. Is this correct?" then wait for confirmation.`}
             5. ${activeSkillName ? 'Assessment' : 'If confirmed -> Grade'} using the FMS Checklist & Rubric.
             - **Step Verification**: If "DISTINCT STEP DETECTED", credit the step criteria.
-            - **Quality Control**: Even if all checkboxes are technically met, if the movement looks "Chaotic", "Excessive", or "Segmented", you MUST downgrade the Proficiency Level to "Developing" or "Beginning" and explain why.`;
+            - **Quality Control**: Even if all checkboxes are technically met, if the movement looks "Chaotic", "Excessive", or "Segmented", you MUST downgrade the Proficiency Level to "Developing" or "Beginning" and explain why.
+
+            **CRITICAL CONSISTENCY RULE (PROFICIENCY VS CHECKLIST):**
+            - If you grade the Proficiency Level as "Keeping it Real" / "Developing" / "Beginning", you **MUST** have at least one ❌ or ⚠️ in the Checklist Assessment.
+            - **You cannot have a "Competent" checklist (all ✅) and a "Developing" grade.** They must tell the same story.
+            - **SPECIFIC OVERRIDE FOR UNDERHAND ROLL**: 
+              - IF "Hand raised ABOVE HEAD" is detected in the Biomechanics Report, you **MUST MARK CHECKLIST ITEM #5 ("Swing dominant hand back at least to waist level") as ❌ OR ⚠️**.
+              - Reason: "Excessive backswing violates the controlled nature of the skill."
+              - **DO NOT** give a "Pass" just because it went *past* the waist. It must be *controlled* at the waist. "Too much" is a failure of the specific criteria.
+`;
         }
 
         // Choose appropriate system instruction
@@ -552,6 +561,14 @@ export const sendMessageToOpenRouter = async (
         let sanitizedHistory = [...history];
         while (sanitizedHistory.length > 0 && sanitizedHistory[0].role !== 'user') {
             sanitizedHistory.shift();
+        }
+
+        // AGGRESSIVE TRUNCATION FOR NEMOTRON/NOVA (Context Limit Protection)
+        // If history is too long, keep only the last few turns.
+        const MAX_HISTORY_TURNS = (modelId === 'nemotron' || modelId === 'nova') ? 6 : 10;
+        if (sanitizedHistory.length > MAX_HISTORY_TURNS) {
+            console.log(`⚠️ Truncating history from ${sanitizedHistory.length} to ${MAX_HISTORY_TURNS} to save context.`);
+            sanitizedHistory = sanitizedHistory.slice(-MAX_HISTORY_TURNS);
         }
 
         const openRouterMessages: any[] = [
@@ -703,7 +720,8 @@ export const sendMessageToOpenRouter = async (
                 "model": targetModel,
                 "messages": openRouterMessages,
                 "temperature": 0.5,
-                "max_tokens": 5000
+                "max_tokens": 5000,
+                "transforms": ["middle-out"]
             })
         });
 

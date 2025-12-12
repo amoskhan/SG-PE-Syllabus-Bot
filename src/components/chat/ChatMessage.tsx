@@ -116,7 +116,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
             {!isBot && message.media && message.media.length > 0 && (
               <div className="flex flex-col gap-2">
                 {message.media.map((attachment) => (
-                  <div key={attachment.id} className="rounded-lg overflow-hidden border border-slate-200 bg-white w-full md:max-w-2xl shadow-sm">
+                  <div key={attachment.id} className="rounded-lg overflow-hidden border border-slate-200 bg-white w-full md:max-w-4xl shadow-sm">
                     {attachment.type === 'image' ? (
                       <img
                         src={attachment.data}
@@ -161,7 +161,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                             toggleBallValidity(idx);
                           }
                         }}
-                        className={`flex-shrink-0 w-40 h-56 bg-black rounded-xl overflow-hidden border shadow-sm relative group cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all ${ball?.isValid ? 'border-green-500 ring-2 ring-green-500/50' : 'border-slate-200'
+                        className={`flex-shrink-0 w-48 h-64 md:w-60 md:h-80 bg-black rounded-xl overflow-hidden border shadow-sm relative group cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all ${ball?.isValid ? 'border-green-500 ring-2 ring-green-500/50' : 'border-slate-200'
                           }`}
                       >
                         <img src={frame} alt={`Analysis Frame ${idx}`} className="w-full h-full object-cover" />
@@ -278,21 +278,21 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
       {/* Lightbox Modal */}
       {lightboxSrc && (
         <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-1 md:p-2 animate-in fade-in duration-200"
           onClick={() => setLightboxSrc(null)}
         >
           <button
-            className="absolute top-4 right-4 text-white hover:text-slate-300 p-2"
+            className="absolute top-4 right-4 text-white/80 hover:text-white p-2 z-[110] bg-black/40 rounded-full hover:bg-black/60 transition-colors"
             onClick={() => setLightboxSrc(null)}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-8 h-8">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
           <img
             src={lightboxSrc}
             alt="Full size analysis frame"
-            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            className="w-auto h-auto max-w-[90vw] max-h-[80vh] md:max-w-[60vw] md:max-h-[70vh] object-contain rounded-lg shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           />
         </div>

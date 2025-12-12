@@ -432,13 +432,23 @@ ${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
 
 **Immediate Task:**
 ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. Refer to Biomechanics Report for critical errors.` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE".`}
+// ... existing code ...
 **IMPORTANT**:
 - **Visual Evidence**: You MUST add a section called "**Visual Evidence**" where you quote specific differences between the provided Reference Image ("Gold Standard") and the User's Video ("Actual Performance").
 - **CITATION RULE**: You MUST cite the specific frame number (e.g. "At Frame 12...") where the error or key event occurred. Do NOT say "consistent across all frames". Use the 'Ball Detected' status to confirm release points.
 - **Teacher Check**: If the movement is partially obscured, ambiguous, or you are <70% confident, you MUST say: "I am not 100% sure about the [specific body part]. **This would require the assistance of a trained MOE PE teacher to verify.**"
 - **FAILURE EXPLANATION**: When marking a feature as ❌, you MUST cite the specific frame and state what you observed instead (e.g. "At Frame 8, Knee angle was 175° (Straight) instead of <170°"). Do NOT claim "no frames found" if you have data; point to the frame that shows the error.
+
+**CRITICAL CONSISTENCY RULE (PROFICIENCY VS CHECKLIST):**
+- If you grade the Proficiency Level as "Keeping it Real" / "Developing" / "Beginning", you **MUST** have at least one ❌ or ⚠️ in the Checklist Assessment.
+- **You cannot have a "Competent" checklist (all ✅) and a "Developing" grade.** They must tell the same story.
+- **SPECIFIC OVERRIDE FOR UNDERHAND ROLL**: 
+  - IF "Hand raised ABOVE HEAD" is detected in the Biomechanics Report, you **MUST MARK CHECKLIST ITEM #5 ("Swing dominant hand back at least to waist level") as ❌ OR ⚠️**.
+  - Reason: "Excessive backswing violates the controlled nature of the skill."
+  - **DO NOT** give a "Pass" just because it went *past* the waist. It must be *controlled* at the waist. "Too much" is a failure of the specific criteria.
+
 - Pay close attention to the \`biomechanicsReport\` for definitive pass/fail on Step and Wind-up.
-- **QUALITY CHECK**: If "Arm Height" is "ABOVE HEAD" for a low-skill like Underarm Roll, penalize it as "Excessive Movement".
+- **QUALITY CHECK**: If "Arm Height" is "ABOVE HEAD" for a low-skill like Underarm Roll, penalize it as "Excessive Movement" and FAIL the backswing criteria.
 - **CAMERA ANGLE AWARENESS**:
   - The video might be filmed from the **Front** OR the **Side**.
   - **"Face Target"** means the user is looking towards *their* throwing direction.
