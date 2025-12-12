@@ -172,8 +172,26 @@ const App: React.FC = () => {
       video.src = URL.createObjectURL(file);
 
       video.onloadedmetadata = () => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        // Downscale frames to reduce Token Usage (Nemotron 128k limit / Nova Limits)
+        // Original 1080p frames are HUGE tokens. 640px is sufficient for pose/form analysis.
+        const MAX_DIMENSION = 640;
+        let width = video.videoWidth;
+        let height = video.videoHeight;
+
+        if (width > height) {
+          if (width > MAX_DIMENSION) {
+            height = Math.round((height * MAX_DIMENSION) / width);
+            width = MAX_DIMENSION;
+          }
+        } else {
+          if (height > MAX_DIMENSION) {
+            width = Math.round((width * MAX_DIMENSION) / height);
+            height = MAX_DIMENSION;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
 
         // Determine trim range
         const start = startTime !== undefined ? startTime : 0;
