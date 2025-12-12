@@ -4,8 +4,9 @@ import { getFewShotExamples } from '../../data/skillExamples';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 import { MediaData } from './geminiService';
 
-// Note: Using the shared OpenRouter API Key
-const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
+// Note: In development, we can use VITE_OPENROUTER_API_KEY. 
+// In production (Vercel), we should use the server-side proxy /api/openrouter to hide the key.
+const VITE_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
 const SITE_URL = import.meta.env.VITE_SITE_URL || "http://localhost:3000";
 const SITE_NAME = "SG PE Syllabus Bot";
 
@@ -123,8 +124,10 @@ export const sendMessageToOpenRouter = async (
     modelId?: 'nova' | 'nemotron'
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
-        if (!OPENROUTER_API_KEY) {
-            throw new Error("OpenRouter API key not configured. Please add VITE_OPENROUTER_API_KEY to your .env.local file.");
+        const useProxy = !VITE_API_KEY;
+
+        if (useProxy && window.location.hostname === 'localhost') {
+            console.warn("⚠️ No VITE_OPENROUTER_API_KEY found. Attempting to use /api/openrouter proxy. Ensure you are running with 'vercel dev'.");
         }
 
         let enhancedMessage = currentMessage;
@@ -707,15 +710,22 @@ export const sendMessageToOpenRouter = async (
 
         console.log(`🤖 Using OpenRouter Model: ${targetModel}`);
 
+        const endpoint = useProxy ? '/api/openrouter' : "https://openrouter.ai/api/v1/chat/completions";
+
+        const headers: any = {
+            "HTTP-Referer": SITE_URL,
+            "X-Title": SITE_NAME,
+            "Content-Type": "application/json"
+        };
+
+        if (!useProxy) {
+            headers["Authorization"] = `Bearer ${VITE_API_KEY}`;
+        }
+
         // This is a TRUE MULTIMODAL model (Vision + Text)
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        const response = await fetch(endpoint, {
             method: "POST",
-            headers: {
-                "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-                "HTTP-Referer": SITE_URL,
-                "X-Title": SITE_NAME,
-                "Content-Type": "application/json"
-            },
+            headers: headers,
             body: JSON.stringify({
                 "model": targetModel,
                 "messages": openRouterMessages,
