@@ -46,7 +46,7 @@ export interface ChatResponse {
 // Decode base64 URL
 function decodeBedrockUrl(token: string): string {
     // Remove 'bedrock-api-key-' prefix if present
-    const base64Part = token.replace(/^bedrock-api-key-/, '');
+    const base64Part = token.replace(/^bedrock-api-key-/i, '');
 
     // Decode base64
     try {
