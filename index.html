@@ -59,7 +59,40 @@
         transform: scale(1);
       }
     }
+
+    @keyframes scaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .animate-scale-in {
+      animation: scaleIn 0.2s ease-out forwards;
+    }
+
+    @keyframes scaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .animate-scale-in {
+      animation: scaleIn 0.2s ease-out forwards;
+    }
   </style>
+  <link rel="icon" type="image/png" href="/favicon.png" />
 </head>
 
 <body class="bg-slate-50 dark:bg-slate-950 dark:text-white h-screen overflow-hidden transition-colors duration-200">

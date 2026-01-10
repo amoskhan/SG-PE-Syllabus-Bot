@@ -121,7 +121,7 @@ export const sendMessageToOpenRouter = async (
     mediaAttachments?: MediaData[],
     skillName?: string,
     isVerified?: boolean,
-    modelId?: 'nova' | 'nemotron'
+    modelId?: 'gemini-2.0-flash' | 'nemotron'
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         const useProxy = !VITE_API_KEY;
@@ -568,7 +568,7 @@ export const sendMessageToOpenRouter = async (
 
         // AGGRESSIVE TRUNCATION FOR NEMOTRON/NOVA (Context Limit Protection)
         // If history is too long, keep only the last few turns.
-        const MAX_HISTORY_TURNS = (modelId === 'nemotron' || modelId === 'nova') ? 6 : 10;
+        const MAX_HISTORY_TURNS = (modelId === 'nemotron' || modelId === 'gemini-2.0-flash') ? 6 : 10;
         if (sanitizedHistory.length > MAX_HISTORY_TURNS) {
             console.log(`⚠️ Truncating history from ${sanitizedHistory.length} to ${MAX_HISTORY_TURNS} to save context.`);
             sanitizedHistory = sanitizedHistory.slice(-MAX_HISTORY_TURNS);
@@ -596,7 +596,7 @@ export const sendMessageToOpenRouter = async (
         // 2. If there is NO visual data (text-only query), we do NOT force Phase 1.
         const hasVisualContext = (mediaAttachments && mediaAttachments.length > 0) || (poseData && poseData.length > 0);
 
-        if (hasVisualContext && !isVerified && (modelId === 'nemotron' || modelId === 'nova') && !activeSkillName) {
+        if (hasVisualContext && !isVerified && (modelId === 'nemotron' || modelId === 'gemini-2.0-flash') && !activeSkillName) {
             finalMessageContent += `
             
             ⚠️ **URGENT INSTRUCTION:**
@@ -702,11 +702,11 @@ export const sendMessageToOpenRouter = async (
 
         // Map internal model IDs to OpenRouter model strings
         const modelMap: Record<string, string> = {
-            'nova': 'amazon/nova-2-lite-v1:free',
+            'gemini-2.0-flash': 'google/gemini-2.0-flash-exp:free',
             'nemotron': 'nvidia/nemotron-nano-12b-v2-vl:free',
         };
 
-        const targetModel = modelMap[modelId || 'nova'] || 'amazon/nova-2-lite-v1:free';
+        const targetModel = modelMap[modelId || 'gemini-2.0-flash'] || 'google/gemini-2.0-flash-exp:free';
 
         console.log(`🤖 Using OpenRouter Model: ${targetModel}`);
 

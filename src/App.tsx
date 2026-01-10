@@ -19,8 +19,9 @@ const App: React.FC = () => {
     }
   ]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'nemotron' | 'nova'>('nova');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'nemotron' | 'gemini-2.0-flash'>('nemotron');
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Toggle Dark Mode
@@ -97,7 +98,7 @@ const App: React.FC = () => {
         // Process video - extract frames respecting trim range
         // Dynamic Frame Count: Nemotron (Small model) gets 10 frames to match API limit & Visual Vetting.
         // Gemini/Bedrock (Frontier models) get 24 frames for higher temporal resolution.
-        const frameCount = selectedModel === 'nemotron' ? 10 : (selectedModel === 'nova' ? 16 : 24);
+        const frameCount = selectedModel === 'nemotron' ? 10 : (selectedModel === 'gemini-2.0-flash' ? 16 : 24);
         const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
 
@@ -409,7 +410,9 @@ const App: React.FC = () => {
         errorMsgLower.includes('limit') ||
         errorMsgLower.includes('resource exhausted')
       ) {
-        const modelName = selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1);
+        let modelName = selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1);
+        if (selectedModel === 'gemini-2.0-flash') modelName = 'Gemini 2.0 Flash';
+
         errorText = `⚠️ ${modelName} API usage limit reached. It attempted to generate a response but was stopped. Please wait a minute before trying again.`;
       }
 
@@ -524,61 +527,79 @@ const App: React.FC = () => {
         <div className="flex justify-between items-center mb-3 px-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-slate-600 dark:text-slate-400">AI Model:</span>
-            <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 p-1 bg-slate-50 dark:bg-slate-950 flex-wrap gap-1">
+            <div className="relative">
               <button
-                onClick={() => setSelectedModel('nova')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${selectedModel === 'nova'
-                  ? 'bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
-                  }`}
+                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2 min-w-[180px] justify-between"
               >
-                <img src="/assets/model-icons/nova.png" alt="Nova" className="w-6 h-6 object-contain" />
-                Amazon Nova
+                <div className="flex items-center gap-2">
+                  <img
+                    src={`/assets/model-icons/${selectedModel === 'nemotron' ? 'nvidia' : selectedModel === 'gemini-2.0-flash' ? 'gemini' : selectedModel}.png`}
+                    alt={selectedModel}
+                    className="w-5 h-5 object-contain"
+                  />
+                  <span>
+                    {selectedModel === 'nemotron' ? 'Nvidia' :
+                      selectedModel === 'gemini' ? 'Gemini 2.5 Flash' :
+                        selectedModel === 'gemini-2.0-flash' ? 'Gemini 2.0 Flash' :
+                          'Bedrock'}
+                  </span>
+                </div>
+                <svg className={`w-4 h-4 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </button>
-              <button
-                onClick={() => setSelectedModel('gemini')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${selectedModel === 'gemini'
-                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
-                  }`}
-              >
-                <img src="/assets/model-icons/gemini.png" alt="Gemini" className="w-6 h-6 object-contain" />
-                Gemini 2.5 Flash
-              </button>
-              <button
-                onClick={() => setSelectedModel('nemotron')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${selectedModel === 'nemotron'
-                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
-                  }`}
-              >
-                <img src="/assets/model-icons/nvidia.png" alt="Nemotron" className="w-6 h-6 object-contain" />
-                Nvidia Nemotron
-              </button>
-              <button
-                onClick={() => setSelectedModel('bedrock')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${selectedModel === 'bedrock'
-                  ? 'bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
-                  }`}
-              >
-                <img src="/assets/model-icons/bedrock.png" alt="Bedrock" className="w-6 h-6 object-contain" />
-                Bedrock
-              </button>
+
+              {isModelDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setIsModelDropdownOpen(false)}
+                  />
+                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-20 flex flex-col p-1 animate-scale-in">
+                    {[
+                      { id: 'nemotron', name: 'Nvidia', icon: 'nvidia.png' },
+                      { id: 'gemini', name: 'Gemini 2.5 Flash', icon: 'gemini.png' },
+                      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', icon: 'gemini.png' },
+                      { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' }
+                    ].map((model) => (
+                      <button
+                        key={model.id}
+                        onClick={() => {
+                          setSelectedModel(model.id as any);
+                          setIsModelDropdownOpen(false);
+                        }}
+                        className={`w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-3 ${selectedModel === model.id
+                          ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-slate-200'
+                          }`}
+                      >
+                        <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-5 h-5 object-contain" />
+                        {model.name}
+                        {selectedModel === model.id && (
+                          <svg className="w-4 h-4 ml-auto text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:block">
-            {selectedModel === 'nova' ? 'Amazon Nova 2 Lite (Free)' :
+            {selectedModel === 'nemotron' ? 'Nvidia Nemotron 12B' :
               selectedModel === 'gemini' ? 'Google Gemini 2.5 Flash' :
-                selectedModel === 'nemotron' ? 'Nvidia Nemotron 12B' :
+                selectedModel === 'gemini-2.0-flash' ? 'Gemini 2.0 Flash (Free)' :
                   'Claude 3.5 Sonnet'}
           </span>
         </div>
 
         <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-      </div>
+      </div >
       <Analytics />
-    </div>
+    </div >
   );
 };
 
