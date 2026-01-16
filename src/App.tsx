@@ -19,7 +19,7 @@ const App: React.FC = () => {
     }
   ]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'nemotron' | 'gemini-2.0-flash'>('nemotron');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'molmo'>('molmo');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -96,9 +96,9 @@ const App: React.FC = () => {
 
       } else if (file.type.startsWith('video/')) {
         // Process video - extract frames respecting trim range
-        // Dynamic Frame Count: Nemotron (Small model) gets 10 frames to match API limit & Visual Vetting.
+        // Dynamic Frame Count: Molmo (Small model) gets 10 frames to match API limit & Visual Vetting.
         // Gemini/Bedrock (Frontier models) get 24 frames for higher temporal resolution.
-        const frameCount = selectedModel === 'nemotron' ? 10 : (selectedModel === 'gemini-2.0-flash' ? 16 : 24);
+        const frameCount = selectedModel === 'molmo' ? 5 : 24;
         const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
 
@@ -173,7 +173,7 @@ const App: React.FC = () => {
       video.src = URL.createObjectURL(file);
 
       video.onloadedmetadata = () => {
-        // Downscale frames to reduce Token Usage (Nemotron 128k limit / Nova Limits)
+        // Downscale frames to reduce Token Usage (Molmo 128k limit / Nova Limits)
         // Original 1080p frames are HUGE tokens. 640px is sufficient for pose/form analysis.
         const MAX_DIMENSION = 640;
         let width = video.videoWidth;
@@ -411,7 +411,7 @@ const App: React.FC = () => {
         errorMsgLower.includes('resource exhausted')
       ) {
         let modelName = selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1);
-        if (selectedModel === 'gemini-2.0-flash') modelName = 'Gemini 2.0 Flash';
+        if (selectedModel === 'molmo') modelName = 'Molmo 2 8B';
 
         errorText = `⚠️ ${modelName} API usage limit reached. It attempted to generate a response but was stopped. Please wait a minute before trying again.`;
       }
@@ -534,15 +534,14 @@ const App: React.FC = () => {
               >
                 <div className="flex items-center gap-2">
                   <img
-                    src={`/assets/model-icons/${selectedModel === 'nemotron' ? 'nvidia' : selectedModel === 'gemini-2.0-flash' ? 'gemini' : selectedModel}.png`}
+                    src={`/assets/model-icons/${selectedModel === 'molmo' ? 'allen' : selectedModel}.png`}
                     alt={selectedModel}
                     className="w-5 h-5 object-contain"
                   />
                   <span>
-                    {selectedModel === 'nemotron' ? 'Nvidia' :
+                    {selectedModel === 'molmo' ? 'Molmo 2 8B' :
                       selectedModel === 'gemini' ? 'Gemini 2.5 Flash' :
-                        selectedModel === 'gemini-2.0-flash' ? 'Gemini 2.0 Flash' :
-                          'Bedrock'}
+                        'Bedrock'}
                   </span>
                 </div>
                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -558,9 +557,8 @@ const App: React.FC = () => {
                   />
                   <div className="absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-20 flex flex-col p-1 animate-scale-in">
                     {[
-                      { id: 'nemotron', name: 'Nvidia', icon: 'nvidia.png' },
+                      { id: 'molmo', name: 'Molmo 2 8B', icon: 'allen.png' },
                       { id: 'gemini', name: 'Gemini 2.5 Flash', icon: 'gemini.png' },
-                      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', icon: 'gemini.png' },
                       { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' }
                     ].map((model) => (
                       <button
@@ -589,10 +587,9 @@ const App: React.FC = () => {
             </div>
           </div>
           <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:block">
-            {selectedModel === 'nemotron' ? 'Nvidia Nemotron 12B' :
+            {selectedModel === 'molmo' ? 'AllenAI Molmo 2 8B (Free)' :
               selectedModel === 'gemini' ? 'Google Gemini 2.5 Flash' :
-                selectedModel === 'gemini-2.0-flash' ? 'Gemini 2.0 Flash (Free)' :
-                  'Claude 3.5 Sonnet'}
+                'Claude 3.5 Sonnet'}
           </span>
         </div>
 

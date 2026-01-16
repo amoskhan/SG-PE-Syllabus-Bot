@@ -121,7 +121,7 @@ export const sendMessageToOpenRouter = async (
     mediaAttachments?: MediaData[],
     skillName?: string,
     isVerified?: boolean,
-    modelId?: 'gemini-2.0-flash' | 'nemotron'
+    modelId?: 'molmo'
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         const useProxy = !VITE_API_KEY;
@@ -339,9 +339,10 @@ export const sendMessageToOpenRouter = async (
                 movementPattern = `\n\n**Movement patterns (Kinetic Chain indicators):**\n${changes.slice(0, 30).map((c, i) => `• Frame ${i + 1}→${i + 2}: ${c}`).join('\n')}`;
             }
 
-            if (modelId === 'nemotron') { // Enable compression for Nemotron - sending summarized data
-                // LIGHTWEIGHT CONTEXT FOR NEMOTRON
-                // We create a "Minified" Pose Log to save tokens but still provide evidence.
+            if (modelId === 'molmo') {
+                // Light optimization for Molmo (8B) if needed, but for now we follow standard logic
+                // If it struggles with context, we can re-enable summaries.
+                // For now, let's keep the detailed report but ensure history is short.
                 poseDescription = `**Compressed Frame Data (Evidence):**\n` + analyses.map((a, i) => {
                     // Extract key angles for brevity
                     const rElbow = a.keyAngles.find(k => k.joint === 'Right Elbow')?.angle || 0;
@@ -417,7 +418,7 @@ export const sendMessageToOpenRouter = async (
 
             **Pose measurements (Textual Description):**
             ${poseDescription}
-            ${modelId === 'nemotron' ? '' : movementPattern}
+            ${modelId === 'molmo' ? '' : movementPattern}
             ${biomechanicsReport}
             ${userTargetSkill}
 
@@ -566,9 +567,9 @@ export const sendMessageToOpenRouter = async (
             sanitizedHistory.shift();
         }
 
-        // AGGRESSIVE TRUNCATION FOR NEMOTRON/NOVA (Context Limit Protection)
+        // AGGRESSIVE TRUNCATION FOR Molmo (Context Limit Protection)
         // If history is too long, keep only the last few turns.
-        const MAX_HISTORY_TURNS = (modelId === 'nemotron' || modelId === 'gemini-2.0-flash') ? 6 : 10;
+        const MAX_HISTORY_TURNS = (modelId === 'molmo') ? 6 : 10;
         if (sanitizedHistory.length > MAX_HISTORY_TURNS) {
             console.log(`⚠️ Truncating history from ${sanitizedHistory.length} to ${MAX_HISTORY_TURNS} to save context.`);
             sanitizedHistory = sanitizedHistory.slice(-MAX_HISTORY_TURNS);
@@ -596,7 +597,7 @@ export const sendMessageToOpenRouter = async (
         // 2. If there is NO visual data (text-only query), we do NOT force Phase 1.
         const hasVisualContext = (mediaAttachments && mediaAttachments.length > 0) || (poseData && poseData.length > 0);
 
-        if (hasVisualContext && !isVerified && (modelId === 'nemotron' || modelId === 'gemini-2.0-flash') && !activeSkillName) {
+        if (hasVisualContext && !isVerified && (modelId === 'molmo') && !activeSkillName) {
             finalMessageContent += `
             
             ⚠️ **URGENT INSTRUCTION:**
@@ -662,12 +663,11 @@ export const sendMessageToOpenRouter = async (
         if (mediaAttachments && mediaAttachments.length > 0) {
             let processedAttachments = mediaAttachments;
 
-            // Nemotron has a strict 10-image limit per prompt
-            // If we are in verification mode, we use 1 slot for the Reference Image, so we only have 9 slots left.
-            const maxUserFrames = (modelId === 'nemotron' && isVerified) ? 9 : 10;
+            // Molmo has strict 6-image limit per prompt
+            const maxUserFrames = (modelId === 'molmo' && isVerified) ? 5 : 6;
 
-            if (modelId === 'nemotron' && mediaAttachments.length > maxUserFrames) {
-                console.log(`⚠️ Nemotron Limit: Downsampling ${mediaAttachments.length} frames to ${maxUserFrames} (isVerified=${isVerified}).`);
+            if (modelId === 'molmo' && mediaAttachments.length > maxUserFrames) {
+                console.log(`⚠️ Molmo Limit: Downsampling ${mediaAttachments.length} frames to ${maxUserFrames} (isVerified=${isVerified}).`);
                 const step = (mediaAttachments.length - 1) / (maxUserFrames - 1);
                 processedAttachments = [];
                 for (let i = 0; i < maxUserFrames; i++) {
@@ -702,11 +702,10 @@ export const sendMessageToOpenRouter = async (
 
         // Map internal model IDs to OpenRouter model strings
         const modelMap: Record<string, string> = {
-            'gemini-2.0-flash': 'google/gemini-2.0-flash-exp:free',
-            'nemotron': 'nvidia/nemotron-nano-12b-v2-vl:free',
+            'molmo': 'allenai/molmo-2-8b:free',
         };
 
-        const targetModel = modelMap[modelId || 'gemini-2.0-flash'] || 'google/gemini-2.0-flash-exp:free';
+        const targetModel = modelMap[modelId || 'molmo'] || 'allenai/molmo-2-8b:free';
 
         console.log(`🤖 Using OpenRouter Model: ${targetModel}`);
 
