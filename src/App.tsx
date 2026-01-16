@@ -19,6 +19,7 @@ const App: React.FC = () => {
     }
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'molmo'>('molmo');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
@@ -36,7 +37,7 @@ const App: React.FC = () => {
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, isLoading]);
+  }, [messages.length, isLoading, isProcessing]);
 
   // Helper to load image from URL
   const loadImageFromUrl = (url: string): Promise<HTMLImageElement> => {
@@ -280,11 +281,16 @@ const App: React.FC = () => {
     let debugFrames: string[] | undefined;
 
     if (files && files.length > 0) {
-      const processed = await processMediaFiles(files, metadata);
-      mediaAttachments = processed.attachments;
-      poseData = processed.poseData;
-      analysisFrames = processed.analysisFrames;
-      debugFrames = processed.debugFrames;
+      setIsProcessing(true); // START PROCESSING INDICATOR
+      try {
+        const processed = await processMediaFiles(files, metadata);
+        mediaAttachments = processed.attachments;
+        poseData = processed.poseData;
+        analysisFrames = processed.analysisFrames;
+        debugFrames = processed.debugFrames;
+      } finally {
+        setIsProcessing(false); // STOP PROCESSING INDICATOR
+      }
     }
 
     const newMessage: Message = {
@@ -505,6 +511,24 @@ const App: React.FC = () => {
             />
           ))}
 
+          {/* Processing Media Indicator (Before AI Thinking) */}
+          {isProcessing && (
+            <div className="flex justify-start mb-6 animate-pulse">
+              <div className="flex flex-row items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center border border-amber-200 dark:border-amber-700/50">
+                  <svg className="w-4 h-4 text-amber-600 dark:text-amber-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </div>
+                <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-2xl rounded-tl-none border border-amber-100 dark:border-amber-900/30 shadow-sm text-amber-700 dark:text-amber-400 text-sm font-medium flex items-center gap-2">
+                  <span>Processing video frames & detecting poses...</span>
+                  <span className="text-xs opacity-70 font-normal">(This may take ~30s)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {isLoading && (
             <div className="flex justify-start mb-6 animate-pulse">
               <div className="flex flex-row items-center gap-3">
@@ -593,7 +617,7 @@ const App: React.FC = () => {
           </span>
         </div>
 
-        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading || isProcessing} />
       </div >
       <Analytics />
     </div >
