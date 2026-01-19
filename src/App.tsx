@@ -511,12 +511,13 @@ const App: React.FC = () => {
 
       <div className="flex-1 flex flex-col h-full relative bg-white dark:bg-slate-900">
         {/* Header */}
-        <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-4 shrink-0 flex items-center justify-between z-10 w-full">
-          <div className="flex items-center gap-3">
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-4 shrink-0 flex items-center justify-between z-30 w-full relative">
+          <div className="flex items-center gap-2">
             {/* Mobile Toggle */}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="md:hidden p-2 -ml-2 text-slate-600 dark:text-slate-300"
+              className="md:hidden p-3 -ml-1 mr-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              aria-label="Toggle History"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
