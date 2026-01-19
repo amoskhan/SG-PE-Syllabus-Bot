@@ -34,11 +34,20 @@ export interface Message {
   referenceImageURI?: string; // URI of the textbook reference image used
   isAmbiguous?: boolean; // Flag if AI is unsure and needs teacher review
   tokenUsage?: number; // Estimated tokens used for this response
+  modelId?: string; // ID of the AI model that generated this message
 }
 
 export interface ChatState {
   messages: Message[];
   isLoading: boolean;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export const PE_TOPICS = [
