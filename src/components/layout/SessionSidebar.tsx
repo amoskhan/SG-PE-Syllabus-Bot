@@ -25,6 +25,16 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
 
+    // Lock body scroll when sidebar is open on mobile
+    React.useEffect(() => {
+        if (isOpen && window.innerWidth < 768) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => { document.body.style.overflow = ''; };
+    }, [isOpen]);
+
     return (
         <>
             {/* Mobile Overlay */}
@@ -38,7 +48,7 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
             {/* Sidebar Container */}
             <div className={`
         fixed md:relative inset-y-0 left-0 z-50
-        w-80 md:w-72 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-xl border-r border-slate-200 dark:border-slate-800
+        w-[85%] md:w-72 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-xl border-r border-slate-200 dark:border-slate-800
         transform transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         flex flex-col h-full

@@ -608,9 +608,9 @@ const App: React.FC = () => {
         <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 z-10">
           <div className="max-w-4xl mx-auto">
             {/* Model Selector Row */}
-            <div className="flex justify-between items-center mb-3 px-1">
+            <div className="flex justify-between items-center mb-1 px-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-600 dark:text-slate-400">AI Model:</span>
+                <span className="hidden md:inline text-sm font-medium text-slate-600 dark:text-slate-400">AI Model:</span>
                 <div className="relative">
                   <button
                     onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
