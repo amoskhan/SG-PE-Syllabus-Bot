@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import CameraRecorder from '../video/CameraRecorder';
 import VideoFrameSelector from '../video/VideoFrameSelector';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 
 interface ChatInputProps {
   onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string }) => void;
@@ -18,8 +19,26 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Voice Input Hook
+  const { isListening, transcript, startListening, stopListening, resetTranscript, hasRecognitionSupport } = useSpeechRecognition();
+
+  // Sync Voice Transcript to Input
+  useEffect(() => {
+    if (transcript) {
+      setInput(prev => {
+        // Avoid duplicate appending if the user stopped speaking briefly
+        if (prev.endsWith(transcript)) return prev;
+        return prev + (prev && !prev.endsWith(' ') ? ' ' : '') + transcript;
+      });
+      resetTranscript(); // Clear hook buffer so next sentence appends correctly
+    }
+  }, [transcript, resetTranscript]);
+
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isListening) stopListening(); // Stop recording on send
+
     if ((input.trim() || selectedFiles.length > 0) && !isLoading) {
       const metadata = selectedFiles.some(f => f.type.startsWith('video/'))
         ? { startTime: vidStartTime, endTime: vidEndTime, skillName: skillName.trim() || undefined }
@@ -169,7 +188,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             type="button"
             onClick={() => setShowCamera(true)}
             disabled={isLoading}
-            className="flex-shrink-0 p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-shrink-0 p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed hidden md:block"
             title="Record video"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -190,13 +209,31 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             </svg>
           </button>
 
+          {/* Voice Input Button - NEW */}
+          {hasRecognitionSupport && (
+            <button
+              type="button"
+              onClick={isListening ? stopListening : startListening}
+              disabled={isLoading}
+              className={`flex-shrink-0 p-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isListening
+                ? 'text-white bg-red-500 animate-pulse shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30'
+                }`}
+              title={isListening ? "Stop listening" : "Start voice input"}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+              </svg>
+            </button>
+          )}
+
           {/* Text Input */}
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about PE syllabus or upload/record movement for analysis..."
+            placeholder={isListening ? "Listening..." : "Ask about PE syllabus or upload..."}
             disabled={isLoading}
             className="flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden"
             rows={1}
