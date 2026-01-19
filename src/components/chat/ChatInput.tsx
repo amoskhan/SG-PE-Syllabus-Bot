@@ -172,7 +172,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
         )}
 
         {/* Input Area - RESPONSIVE LAYOUT */}
-        <div className="flex flex-col md:flex-row md:items-end gap-3 md:gap-2">
+        <div className="flex flex-col md:flex-row md:items-end gap-2 md:gap-2">
 
           {/* Hidden File Input */}
           <input
@@ -192,25 +192,25 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             onKeyDown={handleKeyDown}
             placeholder={isListening ? "Listening..." : "Ask about PE syllabus or upload..."}
             disabled={isLoading}
-            className="w-full md:flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden order-1 md:order-2"
+            className="w-full md:flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden order-1 md:order-2 text-sm md:text-base"
             rows={1}
           />
 
           {/* Actions Bar (Bottom on Mobile, Left/Right on Desktop) */}
-          <div className="flex items-center justify-between md:contents order-2 md:order-1">
+          <div className="flex items-center justify-between md:contents order-2 md:order-1 pt-1 md:pt-0">
 
             {/* Left Tools Group (Attach, Camera, Voice) */}
-            <div className="flex items-center gap-2 md:order-1">
+            <div className="flex items-center gap-1 md:gap-2 md:order-1">
 
               {/* Attachment Button */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
-                className="p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-800 md:bg-transparent"
+                className="p-2 md:p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-800 md:bg-transparent"
                 title="Upload image or video"
               >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                 </svg>
               </button>
@@ -220,10 +220,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                 type="button"
                 onClick={() => setShowCamera(true)}
                 disabled={isLoading}
-                className="p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-800 md:bg-transparent"
+                className="p-2 md:p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-800 md:bg-transparent"
                 title="Record video"
               >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               </button>
@@ -239,13 +239,13 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                   isListening ? stopListening() : startListening();
                 }}
                 disabled={isLoading}
-                className={`p-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-800 md:bg-transparent ${isListening
+                className={`p-2 md:p-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-slate-100 dark:bg-slate-800 md:bg-transparent ${isListening
                   ? 'text-white bg-red-500 animate-pulse shadow-md'
                   : 'text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30'
                   }`}
                 title={isListening ? "Stop listening" : "Start voice input"}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
                 </svg>
               </button>
@@ -256,15 +256,15 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
               <button
                 type="submit"
                 disabled={(!input.trim() && selectedFiles.length === 0) || isLoading}
-                className="p-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 disabled:from-slate-300 disabled:to-slate-600 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
+                className="p-2 md:p-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 disabled:from-slate-300 disabled:to-slate-600 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
               >
                 {isLoading ? (
-                  <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 md:w-6 md:h-6 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                 ) : (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
                 )}
