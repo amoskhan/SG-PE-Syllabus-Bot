@@ -15,9 +15,9 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
     const recognitionRef = useRef<any>(null);
 
     useEffect(() => {
-        if ('webkitSpeechRecognition' in window) {
-            // @ts-ignore
-            const recognition = new window.webkitSpeechRecognition();
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'en-SG'; // Singapore English
