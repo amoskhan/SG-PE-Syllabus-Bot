@@ -528,7 +528,7 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="font-bold text-xl text-slate-800 dark:text-white hidden sm:block">
-                SG PE Syllabus Bot <span className="text-sm font-normal text-slate-500 dark:text-slate-400">v1.2</span>
+                SG PE Syllabus Bot <span className="text-sm font-normal text-slate-500 dark:text-slate-400">v1.3</span>
               </h1>
               <h1 className="font-bold text-lg text-slate-800 dark:text-white sm:hidden">SG PE Bot</h1>
             </div>
