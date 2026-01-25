@@ -548,7 +548,7 @@ const App: React.FC = () => {
                 />
                 <span className="hidden sm:inline">
                   {selectedModel === 'molmo' ? 'Molmo 2 8B' :
-                    selectedModel === 'gemini' ? 'Gemini 2.5' :
+                    selectedModel === 'gemini' ? 'Gemini 3 Flash' :
                       'Bedrock'}
                 </span>
                 <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -565,7 +565,7 @@ const App: React.FC = () => {
                   <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-20 flex flex-col p-1 animate-scale-in">
                     {[
                       { id: 'molmo', name: 'Molmo 2 8B', icon: 'allen.png' },
-                      { id: 'gemini', name: 'Gemini 2.5 Flash', icon: 'gemini.png' },
+                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
                       { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' }
                     ].map((model) => (
                       <button
