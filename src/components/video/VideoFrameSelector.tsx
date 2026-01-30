@@ -150,7 +150,7 @@ const VideoFrameSelector: React.FC<VideoFrameSelectorProps> = ({ file, onRangeCh
     };
 
     return (
-        <div className="w-full mt-2">
+        <div className="w-full mt-2 min-w-0">
             {/* Header with Expand Button */}
             <div className="flex justify-between items-center mb-1">
                 <span className="text-xs font-medium text-slate-500">Trim Video (Click to set range)</span>
@@ -172,8 +172,10 @@ const VideoFrameSelector: React.FC<VideoFrameSelectorProps> = ({ file, onRangeCh
             </div>
 
             {/* Compact Scrollable Strip */}
-            <div className="flex gap-1 overflow-x-auto pb-2 scrollbar-thin">
-                {thumbnails.map((thumb, idx) => renderThumbnail(thumb, idx, false))}
+            <div className="relative w-full">
+                <div className="flex gap-1 overflow-x-auto pb-2 scrollbar-thin w-full max-w-[85vw] md:max-w-full touch-pan-x mx-auto">
+                    {thumbnails.map((thumb, idx) => renderThumbnail(thumb, idx, false))}
+                </div>
             </div>
 
             {/* Expanded Modal Overlay */}

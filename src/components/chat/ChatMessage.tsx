@@ -84,9 +84,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
           {/* Content */}
           <div
             id={`message-${message.id}`}
-            className={`flex flex-col gap-2 w-full`}
+            className={`flex flex-col gap-2 w-full min-w-0`}
           >
-            <div className={`px-4 py-3 rounded-2xl shadow-sm ${isError
+            <div className={`px-4 py-3 rounded-2xl shadow-sm break-words overflow-hidden ${isError
               ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
               : isBot
                 ? 'bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-slate-200'
@@ -129,7 +129,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
             {!isBot && message.media && message.media.length > 0 && (
               <div className="flex flex-col gap-2">
                 {message.media.map((attachment) => (
-                  <div key={attachment.id} className="rounded-lg overflow-hidden border border-slate-200 bg-white w-full md:max-w-4xl shadow-sm">
+                  <div key={attachment.id} className="rounded-lg overflow-hidden border border-slate-200 bg-white w-full max-w-[85vw] md:max-w-4xl shadow-sm mx-auto">
                     {!attachment.data ? (
                       <div className="h-32 bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center p-4 text-slate-400 border-b border-slate-200 dark:border-slate-700">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 mb-2 opacity-50">
@@ -142,6 +142,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                       <img
                         src={attachment.data}
                         alt={attachment.fileName}
+                        loading="lazy"
                         className="w-full h-auto object-contain"
                       />
                     ) : (
@@ -167,7 +168,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                     <span className="bg-green-100 text-green-700 px-1 rounded text-[9px]">AI DEBUG</span>
                   </div>
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200">
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200 w-full max-w-[85vw] md:max-w-full mx-auto touch-pan-x">
                   {message.analysisFrames.map((frame, idx) => {
                     // Correctly find the pose data for this specific frame index
                     // poseData.timestamp corresponds to the frame index 'idx'

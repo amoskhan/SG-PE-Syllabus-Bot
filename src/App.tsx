@@ -381,8 +381,18 @@ const App: React.FC = () => {
     // Auto-Title Logic on First Message
     let newTitle: string | undefined = undefined;
     if (messages.length <= 1) { // 1 because "Welcome" message is already there
-      // Simple heuristic: First few words of user request
-      newTitle = text.substring(0, 30) + (text.length > 30 ? '...' : '') || 'Media Analysis';
+      if (text && text.trim().length > 0) {
+        // Use user's text (truncated)
+        newTitle = text.substring(0, 30) + (text.length > 30 ? '...' : '');
+      } else if (skillContext) {
+        // Use declared skill
+        newTitle = `Analysis: ${skillContext}`;
+      } else if (mediaAttachments && mediaAttachments.length > 0) {
+        // Generic Media
+        newTitle = 'Media Analysis';
+      } else {
+        newTitle = 'New Conversation';
+      }
     }
 
     handleUpdateCurrentSession(optimisticMessages, newTitle);
@@ -535,7 +545,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-white dark:bg-slate-900 transition-colors">
+    <div className="flex h-screen bg-white dark:bg-slate-900 transition-colors overflow-x-hidden">
 
       <SessionSidebar
         sessions={sessions}
@@ -567,9 +577,9 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="font-bold text-xl text-slate-800 dark:text-white hidden sm:block">
-                SG PE Syllabus Bot <span className="text-sm font-normal text-slate-500 dark:text-slate-400">v1.3</span>
+                SG PE Chatbot
               </h1>
-              <h1 className="font-bold text-lg text-slate-800 dark:text-white sm:hidden">SG PE Bot</h1>
+              <h1 className="font-bold text-lg text-slate-800 dark:text-white sm:hidden">SG PE Chatbot</h1>
             </div>
           </div>
 
@@ -577,7 +587,7 @@ const App: React.FC = () => {
             <div className="relative">
               <button
                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
                 <img
                   src={`/assets/model-icons/${selectedModel === 'molmo' ? 'allen' : selectedModel}.png`}
@@ -641,7 +651,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Main Chat Area */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth bg-slate-50 dark:bg-slate-900/50">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth bg-slate-50 dark:bg-slate-900/50">
           <div className="max-w-4xl mx-auto min-h-full flex flex-col justify-end">
 
             {/* Spacer for empty chat to push welcome down? No, standard flow */}
