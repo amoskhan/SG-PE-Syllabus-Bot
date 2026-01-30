@@ -7,7 +7,9 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
+
 import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
+import { parseDocument } from './services/documentService';
 
 const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -217,6 +219,21 @@ const App: React.FC = () => {
           const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
           if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
         }
+      } else if (file.name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        try {
+          const text = await parseDocument(file);
+          attachments.push({
+            id: Date.now().toString() + Math.random(),
+            type: 'document',
+            mimeType: file.type,
+            data: '', // No visual data needed
+            fileName: file.name,
+            textContent: text
+          });
+        } catch (e) {
+          console.error("Failed to parse document", e);
+          alert(`Failed to read document ${file.name}`);
+        }
       }
     }
 
@@ -402,15 +419,36 @@ const App: React.FC = () => {
         }
       }
 
-      const standardHistory = messages.map(m => ({
-        role: m.sender === Sender.USER ? 'user' : 'assistant',
-        content: m.text
-      }));
+      const standardHistory = messages.map(m => {
+        let content = m.text;
+        // Append document content to history if present
+        if (m.media) {
+          const docs = m.media.filter(a => a.type === 'document' && a.textContent);
+          if (docs.length > 0) {
+            const docContext = docs.map(d => `\n\n[Document Context: ${d.fileName}]\n${d.textContent}`).join('\n');
+            content += docContext;
+          }
+        }
+        return {
+          role: m.sender === Sender.USER ? 'user' : 'assistant',
+          content: content
+        };
+      });
+
+      // Prepare current message context
+      let promptText = newMessage.text;
+      if (newMessage.media) {
+        const docs = newMessage.media.filter(a => a.type === 'document' && a.textContent);
+        if (docs.length > 0) {
+          const docContext = docs.map(d => `\n\n[Document Context: ${d.fileName}]\n${d.textContent}`).join('\n');
+          promptText += docContext;
+        }
+      }
 
       const aiService = getAIService(selectedModel);
       response = await aiService(
         standardHistory,
-        newMessage.text,
+        promptText,
         contextPoseData,
         contextAnalysisFrames,
         skillContext,
