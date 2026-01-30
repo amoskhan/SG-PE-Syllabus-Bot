@@ -61,7 +61,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     const validFiles = files.filter((f: File) =>
-      f.type.startsWith('image/') || f.type.startsWith('video/')
+      f.type.startsWith('image/') ||
+      f.type.startsWith('video/') ||
+      f.name.endsWith('.docx') ||
+      f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     );
     setSelectedFiles(prev => [...prev, ...validFiles]);
     // Reset file input
@@ -123,12 +126,19 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                         alt={file.name}
                         className="w-full h-full object-cover"
                       />
-                    ) : (
+                    ) : file.type.startsWith('video/') ? (
                       <div className="text-center">
                         <svg className="w-6 h-6 text-slate-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                         <span className="text-[8px] text-slate-400">Video</span>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <svg className="w-6 h-6 text-blue-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="text-[8px] text-slate-400">Doc</span>
                       </div>
                     )}
                   </div>
@@ -145,7 +155,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
 
             {/* Video Tools: Range Selector & Skill Name */}
             {hasVideo && (
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700 min-w-0 overflow-hidden">
                 {/* 1. Skill Name Input */}
                 <div className="mb-3">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Target Skill (Optional)</label>
@@ -178,7 +188,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*"
+            accept="image/*,video/*,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             multiple
             onChange={handleFileSelect}
             className="hidden"
@@ -192,25 +202,25 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             onKeyDown={handleKeyDown}
             placeholder={isListening ? "Listening..." : "Ask about PE syllabus or upload..."}
             disabled={isLoading}
-            className="w-full md:flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden order-1 md:order-2 text-sm md:text-base"
+            className="w-full md:flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden order-1 md:order-2 text-base md:text-base"
             rows={1}
           />
 
           {/* Actions Bar (Bottom on Mobile, Left/Right on Desktop) */}
-          <div className="flex items-center justify-between md:contents order-2 md:order-1 pt-1 md:pt-0">
+          <div className="flex items-center justify-between md:contents order-2 md:order-1 pt-2 md:pt-0">
 
             {/* Left Tools Group (Attach, Camera, Voice) */}
-            <div className="flex items-center gap-1 md:gap-2 md:order-1">
+            <div className="flex items-center gap-2 md:gap-2 md:order-1">
 
               {/* Attachment Button */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
-                className="p-1.5 md:p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent"
+                className="p-2.5 md:p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent"
                 title="Upload image or video"
               >
-                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-6 h-6 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                 </svg>
               </button>
@@ -220,10 +230,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                 type="button"
                 onClick={() => setShowCamera(true)}
                 disabled={isLoading}
-                className="p-1.5 md:p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent"
+                className="p-2.5 md:p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent"
                 title="Record video"
               >
-                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-6 h-6 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               </button>
@@ -239,13 +249,13 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                   isListening ? stopListening() : startListening();
                 }}
                 disabled={isLoading}
-                className={`p-1.5 md:p-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent ${isListening
+                className={`p-2.5 md:p-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent ${isListening
                   ? 'text-white bg-red-500 animate-pulse shadow-md'
                   : 'text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30'
                   }`}
                 title={isListening ? "Stop listening" : "Start voice input"}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
+                <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 md:w-6 md:h-6">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
                 </svg>
               </button>

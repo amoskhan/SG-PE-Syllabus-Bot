@@ -13,11 +13,12 @@ export interface GroundingChunk {
 
 export interface MediaAttachment {
   id: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'document';
   mimeType: string;
   data: string; // base64 encoded
   fileName: string;
   thumbnailData?: string; // for video preview
+  textContent?: string; // extracted text for documents
 }
 
 export interface Message {

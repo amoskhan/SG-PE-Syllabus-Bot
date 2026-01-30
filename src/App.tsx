@@ -7,7 +7,9 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
+
 import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
+import { parseDocument } from './services/documentService';
 
 const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -217,6 +219,21 @@ const App: React.FC = () => {
           const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
           if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
         }
+      } else if (file.name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        try {
+          const text = await parseDocument(file);
+          attachments.push({
+            id: Date.now().toString() + Math.random(),
+            type: 'document',
+            mimeType: file.type,
+            data: '', // No visual data needed
+            fileName: file.name,
+            textContent: text
+          });
+        } catch (e) {
+          console.error("Failed to parse document", e);
+          alert(`Failed to read document ${file.name}`);
+        }
       }
     }
 
@@ -364,8 +381,18 @@ const App: React.FC = () => {
     // Auto-Title Logic on First Message
     let newTitle: string | undefined = undefined;
     if (messages.length <= 1) { // 1 because "Welcome" message is already there
-      // Simple heuristic: First few words of user request
-      newTitle = text.substring(0, 30) + (text.length > 30 ? '...' : '') || 'Media Analysis';
+      if (text && text.trim().length > 0) {
+        // Use user's text (truncated)
+        newTitle = text.substring(0, 30) + (text.length > 30 ? '...' : '');
+      } else if (skillContext) {
+        // Use declared skill
+        newTitle = `Analysis: ${skillContext}`;
+      } else if (mediaAttachments && mediaAttachments.length > 0) {
+        // Generic Media
+        newTitle = 'Media Analysis';
+      } else {
+        newTitle = 'New Conversation';
+      }
     }
 
     handleUpdateCurrentSession(optimisticMessages, newTitle);
@@ -402,15 +429,36 @@ const App: React.FC = () => {
         }
       }
 
-      const standardHistory = messages.map(m => ({
-        role: m.sender === Sender.USER ? 'user' : 'assistant',
-        content: m.text
-      }));
+      const standardHistory = messages.map(m => {
+        let content = m.text;
+        // Append document content to history if present
+        if (m.media) {
+          const docs = m.media.filter(a => a.type === 'document' && a.textContent);
+          if (docs.length > 0) {
+            const docContext = docs.map(d => `\n\n[Document Context: ${d.fileName}]\n${d.textContent}`).join('\n');
+            content += docContext;
+          }
+        }
+        return {
+          role: m.sender === Sender.USER ? 'user' : 'assistant',
+          content: content
+        };
+      });
+
+      // Prepare current message context
+      let promptText = newMessage.text;
+      if (newMessage.media) {
+        const docs = newMessage.media.filter(a => a.type === 'document' && a.textContent);
+        if (docs.length > 0) {
+          const docContext = docs.map(d => `\n\n[Document Context: ${d.fileName}]\n${d.textContent}`).join('\n');
+          promptText += docContext;
+        }
+      }
 
       const aiService = getAIService(selectedModel);
       response = await aiService(
         standardHistory,
-        newMessage.text,
+        promptText,
         contextPoseData,
         contextAnalysisFrames,
         skillContext,
@@ -497,7 +545,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-white dark:bg-slate-900 transition-colors">
+    <div className="flex h-screen bg-white dark:bg-slate-900 transition-colors overflow-x-hidden">
 
       <SessionSidebar
         sessions={sessions}
@@ -529,9 +577,9 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="font-bold text-xl text-slate-800 dark:text-white hidden sm:block">
-                SG PE Syllabus Bot <span className="text-sm font-normal text-slate-500 dark:text-slate-400">v1.3</span>
+                SG PE Chatbot
               </h1>
-              <h1 className="font-bold text-lg text-slate-800 dark:text-white sm:hidden">SG PE Bot</h1>
+              <h1 className="font-bold text-lg text-slate-800 dark:text-white sm:hidden">SG PE Chatbot</h1>
             </div>
           </div>
 
@@ -539,7 +587,7 @@ const App: React.FC = () => {
             <div className="relative">
               <button
                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
                 <img
                   src={`/assets/model-icons/${selectedModel === 'molmo' ? 'allen' : selectedModel}.png`}
@@ -603,7 +651,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Main Chat Area */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth bg-slate-50 dark:bg-slate-900/50">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth bg-slate-50 dark:bg-slate-900/50">
           <div className="max-w-4xl mx-auto min-h-full flex flex-col justify-end">
 
             {/* Spacer for empty chat to push welcome down? No, standard flow */}
