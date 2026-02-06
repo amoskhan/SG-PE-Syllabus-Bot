@@ -31,15 +31,13 @@ const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseDat
 };
 
 // Start with a registry that returns the FUNCTION
-export const getAIService = (modelId: 'gemini' | 'bedrock' | 'molmo'): AIServiceFunction => {
+export const getAIService = (modelId: 'gemini' | 'bedrock'): AIServiceFunction => {
     switch (modelId) {
         case 'gemini':
             return geminiWrapper;
         case 'bedrock':
             return bedrockWrapper;
-        case 'molmo':
-            return (h, m, p, med, s, v) => sendMessageToOpenRouter(h, m, p, med, s, v, 'molmo');
         default:
-            return (h, m, p, med, s, v) => sendMessageToOpenRouter(h, m, p, med, s, v, 'molmo');
+            return geminiWrapper;
     }
 };

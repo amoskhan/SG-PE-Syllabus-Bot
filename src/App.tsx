@@ -64,7 +64,7 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'molmo'>('molmo');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock'>('gemini');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
@@ -201,7 +201,7 @@ const App: React.FC = () => {
         if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0 });
 
       } else if (file.type.startsWith('video/')) {
-        const frameCount = selectedModel === 'molmo' ? 5 : 24;
+        const frameCount = 24;
         const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
         attachments.push({
@@ -590,7 +590,7 @@ const App: React.FC = () => {
                 className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
                 <img
-                  src={`/assets/model-icons/${selectedModel === 'molmo' ? 'allen' : selectedModel}.png`}
+                  src={`/assets/model-icons/${selectedModel}.png`}
                   alt={selectedModel}
                   className="w-5 h-5 object-contain"
                 />
