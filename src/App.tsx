@@ -64,7 +64,7 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'molmo'>('molmo');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock'>('gemini');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
@@ -201,7 +201,7 @@ const App: React.FC = () => {
         if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0 });
 
       } else if (file.type.startsWith('video/')) {
-        const frameCount = selectedModel === 'molmo' ? 5 : 24;
+        const frameCount = 24;
         const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
         attachments.push({
@@ -590,14 +590,12 @@ const App: React.FC = () => {
                 className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
                 <img
-                  src={`/assets/model-icons/${selectedModel === 'molmo' ? 'allen' : selectedModel}.png`}
+                  src={`/assets/model-icons/${selectedModel}.png`}
                   alt={selectedModel}
                   className="w-5 h-5 object-contain"
                 />
                 <span className="hidden sm:inline">
-                  {selectedModel === 'molmo' ? 'Molmo 2 8B' :
-                    selectedModel === 'gemini' ? 'Gemini 2.5' :
-                      'Bedrock'}
+                  {selectedModel === 'gemini' ? 'Gemini 2.5 Flash' : 'Bedrock'}
                 </span>
                 <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -612,7 +610,6 @@ const App: React.FC = () => {
                   />
                   <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-20 flex flex-col p-1 animate-scale-in">
                     {[
-                      { id: 'molmo', name: 'Molmo 2 8B', icon: 'allen.png' },
                       { id: 'gemini', name: 'Gemini 2.5 Flash', icon: 'gemini.png' },
                       { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' }
                     ].map((model) => (
