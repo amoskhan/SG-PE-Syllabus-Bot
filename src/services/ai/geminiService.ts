@@ -4,7 +4,7 @@ import { GroundingChunk } from '../../types';
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from '../../data/fundamentalMovementSkillsData';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 
-const MODEL_NAME = 'gemini-2.5-flash';
+const MODEL_NAME = 'gemini-3-flash';
 
 // Initialize the client
 // Note: In a real app, never expose keys on the client. This is for the generated demo environment.
