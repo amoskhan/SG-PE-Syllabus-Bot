@@ -121,7 +121,8 @@ export const sendMessageToOpenRouter = async (
     mediaAttachments?: MediaData[],
     skillName?: string,
     isVerified?: boolean,
-    modelId?: 'molmo'
+    modelId?: 'nemotron',
+    sessionId?: string
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         const useProxy = !VITE_API_KEY;
@@ -339,78 +340,20 @@ export const sendMessageToOpenRouter = async (
                 movementPattern = `\n\n**Movement patterns (Kinetic Chain indicators):**\n${changes.slice(0, 30).map((c, i) => `• Frame ${i + 1}→${i + 2}: ${c}`).join('\n')}`;
             }
 
-            if (modelId === 'molmo') {
-                // Light optimization for Molmo (8B) if needed, but for now we follow standard logic
-                // If it struggles with context, we can re-enable summaries.
-                // For now, let's keep the detailed report but ensure history is short.
-                poseDescription = `**Compressed Frame Data (Evidence):**\n` + analyses.map((a, i) => {
-                    // Extract key angles for brevity
-                    const rElbow = a.keyAngles.find(k => k.joint === 'Right Elbow')?.angle || 0;
-                    const rKnee = a.keyAngles.find(k => k.joint === 'Right Knee')?.angle || 0;
-                    const lKnee = a.keyAngles.find(k => k.joint === 'Left Knee')?.angle || 0;
 
-                    // Summarize Arm position from text
-                    const rArm = a.poseSummary.includes('Right arm: raised') ? 'RArm:HIGH' : (a.poseSummary.includes('lowered') ? 'RArm:LOW' : 'RArm:MID');
-
-                    // Check Ball Validity (Respect User Omit) AND Calculate Trajectory
-                    const ball = poseData[i].ball;
-                    let bTag = 'Ball:N';
-
-                    if (ball && ball.isValid) {
-                        // Default to YES if calc fails
-                        bTag = 'Ball:Y';
-
-                        if (ball.centerNormalized) {
-                            const b = ball.centerNormalized;
-                            const lm = poseData[i].landmarks; // Normalized Landmarks
-
-                            // 1. Calculate Release (Distance from Wrists)
-                            const rWrist = lm[16];
-                            const lWrist = lm[15];
-                            // Distance formula
-                            const distR = Math.hypot(b.x - rWrist.x, b.y - rWrist.y);
-                            const distL = Math.hypot(b.x - lWrist.x, b.y - lWrist.y);
-                            const minDist = Math.min(distR, distL);
-
-                            // Threshold: 0.15 is roughly 15% of screen width (approx arm length radius)
-                            const isReleased = minDist > 0.15;
-                            const status = isReleased ? 'REL' : 'HELD';
-
-                            // 2. Calculate Height Zone (Y coordinate: 0 is top, 1 is bottom)
-                            // Compare Ball Y to body parts
-                            const noseY = lm[0].y;
-                            const shoulderY = (lm[11].y + lm[12].y) / 2;
-                            const hipY = (lm[23].y + lm[24].y) / 2;
-                            const kneeY = (lm[25].y + lm[26].y) / 2;
-
-                            let zone = 'LOW'; // Ground level
-                            if (b.y < noseY) zone = 'OVERHEAD';
-                            else if (b.y < shoulderY) zone = 'HEAD';
-                            else if (b.y < hipY) zone = 'CHEST';
-                            else if (b.y < kneeY) zone = 'WAIST';
-                            else zone = 'KNEE_LOW';
-
-                            bTag = `Ball:${status}@${zone}`;
-                        }
-                    }
-
-                    return `F${i + 1}: ${rArm}. R.Elbow:${rElbow}. Knees:${Math.min(rKnee, lKnee)}. ${bTag}.`;
-                }).join('\n');
-            } else {
-                poseDescription = analyses.map((analysis, i) => {
-                    const ball = poseData[i].ball;
-                    // Only report 'YES' if the ball exists AND is marked as valid by the logic or user
-                    const hasBall = (ball && ball.isValid)
-                        ? `YES (x:${ball.center.x.toFixed(0)}, y:${ball.center.y.toFixed(0)})`
-                        : 'NO (Not detected or User Omitted)';
-                    return `
+            poseDescription = analyses.map((analysis, i) => {
+                const ball = poseData[i].ball;
+                // Only report 'YES' if the ball exists AND is marked as valid by the logic or user
+                const hasBall = (ball && ball.isValid)
+                    ? `YES (x:${ball.center.x.toFixed(0)}, y:${ball.center.y.toFixed(0)})`
+                    : 'NO (Not detected or User Omitted)';
+                return `
                 **Frame ${i + 1}:**
                 Position: ${analysis.poseSummary}
                 Angles: ${analysis.keyAngles.map(a => `${a.joint}=${a.angle}°`).join(', ')}
                 Ball Detected: ${hasBall}
             `;
-                }).join('\n');
-            }
+            }).join('\n');
 
             const userTargetSkill = skillName ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.` : '';
 
@@ -418,7 +361,7 @@ export const sendMessageToOpenRouter = async (
 
             **Pose measurements (Textual Description):**
             ${poseDescription}
-            ${modelId === 'molmo' ? '' : movementPattern}
+            ${movementPattern}
             ${biomechanicsReport}
             ${userTargetSkill}
 
@@ -567,9 +510,9 @@ export const sendMessageToOpenRouter = async (
             sanitizedHistory.shift();
         }
 
-        // AGGRESSIVE TRUNCATION FOR Molmo (Context Limit Protection)
+        // AGGRESSIVE TRUNCATION
         // If history is too long, keep only the last few turns.
-        const MAX_HISTORY_TURNS = (modelId === 'molmo') ? 6 : 10;
+        const MAX_HISTORY_TURNS = 10;
         if (sanitizedHistory.length > MAX_HISTORY_TURNS) {
             console.log(`⚠️ Truncating history from ${sanitizedHistory.length} to ${MAX_HISTORY_TURNS} to save context.`);
             sanitizedHistory = sanitizedHistory.slice(-MAX_HISTORY_TURNS);
@@ -597,16 +540,6 @@ export const sendMessageToOpenRouter = async (
         // 2. If there is NO visual data (text-only query), we do NOT force Phase 1.
         const hasVisualContext = (mediaAttachments && mediaAttachments.length > 0) || (poseData && poseData.length > 0);
 
-        if (hasVisualContext && !isVerified && (modelId === 'molmo') && !activeSkillName) {
-            finalMessageContent += `
-            
-            ⚠️ **URGENT INSTRUCTION:**
-            **STOP!** Do NOT analyze or grade yet.
-            Your ONLY goal right now is to **IDENTIFY** the skill from the visual evidence.
-            Answer in this EXACT format: "Phase 1: I have detected a **[Skill Name]**. Is this correct?."
-            (The Skill Name must be one of: Underhand Throw, Overhand Throw, Chest Pass, etc. Do NOT use synonymous names like 'Free Throw').
-            If unsure, say "Unknown".`;
-        }
 
         const userContent: any[] = [
             { type: "text", text: finalMessageContent }
@@ -664,19 +597,7 @@ export const sendMessageToOpenRouter = async (
             let processedAttachments = mediaAttachments;
 
             // Molmo has strict 6-image limit per prompt
-            const maxUserFrames = (modelId === 'molmo' && isVerified) ? 5 : 6;
-
-            if (modelId === 'molmo' && mediaAttachments.length > maxUserFrames) {
-                console.log(`⚠️ Molmo Limit: Downsampling ${mediaAttachments.length} frames to ${maxUserFrames} (isVerified=${isVerified}).`);
-                const step = (mediaAttachments.length - 1) / (maxUserFrames - 1);
-                processedAttachments = [];
-                for (let i = 0; i < maxUserFrames; i++) {
-                    const idx = Math.min(Math.round(i * step), mediaAttachments.length - 1);
-                    processedAttachments.push(mediaAttachments[idx]);
-                }
-                // Filter out potential duplicates if video is extremely short
-                processedAttachments = [...new Set(processedAttachments)];
-            }
+            const maxUserFrames = 6;
 
             processedAttachments.forEach(media => {
                 // Ensure data URL proper format
@@ -702,10 +623,10 @@ export const sendMessageToOpenRouter = async (
 
         // Map internal model IDs to OpenRouter model strings
         const modelMap: Record<string, string> = {
-            'molmo': 'allenai/molmo-2-8b:free',
+            'nemotron': 'nvidia/nemotron-nano-12b-v2-vl:free',
         };
 
-        const targetModel = modelMap[modelId || 'molmo'] || 'allenai/molmo-2-8b:free';
+        const targetModel = modelMap[modelId || 'nemotron'] || 'nvidia/nemotron-nano-12b-v2-vl:free';
 
         console.log(`🤖 Using OpenRouter Model: ${targetModel}`);
 
@@ -747,10 +668,31 @@ export const sendMessageToOpenRouter = async (
             throw new Error(`API Error: ${data.error.message || JSON.stringify(data.error)}`);
         }
 
-        const text = data.choices?.[0]?.message?.content || "I couldn't generate a response (No content received).";
+        const responseText = data.choices?.[0]?.message?.content || "I couldn't generate a response (No content received).";
         const tokenUsage = data.usage?.total_tokens;
 
-        return { text, tokenUsage, referenceImageURI: finalReferenceURI };
+        // LOGGING TO SUPABASE (Fire and Forget)
+        if (sessionId) {
+            import('../db/supabaseClient').then(({ logChatToDB }) => {
+                logChatToDB(
+                    sessionId,
+                    finalMessageContent,
+                    responseText, // The final text
+                    activeSkillName || undefined,
+                    {
+                        model: targetModel,
+                        tokenUsage: data.usage?.total_tokens || 0,
+                        hasMedia: mediaAttachments && mediaAttachments.length > 0
+                    }
+                );
+            });
+        }
+
+        return {
+            text: responseText,
+            tokenUsage: data.usage?.total_tokens || 0,
+            referenceImageURI: finalReferenceURI
+        };
     } catch (error) {
         console.error("OpenRouter API Error:", error);
         throw error;
