@@ -51,9 +51,11 @@ export default async function handler(req: any, res: any) {
         // Send message (support text or parts for multimodal)
         // Note: SDK usually expects 'message' for sendMessage to be string or Part[]
         const result = await chat.sendMessage({ message: message });
-        const response = result;
+        const response = (result as any).response || result;
 
-        const text = response.text || "";
+        const text = typeof response.text === 'function' ? response.text() :
+            (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
+
         const usage = response.usageMetadata?.totalTokenCount;
         const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
 
