@@ -31,13 +31,20 @@ const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseDat
     return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId);
 };
 
+// Wrapper for OpenRouter (Nemotron)
+const nemotronWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId) => {
+    return sendMessageToOpenRouter(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, 'nemotron', sessionId);
+};
+
 // Start with a registry that returns the FUNCTION
-export const getAIService = (modelId: 'gemini' | 'bedrock'): AIServiceFunction => {
+export const getAIService = (modelId: 'gemini' | 'bedrock' | 'nemotron'): AIServiceFunction => {
     switch (modelId) {
         case 'gemini':
             return geminiWrapper;
         case 'bedrock':
             return bedrockWrapper;
+        case 'nemotron':
+            return nemotronWrapper;
         default:
             return geminiWrapper;
     }
