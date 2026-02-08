@@ -11,7 +11,8 @@ export type AIServiceFunction = (
     poseData?: import('../vision/poseDetectionService').PoseData[],
     mediaAttachments?: MediaData[],
     skillName?: string,
-    isVerified?: boolean
+    isVerified?: boolean,
+    sessionId?: string
 ) => Promise<ChatResponse & { tokenUsage?: number }>;
 
 // Wrapper for Bedrock to match the interface (ignoring extra args)
@@ -20,14 +21,14 @@ const bedrockWrapper: AIServiceFunction = async (history, currentMessage) => {
 };
 
 // Wrapper for Gemini to convert standard history to Google Content format
-const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified) => {
+const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId) => {
     // Convert { role: 'user'|'assistant', content: string }[] to Google Content[]
     const googleHistory: Content[] = history.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }] as import('@google/genai').Part[]
     }));
 
-    return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified);
+    return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId);
 };
 
 // Start with a registry that returns the FUNCTION

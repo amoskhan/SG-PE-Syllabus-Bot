@@ -138,7 +138,8 @@ export const sendMessageToGemini = async (
   poseData?: import('../vision/poseDetectionService').PoseData[],
   mediaAttachments?: MediaData[],
   skillName?: string,
-  isVerified?: boolean
+  isVerified?: boolean,
+  sessionId?: string
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
   try {
     let enhancedMessage = currentMessage;
@@ -673,6 +674,24 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
     // Clean the tag from the displayed text
     const cleanText = text.replace(/\[\[DISPLAY_REFERENCE:\s*[^\]]+\]\]/g, '').trim();
+
+    // LOGGING TO SUPABASE (Fire and Forget)
+    if (sessionId) {
+      // Don't await this, let it run in background to not block UI
+      import('../db/supabaseClient').then(({ logChatToDB }) => {
+        logChatToDB(
+          sessionId,
+          currentMessage,
+          cleanText,
+          activeSkillName || undefined,
+          {
+            model: MODEL_NAME,
+            tokenUsage,
+            hasMedia: mediaAttachments && mediaAttachments.length > 0
+          }
+        );
+      });
+    }
 
     return {
       text: cleanText,

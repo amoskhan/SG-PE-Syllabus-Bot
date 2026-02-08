@@ -462,7 +462,8 @@ const App: React.FC = () => {
         contextPoseData,
         contextAnalysisFrames,
         skillContext,
-        isVerifying
+        isVerifying,
+        currentSessionId
       );
 
       const botMessage: Message = {
