@@ -4,7 +4,7 @@ import { GroundingChunk } from '../../types';
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from '../../data/fundamentalMovementSkillsData';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 
-const MODEL_NAME = 'gemini-3-flash';
+const MODEL_NAME = 'gemini-2.5-flash';
 
 // Initialize the client
 // Note: In a real app, never expose keys on the client. This is for the generated demo environment.
@@ -624,13 +624,16 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       result = await chat.sendMessage({ message: parts as any });
 
       // Safety check - ensure we have a valid response
-      if (!result || !result.response) {
+      if (!result) {
         throw new Error("Gemini API returned an empty response. This is usually due to Safety Filters or Quota Limits.");
       }
 
-      text = result.response.text();
-      groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      tokenUsage = result.response.usageMetadata?.totalTokenCount || 0;
+      const response = result.response || result;
+      text = typeof response.text === 'function' ? response.text() :
+        (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
+
+      groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      tokenUsage = response.usageMetadata?.totalTokenCount || 0;
 
     } else {
       console.log("🚀 PROD MODE: Using Secure Serverless Function");
