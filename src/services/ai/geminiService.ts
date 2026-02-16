@@ -632,10 +632,15 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       tokenUsage = result.response.usageMetadata?.totalTokenCount || 0;
 
     } else {
-      console.log("🚀 PROD MODE: Using Secure Serverless Function");
+      console.log("🚀 PROD MODE: Using Django Backend Proxy");
 
-      const response = await fetch('/api/gemini', {
+      // VITE_BACKEND_URL can be set in .env.local for local dev pointing at Django.
+      // Falls back to localhost:8000 if not set.
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
+      const response = await fetch(`${backendUrl}/api/gemini/`, {
         method: 'POST',
+        credentials: 'include', // send session cookie for authentication
         headers: {
           'Content-Type': 'application/json',
         },
