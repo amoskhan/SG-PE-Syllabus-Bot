@@ -1,0 +1,8 @@
+Lib/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+backendmain/db.sqlite3
+.env
+.env.*

@@ -1,0 +1,15 @@
+# Python virtual environment (created by venv)
+Lib/
+Include/
+Scripts/
+pyvenv.cfg
+
+# Byte-compiled / optimised / DLL files
+__pycache__/
+*.py[cod]
+
+# Secrets
+.env
+
+# Django
+db.sqlite3
