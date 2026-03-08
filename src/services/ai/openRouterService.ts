@@ -3,10 +3,13 @@ import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_I
 import { getFewShotExamples } from '../../data/skillExamples';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 import { MediaData } from './geminiService';
+import { StandardHistoryMessage } from '../../types';
+import { STEP_MOVEMENT_THRESHOLD, STANCE_WIDTH_RATIO, STANCE_ISSUE_RATIO, MOVEMENT_CONFIDENCE_RATIO, STRIDE_EXPANSION_THRESHOLD, FOOT_VELOCITY_RATIO, DIVISION_ZERO_GUARD, KNEE_BEND_THRESHOLD, BALL_RELEASE_DISTANCE, SMALL_MODEL_MAX_HISTORY, LARGE_MODEL_MAX_HISTORY } from '../../constants';
 
 // Note: In development, we can use VITE_OPENROUTER_API_KEY. 
 // In production (Vercel), we should use the server-side proxy /api/openrouter to hide the key.
 const VITE_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
+const isDev = import.meta.env.DEV;
 const SITE_URL = import.meta.env.VITE_SITE_URL || "http://localhost:3000";
 const SITE_NAME = "SG PE Syllabus Bot";
 
@@ -115,7 +118,7 @@ export interface ChatResponse {
 }
 
 export const sendMessageToOpenRouter = async (
-    history: { role: string; content: string }[],
+    history: StandardHistoryMessage[],
     currentMessage: string,
     poseData?: import('../vision/poseDetectionService').PoseData[],
     mediaAttachments?: MediaData[],
@@ -262,12 +265,12 @@ export const sendMessageToOpenRouter = async (
 
                     const shoulderWidth = Math.abs(curr[11].x - curr[12].x);
                     const ankleWidth = Math.abs(curr[27].x - curr[28].x);
-                    if (ankleWidth < shoulderWidth * 0.8) narrowStanceCount++;
+                    if (ankleWidth < shoulderWidth * STANCE_WIDTH_RATIO) narrowStanceCount++;
 
                     // const rightFootMoveY = curr[28].y - prev[28].y;
 
                     // Movement Log
-                    const stepThreshold = 0.05;
+                    const stepThreshold = STEP_MOVEMENT_THRESHOLD;
                     if (Math.abs(rightFootMoveX) > stepThreshold) {
                         changes.push(`Right foot moved X: ${rightFootMoveX.toFixed(2)}`);
                     }
@@ -280,14 +283,14 @@ export const sendMessageToOpenRouter = async (
                 // "Force Generation" on Orange lines = Right Handed
                 const dominantHand = totalRightHandMove > totalLeftHandMove ? 'Right' : 'Left';
                 const handRatio = Math.max(totalRightHandMove, totalLeftHandMove) / Math.min(totalRightHandMove, totalLeftHandMove);
-                const confidence = handRatio > 1.2 ? '(High Confidence)' : '(Low Confidence)';
+                const confidence = handRatio > MOVEMENT_CONFIDENCE_RATIO ? '(High Confidence)' : '(Low Confidence)';
 
-                // Stepping foot 
-                const strideExpansion = maxAnkleDist / (initialAnkleDist + 0.001); // Avoid div/0
-                const stepDetected = strideExpansion > 1.2;
-                const steppingFoot = maxRightFootVel > maxLeftFootVel * 1.2 ? 'Right' : (maxLeftFootVel > maxRightFootVel * 1.2 ? 'Left' : 'None/Both');
+                // Stepping foot
+                const strideExpansion = maxAnkleDist / (initialAnkleDist + DIVISION_ZERO_GUARD);
+                const stepDetected = strideExpansion > STRIDE_EXPANSION_THRESHOLD;
+                const steppingFoot = maxRightFootVel > maxLeftFootVel * FOOT_VELOCITY_RATIO ? 'Right' : (maxLeftFootVel > maxRightFootVel * FOOT_VELOCITY_RATIO ? 'Left' : 'None/Both');
 
-                const stanceIssue = narrowStanceCount > (poseData.length * 0.6) ? '⚠️ Feet too narrow (Narrower than shoulders)' : '✅ Stance width looks okay';
+                const stanceIssue = narrowStanceCount > (poseData.length * STANCE_ISSUE_RATIO) ? '⚠️ Feet too narrow (Narrower than shoulders)' : '✅ Stance width looks okay';
 
                 // Coordination Check
                 let coordinationCheck = '✅ Coordination looks okay';
@@ -315,7 +318,7 @@ export const sendMessageToOpenRouter = async (
                 }
 
                 // Knee Bend Check
-                const kneeBendCheck = minKneeAngle < 170.0
+                const kneeBendCheck = minKneeAngle < KNEE_BEND_THRESHOLD
                     ? `✅ Knees Bent Detected (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}). Credit "knees bent" criteria.`
                     : `⚠️ Knees appear straight (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}).`;
 
@@ -372,7 +375,7 @@ export const sendMessageToOpenRouter = async (
                             const minDist = Math.min(distR, distL);
 
                             // Threshold: 0.15 is roughly 15% of screen width (approx arm length radius)
-                            const isReleased = minDist > 0.15;
+                            const isReleased = minDist > BALL_RELEASE_DISTANCE;
                             const status = isReleased ? 'REL' : 'HELD';
 
                             // 2. Calculate Height Zone (Y coordinate: 0 is top, 1 is bottom)
@@ -568,9 +571,9 @@ export const sendMessageToOpenRouter = async (
 
         // AGGRESSIVE TRUNCATION FOR NEMOTRON/NOVA (Context Limit Protection)
         // If history is too long, keep only the last few turns.
-        const MAX_HISTORY_TURNS = (modelId === 'nemotron' || modelId === 'nova') ? 6 : 10;
+        const MAX_HISTORY_TURNS = (modelId === 'nemotron' || modelId === 'nova') ? SMALL_MODEL_MAX_HISTORY : LARGE_MODEL_MAX_HISTORY;
         if (sanitizedHistory.length > MAX_HISTORY_TURNS) {
-            console.log(`⚠️ Truncating history from ${sanitizedHistory.length} to ${MAX_HISTORY_TURNS} to save context.`);
+            if (isDev) console.log(`⚠️ Truncating history from ${sanitizedHistory.length} to ${MAX_HISTORY_TURNS} to save context.`);
             sanitizedHistory = sanitizedHistory.slice(-MAX_HISTORY_TURNS);
         }
 
@@ -584,9 +587,11 @@ export const sendMessageToOpenRouter = async (
 
         // [DEV TOOL] Log the full prompt data so we can copy it for Few-Shot Learning examples
         if (poseData && poseData.length > 0) {
-            console.log("👇👇 COPY FROM HERE (FEW-SHOT DATA) 👇👇");
-            console.log(enhancedMessage);
-            console.log("👆👆 COPY TO HERE 👆👆");
+            if (isDev) {
+                console.log("👇👇 COPY FROM HERE (FEW-SHOT DATA) 👇👇");
+                console.log(enhancedMessage);
+                console.log("👆👆 COPY TO HERE 👆👆");
+            }
         }
 
         // CRITICAL: For Nemotron/Nova (Smaller models), they often forget the System Instruction "Phase 1" rule
@@ -619,7 +624,7 @@ export const sendMessageToOpenRouter = async (
             // Auto-detect skill from text if not explicitly provided
             if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
 
-                console.log(`📘 [OpenRouter] Injecting Reference Image for: ${activeSkillName}`);
+                if (isDev) console.log(`📘 [OpenRouter] Injecting Reference Image for: ${activeSkillName}`);
                 finalReferenceURI = SKILL_REFERENCE_IMAGES[activeSkillName];
 
                 try {
@@ -667,7 +672,7 @@ export const sendMessageToOpenRouter = async (
             const maxUserFrames = (modelId === 'nemotron' && isVerified) ? 9 : 10;
 
             if (modelId === 'nemotron' && mediaAttachments.length > maxUserFrames) {
-                console.log(`⚠️ Nemotron Limit: Downsampling ${mediaAttachments.length} frames to ${maxUserFrames} (isVerified=${isVerified}).`);
+                if (isDev) console.log(`⚠️ Nemotron Limit: Downsampling ${mediaAttachments.length} frames to ${maxUserFrames} (isVerified=${isVerified}).`);
                 const step = (mediaAttachments.length - 1) / (maxUserFrames - 1);
                 processedAttachments = [];
                 for (let i = 0; i < maxUserFrames; i++) {
@@ -692,7 +697,7 @@ export const sendMessageToOpenRouter = async (
                     }
                 });
             });
-            console.log(`[OpenRouterService] Attached ${processedAttachments.length} images for vision processing.`);
+            if (isDev) console.log(`[OpenRouterService] Attached ${processedAttachments.length} images for vision processing.`);
         }
 
         openRouterMessages.push({
@@ -708,7 +713,7 @@ export const sendMessageToOpenRouter = async (
 
         const targetModel = modelMap[modelId || 'nova'] || 'amazon/nova-2-lite-v1:free';
 
-        console.log(`🤖 Using OpenRouter Model: ${targetModel}`);
+        if (isDev) console.log(`🤖 Using OpenRouter Model: ${targetModel}`);
 
         const endpoint = useProxy ? '/api/openrouter' : "https://openrouter.ai/api/v1/chat/completions";
 
@@ -742,7 +747,7 @@ export const sendMessageToOpenRouter = async (
         }
 
         const data = await response.json();
-        console.log("🟢 OpenRouter Raw Response:", JSON.stringify(data, null, 2)); // Debug log
+        if (isDev) console.log("🟢 OpenRouter Raw Response:", JSON.stringify(data, null, 2));
 
         if (data.error) {
             throw new Error(`API Error: ${data.error.message || JSON.stringify(data.error)}`);

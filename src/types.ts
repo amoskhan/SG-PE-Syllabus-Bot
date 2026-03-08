@@ -4,6 +4,13 @@ export enum Sender {
   BOT = 'bot'
 }
 
+// Canonical history format passed between App and all AI service wrappers.
+// Each service wrapper converts this to its own SDK format internally.
+export interface StandardHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface GroundingChunk {
   web?: {
     uri?: string;

@@ -3,10 +3,10 @@ import { sendMessageToBedrock } from './bedrockService';
 import { sendMessageToOpenRouter } from './openRouterService';
 import { Content } from '@google/genai';
 import { MediaData, ChatResponse } from './geminiService';
-import { Message, Sender } from '../../types';
+import { StandardHistoryMessage } from '../../types';
 
 export type AIServiceFunction = (
-    history: any[], // We will normalize this inside the wrapper
+    history: StandardHistoryMessage[],
     currentMessage: string,
     poseData?: import('../vision/poseDetectionService').PoseData[],
     mediaAttachments?: MediaData[],
@@ -21,7 +21,7 @@ const bedrockWrapper: AIServiceFunction = async (history, currentMessage) => {
 
 // Wrapper for Gemini to convert standard history to Google Content format
 const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified) => {
-    // Convert { role: 'user'|'assistant', content: string }[] to Google Content[]
+    // Convert StandardHistoryMessage[] to Google Content[]
     const googleHistory: Content[] = history.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }] as import('@google/genai').Part[]

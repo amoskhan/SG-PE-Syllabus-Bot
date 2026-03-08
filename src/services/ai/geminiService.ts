@@ -3,12 +3,11 @@ import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { GroundingChunk } from '../../types';
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from '../../data/fundamentalMovementSkillsData';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
+import { STEP_MOVEMENT_THRESHOLD, STANCE_WIDTH_RATIO, STANCE_ISSUE_RATIO, MOVEMENT_CONFIDENCE_RATIO, STRIDE_EXPANSION_THRESHOLD, FOOT_VELOCITY_RATIO, DIVISION_ZERO_GUARD, KNEE_BEND_THRESHOLD, COMPRESS_MAX_WIDTH, COMPRESS_QUALITY } from '../../constants';
 
 const MODEL_NAME = 'gemini-2.5-flash';
+const isDev = import.meta.env.DEV;
 
-// Initialize the client
-// Note: In a real app, never expose keys on the client. This is for the generated demo environment.
-// const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 const FULL_SYSTEM_INSTRUCTION = `
 You are the Singapore PE Syllabus Assistant, an expert on the Physical Education (PE) syllabus provided by the Ministry of Education (MOE) Singapore.
@@ -253,12 +252,12 @@ export const sendMessageToGemini = async (
 
           const shoulderWidth = Math.abs(curr[11].x - curr[12].x);
           const ankleWidth = Math.abs(curr[27].x - curr[28].x);
-          if (ankleWidth < shoulderWidth * 0.8) narrowStanceCount++;
+          if (ankleWidth < shoulderWidth * STANCE_WIDTH_RATIO) narrowStanceCount++;
 
           const rightFootMoveY = curr[28].y - prev[28].y;
 
           // Movement Log
-          const stepThreshold = 0.05;
+          const stepThreshold = STEP_MOVEMENT_THRESHOLD;
           if (Math.abs(rightFootMoveX) > stepThreshold) {
             changes.push(`Right foot moved X: ${rightFootMoveX.toFixed(2)}`);
           }
@@ -271,14 +270,14 @@ export const sendMessageToGemini = async (
         // "Force Generation" on Orange lines = Right Handed
         const dominantHand = totalRightHandMove > totalLeftHandMove ? 'Right' : 'Left';
         const handRatio = Math.max(totalRightHandMove, totalLeftHandMove) / Math.min(totalRightHandMove, totalLeftHandMove);
-        const confidence = handRatio > 1.2 ? '(High Confidence)' : '(Low Confidence)';
+        const confidence = handRatio > MOVEMENT_CONFIDENCE_RATIO ? '(High Confidence)' : '(Low Confidence)';
 
-        // Stepping foot 
-        const strideExpansion = maxAnkleDist / (initialAnkleDist + 0.001); // Avoid div/0
-        const stepDetected = strideExpansion > 1.2;
-        const steppingFoot = maxRightFootVel > maxLeftFootVel * 1.2 ? 'Right' : (maxLeftFootVel > maxRightFootVel * 1.2 ? 'Left' : 'None/Both');
+        // Stepping foot
+        const strideExpansion = maxAnkleDist / (initialAnkleDist + DIVISION_ZERO_GUARD);
+        const stepDetected = strideExpansion > STRIDE_EXPANSION_THRESHOLD;
+        const steppingFoot = maxRightFootVel > maxLeftFootVel * FOOT_VELOCITY_RATIO ? 'Right' : (maxLeftFootVel > maxRightFootVel * FOOT_VELOCITY_RATIO ? 'Left' : 'None/Both');
 
-        const stanceIssue = narrowStanceCount > (poseData.length * 0.6) ? '⚠️ Feet too narrow (Narrower than shoulders)' : '✅ Stance width looks okay';
+        const stanceIssue = narrowStanceCount > (poseData.length * STANCE_ISSUE_RATIO) ? '⚠️ Feet too narrow (Narrower than shoulders)' : '✅ Stance width looks okay';
 
         // Coordination Check
         let coordinationCheck = '✅ Coordination looks okay';
@@ -306,7 +305,7 @@ export const sendMessageToGemini = async (
         }
 
         // Knee Bend Check
-        const kneeBendCheck = minKneeAngle < 170.0
+        const kneeBendCheck = minKneeAngle < KNEE_BEND_THRESHOLD
           ? `✅ Knees Bent Detected (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}). Credit "knees bent" criteria.`
           : `⚠️ Knees appear straight (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}).`;
 
@@ -473,7 +472,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
       for (const skill of knownSkills) {
         if (lowerMsg.includes(skill.toLowerCase())) {
-          console.log(`🧠 Text Context detected skill: ${skill}`);
+          if (isDev) console.log(`🧠 Text Context detected skill: ${skill}`);
           activeSkillName = skill;
           break;
         }
@@ -481,7 +480,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
     }
 
     if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
-      console.log(`📘 Injecting Reference Image for: ${activeSkillName}`);
+      if (isDev) console.log(`📘 Injecting Reference Image for: ${activeSkillName}`);
 
       // We need to fetch the image from the public folder and convert to base64
       // Since this runs in browser, we can use fetch
@@ -528,7 +527,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
     }
 
     // Helper to compress images for Vercel Payload Limits (4.5MB)
-    const compressBase64Image = async (base64: string, maxWidth = 640, quality = 0.6): Promise<string> => {
+    const compressBase64Image = async (base64: string, maxWidth = COMPRESS_MAX_WIDTH, quality = COMPRESS_QUALITY): Promise<string> => {
       return new Promise((resolve) => {
         const img = new Image();
         // Ensure prefix
@@ -568,7 +567,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
     };
 
     if (mediaAttachments && mediaAttachments.length > 0) {
-      console.log(`📎 Attaching ${mediaAttachments.length} images/frames to prompt`);
+      if (isDev) console.log(`📎 Attaching ${mediaAttachments.length} images/frames to prompt`);
 
       // Process serially to be safe
       for (const media of mediaAttachments) {
@@ -579,7 +578,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         // OR always compress to be safe? 
         // Let's always compress video analysis frames as they can be huge (10 frames * 1MB = 10MB)
         try {
-          console.log("Compressing frame for upload...");
+          if (isDev) console.log("Compressing frame for upload...");
           base64Data = await compressBase64Image(media.data);
         } catch (e) {
           console.warn("Compression failed, sending original", e);
@@ -604,7 +603,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
     // If LOCAL (DEV) -> Use Direct Client Key (Fast, no server setup needed)
     // If PROD -> Use Serverless Proxy (Secure, hides key)
     if (import.meta.env.DEV) {
-      console.log("🔧 DEV MODE: Using direct Client-Side API Key");
+      if (isDev) console.log("🔧 DEV MODE: Using direct Client-Side API Key");
 
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error("VITE_GEMINI_API_KEY is missing in .env.local");
@@ -632,7 +631,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       tokenUsage = result.response.usageMetadata?.totalTokenCount || 0;
 
     } else {
-      console.log("🚀 PROD MODE: Using Django Backend Proxy");
+      if (isDev) console.log("🚀 PROD MODE: Using Django Backend Proxy");
 
       // VITE_BACKEND_URL can be set in .env.local for local dev pointing at Django.
       // Falls back to localhost:8000 if not set.
@@ -672,7 +671,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       const suggestedSkill = referenceTagMatch[1].trim();
       if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
         finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
-        console.log(`🖼️ AI triggered reference image for: ${suggestedSkill}`);
+        if (isDev) console.log(`🖼️ AI triggered reference image for: ${suggestedSkill}`);
       }
     }
 

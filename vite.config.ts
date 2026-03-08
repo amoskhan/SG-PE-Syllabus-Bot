@@ -4,36 +4,39 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+
+  // Decode BEDROCK_BEARER_TOKEN (server-side only, no VITE_ prefix) for the dev proxy
+  let bedrockProxyTarget = 'https://bedrock-runtime.ap-southeast-1.amazonaws.com';
+  let bedrockPresignedPath = '/';
+  const bedrockToken = env.BEDROCK_BEARER_TOKEN || '';
+  if (bedrockToken) {
+    try {
+      const base64Part = bedrockToken.replace(/^bedrock-api-key-/, '');
+      const decoded = Buffer.from(base64Part, 'base64').toString('utf-8');
+      const presignedUrl = decoded.startsWith('http') ? decoded : `https://${decoded}`;
+      const urlObj = new URL(presignedUrl);
+      bedrockProxyTarget = `${urlObj.protocol}//${urlObj.host}`;
+      bedrockPresignedPath = `${urlObj.pathname}${urlObj.search}`;
+    } catch {
+      console.warn('vite.config: Could not decode BEDROCK_BEARER_TOKEN for dev proxy');
+    }
+  }
+
   return {
     clearScreen: true,
     server: {
       port: 3000,
       host: '0.0.0.0',
       proxy: {
-        '/bedrock-api': {
-          target: 'https://bedrock-runtime.ap-southeast-1.amazonaws.com',
+        '/api/bedrock': {
+          target: bedrockProxyTarget,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/bedrock-api/, ''),
+          rewrite: () => bedrockPresignedPath,
           secure: false,
-          configure: (proxy, _options) => {
-            proxy.on('error', (err, _req, _res) => {
-              console.log('proxy error', err);
-            });
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              console.log('Sending Request to the Target:', req.method, req.url);
-            });
-            proxy.on('proxyRes', (proxyRes, req, _res) => {
-              console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
-            });
-          },
         },
       },
     },
     plugins: [react()],
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY)
-    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

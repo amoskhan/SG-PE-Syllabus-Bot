@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, THUMBNAIL_JPEG_QUALITY } from '../../constants';
 
 
 
@@ -51,8 +52,8 @@ const VideoFrameSelector: React.FC<VideoFrameSelectorProps> = ({ file, onRangeCh
         // We want thumbnails representing the standard distribution
         const interval = duration / NUM_THUMBNAILS;
 
-        canvas.width = 160; // Thumbnail width
-        canvas.height = 90; // Thumbnail height (16:9 approx)
+        canvas.width = THUMBNAIL_WIDTH;
+        canvas.height = THUMBNAIL_HEIGHT;
 
         // Safety check for video dimensions, update canvas aspect ratio if needed
         if (video.videoWidth && video.videoHeight) {
@@ -71,7 +72,7 @@ const VideoFrameSelector: React.FC<VideoFrameSelectorProps> = ({ file, onRangeCh
                         if (ctx) {
                             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                             thumbs.push({
-                                url: canvas.toDataURL('image/jpeg', 0.6),
+                                url: canvas.toDataURL('image/jpeg', THUMBNAIL_JPEG_QUALITY),
                                 time: time
                             });
                         }

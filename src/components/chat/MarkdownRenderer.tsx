@@ -76,19 +76,18 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
   return <div className="text-sm md:text-base">{formattedElements}</div>;
 };
 
-// Helper to handle **bold** and *italic*
+// Helper to handle **bold**, *italic*, and [links](url)
 const formatInline = (text: string): React.ReactNode => {
-  const parts = text.split(/(\*\*.*?\*\*)/g);
+  // Split on bold and markdown links
+  const parts = text.split(/(\*\*.*?\*\*|\[.*?\]\(.*?\))/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={i} className="font-semibold text-slate-900 dark:text-white">{part.slice(2, -2)}</strong>;
     }
-    // Simple link detection
-    if (part.match(/\[.*?\]\(.*?\)/)) {
-      // Very basic link parser, generally Gemini returns plain URLs or markdown links
-      // For safety in this regex-lite version, we return text. 
-      // Real implementation would use a robust parser.
-      return <span key={i}>{part}</span>;
+    // Markdown link: [text](url)
+    const linkMatch = part.match(/^\[(.*?)\]\((.*?)\)$/);
+    if (linkMatch) {
+      return <a key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300">{linkMatch[1]}</a>;
     }
     return part;
   });

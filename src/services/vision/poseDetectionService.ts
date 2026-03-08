@@ -1,4 +1,5 @@
 import { PoseLandmarker, FilesetResolver, type NormalizedLandmark, ObjectDetector, type Detection } from '@mediapipe/tasks-vision';
+import { OBJECT_DETECTION_SCORE_THRESHOLD, BALL_CONFIDENCE_THRESHOLD, BALL_PROXIMITY_WIDTH_RATIO, BALL_PROXIMITY_MIN_PX, STATIC_OBJECT_THRESHOLD_PX, POSE_JPEG_QUALITY, SKELETON_LINE_WIDTH, SKELETON_INNER_LINE_WIDTH, LANDMARK_BORDER_WIDTH } from '../../constants';
 
 export interface PoseData {
     landmarks: NormalizedLandmark[];
@@ -64,7 +65,11 @@ class PoseDetectionService {
             const vision = await this.createVision();
             this.imageLandmarker = await PoseLandmarker.createFromOptions(vision, this.createOptions('IMAGE'));
             console.log('✅ MediaPipe Pose Landmarker (IMAGE Mode) initialized');
-        })();
+        })().catch(error => {
+            console.error('Failed to initialize image pose landmarker:', error);
+            this.initPromiseImage = null; // Reset so the next call can retry
+            throw error;
+        });
 
         return this.initPromiseImage;
     }
@@ -77,7 +82,11 @@ class PoseDetectionService {
             const vision = await this.createVision();
             this.videoLandmarker = await PoseLandmarker.createFromOptions(vision, this.createOptions('VIDEO'));
             console.log('✅ MediaPipe Pose Landmarker (VIDEO Mode) initialized');
-        })();
+        })().catch(error => {
+            console.error('Failed to initialize video pose landmarker:', error);
+            this.initPromiseVideo = null; // Reset so the next call can retry
+            throw error;
+        });
 
         return this.initPromiseVideo;
     }
@@ -93,12 +102,16 @@ class PoseDetectionService {
                     modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite2/float16/1/efficientdet_lite2.tflite',
                     delegate: 'CPU'
                 },
-                scoreThreshold: 0.15, // Lower threshold for better recall
+                scoreThreshold: OBJECT_DETECTION_SCORE_THRESHOLD,
                 runningMode: 'IMAGE',
                 // categoryAllowlist: ['sports ball'] // Removed to allow manual filtering of misclassifications
             });
             console.log('✅ MediaPipe Object Detector initialized');
-        })();
+        })().catch(error => {
+            console.error('Failed to initialize object detector:', error);
+            this.initPromiseObject = null; // Reset so the next call can retry
+            throw error;
+        });
 
         return this.initPromiseObject;
     }
@@ -182,7 +195,7 @@ class PoseDetectionService {
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.strokeStyle = 'white';
-                ctx.lineWidth = 8;
+                ctx.lineWidth = SKELETON_LINE_WIDTH;
                 ctx.stroke();
 
                 // Draw colored inner line based on side (Left=Cyan, Right=Orange)
@@ -199,7 +212,7 @@ class PoseDetectionService {
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.strokeStyle = color;
-                ctx.lineWidth = 4;
+                ctx.lineWidth = SKELETON_INNER_LINE_WIDTH;
                 ctx.stroke();
             }
         }
@@ -222,7 +235,7 @@ class PoseDetectionService {
             ctx.fill();
 
             // White border
-            ctx.lineWidth = 2;
+            ctx.lineWidth = LANDMARK_BORDER_WIDTH;
             ctx.strokeStyle = 'white';
             ctx.stroke();
         }
@@ -332,7 +345,7 @@ class PoseDetectionService {
         }
 
         // Return base64
-        return canvas.toDataURL('image/jpeg', 0.8);
+        return canvas.toDataURL('image/jpeg', POSE_JPEG_QUALITY);
     }
 
     async detectBallFrame(videoElement: HTMLVideoElement, pose?: PoseData): Promise<BallData | null> {
@@ -343,7 +356,7 @@ class PoseDetectionService {
             // Video dimensions are inherent in the element
             return this.processBallDetectionResult(result, { width: videoElement.videoWidth, height: videoElement.videoHeight }, pose);
         } catch (error) {
-            // silent fail
+            console.warn('Ball detection warning (Frame):', error);
         }
         return null;
     }
@@ -453,10 +466,10 @@ class PoseDetectionService {
                 const minDist = Math.min(getDist(rw), getDist(lw), getDist(rk), getDist(lk), getDist(rf), getDist(lf));
 
                 // Threshold: Relaxed slightly to 30% of width to allow for tosses
-                const THRESHOLD = Math.max(imageSize.width * 0.3, 250);
+                const THRESHOLD = Math.max(imageSize.width * BALL_PROXIMITY_WIDTH_RATIO, BALL_PROXIMITY_MIN_PX);
 
                 if (minDist > THRESHOLD) {
-                    if (bestMatch.categories[0].score > 0.85 && bestMatch.categories[0].categoryName === 'sports ball') {
+                    if (bestMatch.categories[0].score > BALL_CONFIDENCE_THRESHOLD && bestMatch.categories[0].categoryName === 'sports ball') {
                         status = "In Flight (High Confidence)";
                     } else {
                         isValid = false;
@@ -506,7 +519,6 @@ class PoseDetectionService {
 
         ballPositions.forEach(pos => {
             minX = Math.min(minX, pos.x);
-            maxX = Math.max(minX, pos.x); // Wait, maxX calculation was bugged in thought process, fixing:
             maxX = Math.max(maxX, pos.x);
             minY = Math.min(minY, pos.y);
             maxY = Math.max(maxY, pos.y);
@@ -520,7 +532,7 @@ class PoseDetectionService {
         // THRESHOLD: If the object moved less than 30 pixels total across the entire video, it's a marker.
         // (Assuming standard 640x480 analysis or similar). 
         // 30px is conservative but safe for floor markers.
-        const STATIC_THRESHOLD = 30;
+        const STATIC_THRESHOLD = STATIC_OBJECT_THRESHOLD_PX;
 
         if (totalMovement < STATIC_THRESHOLD) {
             console.log(`🧹 Filtered Static Object: Moved only ${totalMovement.toFixed(1)}px (Threshold: ${STATIC_THRESHOLD}px)`);

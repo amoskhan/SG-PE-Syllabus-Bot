@@ -8,6 +8,10 @@ import { Message, Sender, PE_TOPICS, MediaAttachment } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
 import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
+import { NEMOTRON_FRAME_COUNT, NOVA_FRAME_COUNT, FRONTIER_FRAME_COUNT, MAX_FRAME_DIMENSION, FRAME_JPEG_QUALITY } from './constants';
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -73,55 +77,70 @@ const App: React.FC = () => {
 
     for (const file of files) {
       if (file.type.startsWith('image/')) {
-        // ... (image processing remains same)
-        const base64 = await fileToBase64(file);
-        attachments.push({
-          id: Date.now().toString() + Math.random(),
-          type: 'image',
-          mimeType: file.type,
-          data: base64,
-          fileName: file.name
-        });
+        try {
+          const base64 = await fileToBase64(file);
+          attachments.push({
+            id: Date.now().toString() + Math.random(),
+            type: 'image',
+            mimeType: file.type,
+            data: base64,
+            fileName: file.name
+          });
 
-        const img = await loadImageFromUrl(base64);
-        const pose = await poseDetectionService.detectPoseFromImage(img);
-
-        // For single images, static usage isn't applicable, but we keep consistency
-        const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
-
-        if (pose) {
-          processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0 });
-        }
-
-      } else if (file.type.startsWith('video/')) {
-        // Process video - extract frames respecting trim range
-        // Dynamic Frame Count: Nemotron (Small model) gets 10 frames to match API limit & Visual Vetting.
-        // Gemini/Bedrock (Frontier models) get 24 frames for higher temporal resolution.
-        const frameCount = selectedModel === 'nemotron' ? 10 : (selectedModel === 'nova' ? 16 : 24);
-        const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
-        const videoUrl = URL.createObjectURL(file);
-
-        attachments.push({
-          id: Date.now().toString() + Math.random(),
-          type: 'video',
-          mimeType: file.type,
-          data: videoUrl,
-          fileName: file.name,
-          thumbnailData: frames[0]
-        });
-
-        for (let i = 0; i < frames.length; i++) {
-          const img = await loadImageFromUrl(frames[i]);
-
-          // PHASE 1: Detect Pose FIRST
+          const img = await loadImageFromUrl(base64);
           const pose = await poseDetectionService.detectPoseFromImage(img);
 
-          // PHASE 2: Detect Ball
+          // For single images, static usage isn't applicable, but we keep consistency
           const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
 
           if (pose) {
-            processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
+            processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0 });
           }
+        } catch (imageError) {
+          console.warn(`⚠️ Skipping image "${file.name}": ${getErrorMessage(imageError)}`);
+        }
+
+      } else if (file.type.startsWith('video/')) {
+        let videoUrl: string | null = null;
+        try {
+          // Process video - extract frames respecting trim range
+          // Dynamic Frame Count: Nemotron (Small model) gets 10 frames to match API limit & Visual Vetting.
+          // Gemini/Bedrock (Frontier models) get 24 frames for higher temporal resolution.
+          const frameCount = selectedModel === 'nemotron' ? NEMOTRON_FRAME_COUNT : (selectedModel === 'nova' ? NOVA_FRAME_COUNT : FRONTIER_FRAME_COUNT);
+          const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
+          videoUrl = URL.createObjectURL(file);
+
+          attachments.push({
+            id: Date.now().toString() + Math.random(),
+            type: 'video',
+            mimeType: file.type,
+            data: videoUrl,
+            fileName: file.name,
+            thumbnailData: frames[0]
+          });
+
+          for (let i = 0; i < frames.length; i++) {
+            try {
+              const img = await loadImageFromUrl(frames[i]);
+
+              // PHASE 1: Detect Pose FIRST
+              const pose = await poseDetectionService.detectPoseFromImage(img);
+
+              // PHASE 2: Detect Ball
+              const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
+
+              if (pose) {
+                processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
+              }
+            } catch (frameError) {
+              console.warn(`⚠️ Skipping frame ${i + 1}: ${getErrorMessage(frameError)}`);
+            }
+          }
+        } catch (videoError) {
+          if (videoUrl) {
+            URL.revokeObjectURL(videoUrl);
+          }
+          console.warn(`⚠️ Skipping video "${file.name}": ${getErrorMessage(videoError)}`);
         }
       }
     }
@@ -174,19 +193,18 @@ const App: React.FC = () => {
       video.onloadedmetadata = () => {
         // Downscale frames to reduce Token Usage (Nemotron 128k limit / Nova Limits)
         // Original 1080p frames are HUGE tokens. 640px is sufficient for pose/form analysis.
-        const MAX_DIMENSION = 640;
         let width = video.videoWidth;
         let height = video.videoHeight;
 
         if (width > height) {
-          if (width > MAX_DIMENSION) {
-            height = Math.round((height * MAX_DIMENSION) / width);
-            width = MAX_DIMENSION;
+          if (width > MAX_FRAME_DIMENSION) {
+            height = Math.round((height * MAX_FRAME_DIMENSION) / width);
+            width = MAX_FRAME_DIMENSION;
           }
         } else {
-          if (height > MAX_DIMENSION) {
-            width = Math.round((width * MAX_DIMENSION) / height);
-            height = MAX_DIMENSION;
+          if (height > MAX_FRAME_DIMENSION) {
+            width = Math.round((width * MAX_FRAME_DIMENSION) / height);
+            height = MAX_FRAME_DIMENSION;
           }
         }
 
@@ -219,46 +237,50 @@ const App: React.FC = () => {
         };
 
         video.onseeked = () => {
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            frames.push(canvas.toDataURL('image/jpeg', 0.8));
+          try {
+            if (ctx) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              frames.push(canvas.toDataURL('image/jpeg', FRAME_JPEG_QUALITY));
+            }
+            currentFrame++;
+            captureFrame();
+          } catch (err) {
+            URL.revokeObjectURL(video.src);
+            reject(new Error(`Failed to capture frame ${currentFrame + 1}: ${getErrorMessage(err)}`));
           }
-          currentFrame++;
-          captureFrame();
         };
 
-        video.onerror = () => reject(new Error('Failed to load video'));
+        video.onerror = () => {
+          URL.revokeObjectURL(video.src);
+          reject(new Error('Failed to load video'));
+        };
         captureFrame();
       };
     });
   };
 
-  const handleSendMessage = async (
+  // Detect skill verification or correction from user text
+  const detectSkillContext = (
     text: string,
-    files?: File[],
-    metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean }
-  ) => {
-    // Smart Verification Check: If user types "yes" to a confirmation, treat it as verified.
+    currentMessages: Message[],
+    metadata?: { skillName?: string; isVerified?: boolean }
+  ): { isVerifying?: boolean; skillContext?: string } => {
     let isVerifying = metadata?.isVerified;
     let skillContext = metadata?.skillName;
 
     if (!isVerifying && text) {
       const lowerText = text.toLowerCase().trim();
 
-      // 1. Check for explicit verification words
       const confirmationWords = ['yes', 'correct', 'yup', 'yeah', 'sure', 'confirm'];
       const isConfirmation = confirmationWords.some(w => lowerText === w || lowerText.startsWith(w + ' '));
 
-      // 2. Check for explicit Skill Name Correction (e.g. "it's underhand roll", "underhand roll")
       const knownSkills = [
         'underhand throw', 'underhand roll', 'overhand throw', 'kick',
         'dribble with feet', 'dribble with hands', 'chest pass', 'bounce pass', 'bounce', 'above the waist catch',
       ];
-      // Find if user text contains a skill name. We sort by length desc to match "Underhand Roll" before "Roll"
-      const matchedSkill = knownSkills.sort((a, b) => b.length - a.length).find(skill => lowerText.includes(skill));
+      const matchedSkill = knownSkills.sort((a, b) => b.length - a.length).find(skill => new RegExp(`\\b${skill}\\b`).test(lowerText));
 
-      // Check if the LAST message was a Bot Phase 1 detection
-      const lastMsg = messages[messages.length - 1];
+      const lastMsg = currentMessages[currentMessages.length - 1];
       if (lastMsg && lastMsg.sender === Sender.BOT && lastMsg.text.includes("Phase 1")) {
         if (isConfirmation) {
           console.log("✅ Auto-detecting verification from text: 'yes'");
@@ -267,11 +289,86 @@ const App: React.FC = () => {
           if (skillMatch && !skillContext) skillContext = skillMatch[1];
         } else if (matchedSkill) {
           console.log(`✅ Auto-detecting Skill Correction: '${matchedSkill}'`);
-          isVerifying = true; // Treat correction as verification of the NEW skill
-          skillContext = matchedSkill; // OVERRIDE the context with user input
+          isVerifying = true;
+          skillContext = matchedSkill;
         }
       }
     }
+
+    return { isVerifying, skillContext };
+  };
+
+  // Find pose data and analysis frames from message history
+  const findContextFromHistory = (
+    currentMessages: Message[],
+    poseData?: PoseData[],
+    analysisFrames?: MediaData[]
+  ): { contextPoseData?: PoseData[]; contextAnalysisFrames?: MediaData[] } => {
+    let contextPoseData = poseData;
+    let contextAnalysisFrames = analysisFrames;
+
+    if (!contextPoseData || !contextAnalysisFrames) {
+      for (let i = currentMessages.length - 1; i >= 0; i--) {
+        if (!contextPoseData && currentMessages[i].poseData && currentMessages[i].poseData!.length > 0) {
+          contextPoseData = currentMessages[i].poseData;
+          console.log('📌 Using pose data from previous message for context');
+        }
+
+        if (!contextAnalysisFrames) {
+          if (currentMessages[i].analysisFrames && currentMessages[i].analysisFrames!.length > 0) {
+            console.log(`📌 Reusing ${currentMessages[i].analysisFrames!.length} visual frames from history.`);
+            contextAnalysisFrames = currentMessages[i].analysisFrames!.map(f => ({
+              mimeType: f.match(/^data:([^;]+);/)?.[1] || 'image/jpeg',
+              data: f
+            }));
+          } else if (currentMessages[i].media && currentMessages[i].media!.length > 0) {
+            const images = currentMessages[i].media!.filter(m => m.type === 'image');
+            if (images.length > 0) {
+              console.log(`📌 Reusing ${images.length} raw images from history.`);
+              contextAnalysisFrames = images.map(img => ({
+                mimeType: img.mimeType,
+                data: img.data
+              }));
+            }
+          }
+        }
+
+        if (contextPoseData && contextAnalysisFrames) break;
+      }
+    }
+
+    return { contextPoseData, contextAnalysisFrames };
+  };
+
+  // Extract predicted skill from AI response and tag the video message
+  const extractAndTagSkill = (responseText: string): string | undefined => {
+    const skillMatch = responseText.match(/(?:I believe this is a|this looks like a|I have detected a|Performance Analysis for) (?:\*\*|)?([^*:\n]+)(?:\*\*|:)?/i);
+    return skillMatch ? skillMatch[1].trim() : undefined;
+  };
+
+  // Build a user-friendly error message for AI service errors
+  const buildAIErrorMessage = (error: unknown): string => {
+    let errorText = `Error: ${getErrorMessage(error)}`;
+    const errorMsgLower = errorText.toLowerCase();
+    if (
+      errorMsgLower.includes('429') ||
+      errorMsgLower.includes('quota') ||
+      errorMsgLower.includes('limit') ||
+      errorMsgLower.includes('resource exhausted')
+    ) {
+      const modelName = selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1);
+      errorText = `⚠️ ${modelName} API usage limit reached. It attempted to generate a response but was stopped. Please wait a minute before trying again.`;
+    }
+    return errorText;
+  };
+
+  const handleSendMessage = async (
+    text: string,
+    files?: File[],
+    metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean }
+  ) => {
+    const { isVerifying, skillContext } = detectSkillContext(text, messages, metadata);
+
     // Process media files if present
     let mediaAttachments: MediaAttachment[] | undefined;
     let poseData: PoseData[] | undefined;
@@ -279,11 +376,29 @@ const App: React.FC = () => {
     let debugFrames: string[] | undefined;
 
     if (files && files.length > 0) {
-      const processed = await processMediaFiles(files, metadata);
-      mediaAttachments = processed.attachments;
-      poseData = processed.poseData;
-      analysisFrames = processed.analysisFrames;
-      debugFrames = processed.debugFrames;
+      try {
+        const processed = await processMediaFiles(files, metadata);
+        mediaAttachments = processed.attachments;
+        poseData = processed.poseData;
+        analysisFrames = processed.analysisFrames;
+        debugFrames = processed.debugFrames;
+      } catch (mediaError) {
+        const userMsg: Message = {
+          id: crypto.randomUUID(),
+          text: text || 'Analyze this movement',
+          sender: Sender.USER,
+          timestamp: new Date(),
+        };
+        const errorMsg: Message = {
+          id: crypto.randomUUID(),
+          text: `⚠️ Could not process the uploaded file: ${getErrorMessage(mediaError)}. Please check the file and try again.`,
+          sender: Sender.BOT,
+          timestamp: new Date(),
+          isError: true,
+        };
+        setMessages(prev => [...prev, userMsg, errorMsg]);
+        return;
+      }
     }
 
     const newMessage: Message = {
@@ -292,75 +407,29 @@ const App: React.FC = () => {
       sender: Sender.USER,
       timestamp: new Date(),
       media: mediaAttachments,
-      poseData: poseData, // Store pose data in message
-      analysisFrames: debugFrames // Visual proof of analysis
+      poseData: poseData,
+      analysisFrames: debugFrames
     };
 
     setMessages((prev) => [...prev, newMessage]);
     setIsLoading(true);
 
     try {
-      let response;
+      const { contextPoseData, contextAnalysisFrames } = findContextFromHistory(messages, poseData, analysisFrames);
 
-      // Context finding for pose data
-      let contextPoseData = poseData;
-      // Context finding for visual frames (CRITICAL for "Analyze Now" button)
-      let contextAnalysisFrames = analysisFrames;
-
-      if (!contextPoseData || !contextAnalysisFrames) {
-        for (let i = messages.length - 1; i >= 0; i--) {
-          // 1. Find Pose Data
-          if (!contextPoseData && messages[i].poseData && messages[i].poseData!.length > 0) {
-            contextPoseData = messages[i].poseData;
-            console.log('📌 Using pose data from previous message for context');
-          }
-
-          // 2. Find Visual Frames (Reconstruct from history)
-          if (!contextAnalysisFrames) {
-            // Try used analysis frames (Debug frames)
-            if (messages[i].analysisFrames && messages[i].analysisFrames!.length > 0) {
-              console.log(`📌 Reusing ${messages[i].analysisFrames!.length} visual frames from history.`);
-              contextAnalysisFrames = messages[i].analysisFrames!.map(f => ({
-                mimeType: f.match(/^data:([^;]+);/)?.[1] || 'image/jpeg',
-                data: f
-              }));
-            }
-            // Fallback: Try raw media attachments (e.g. single upload)
-            else if (messages[i].media && messages[i].media!.length > 0) {
-              const images = messages[i].media!.filter(m => m.type === 'image');
-              if (images.length > 0) {
-                console.log(`📌 Reusing ${images.length} raw images from history.`);
-                contextAnalysisFrames = images.map(img => ({
-                  mimeType: img.mimeType,
-                  data: img.data
-                }));
-              }
-            }
-          }
-
-          if (contextPoseData && contextAnalysisFrames) break;
-        }
-      }
-
-      // Standardize history for all models (OpenAI style)
-      // The registry wrapper handles conversion to specific formats (e.g. Google Content)
       const standardHistory = messages.map(m => ({
         role: m.sender === Sender.USER ? 'user' : 'assistant',
         content: m.text
       }));
 
-      // Get appropriate service function from registry
       const aiService = getAIService(selectedModel);
-
-      // Call the service with standard arguments
-      // Note: Bedrock service wrapper ignores extra args
-      response = await aiService(
+      const response = await aiService(
         standardHistory,
         newMessage.text,
         contextPoseData,
-        contextAnalysisFrames, // Use the context-aware frames
-        skillContext, // Use detected or metadata skill
-        isVerifying // Use detected or metadata verification status
+        contextAnalysisFrames,
+        skillContext,
+        isVerifying
       );
 
       const botMessage: Message = {
@@ -373,14 +442,7 @@ const App: React.FC = () => {
         tokenUsage: response.tokenUsage
       };
 
-      // Check for predicted skill in response (Supports both formats)
-      // 1. "I believe this is a **Skill**" (Standard)
-      // 2. "this looks like a **Skill**" (Verification Mode)
-      // 3. "I have detected a **Skill**" (Strict Phase 1 Mode)
-      // 4. "Performance Analysis for **Skill**" (Phase 2 Reporting Mode)
-      // Regex simplified: Look for one of the prefixes, then capture the text until the next * or : or newline
-      const skillMatch = response.text.match(/(?:I believe this is a|this looks like a|I have detected a|Performance Analysis for) (?:\*\*|)?([^*:\n]+)(?:\*\*|:)?/i);
-      const detectedSkill = skillMatch ? skillMatch[1].trim() : undefined;
+      const detectedSkill = extractAndTagSkill(response.text);
 
       setMessages((prev) => {
         const updatedMessages = [...prev];
@@ -400,22 +462,9 @@ const App: React.FC = () => {
 
     } catch (error) {
       console.error("Error generating response:", error);
-      let errorText = `Error: ${error instanceof Error ? error.message : String(error)}`;
-
-      const errorMsgLower = errorText.toLowerCase();
-      if (
-        errorMsgLower.includes('429') ||
-        errorMsgLower.includes('quota') ||
-        errorMsgLower.includes('limit') ||
-        errorMsgLower.includes('resource exhausted')
-      ) {
-        const modelName = selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1);
-        errorText = `⚠️ ${modelName} API usage limit reached. It attempted to generate a response but was stopped. Please wait a minute before trying again.`;
-      }
-
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: errorText,
+        text: buildAIErrorMessage(error),
         sender: Sender.BOT,
         timestamp: new Date(),
         isError: true
