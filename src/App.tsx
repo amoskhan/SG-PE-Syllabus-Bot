@@ -10,6 +10,8 @@ import { getAIService } from './services/ai/aiServiceRegistry';
 
 import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
 import { parseDocument } from './services/documentService';
+import PdfUploaderModal from './components/admin/PdfUploaderModal';
+import { ALL_FMS_SKILLS } from './data/fundamentalMovementSkillsData';
 
 const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -67,6 +69,8 @@ const App: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'nemotron'>('gemini');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [isSkillSelectorOpen, setIsSkillSelectorOpen] = useState(false);
 
   // Sync Current Session ID if sessions change (e.g. deletion)
   useEffect(() => {
@@ -180,11 +184,9 @@ const App: React.FC = () => {
     metadata?: { startTime?: number; endTime?: number }
   ): Promise<{ attachments: MediaAttachment[], poseData: PoseData[], analysisFrames: MediaData[], debugFrames: string[] }> => {
     const attachments: MediaAttachment[] = [];
-    let poseData: PoseData[] = [];
-    const analysisFrames: MediaData[] = [];
-    const debugFrames: string[] = [];
     const processedImages: { img: HTMLImageElement, pose: any, ball: any, timestamp: number }[] = [];
 
+    // Phase 1: Fast Path (Attachments only for UI)
     for (const file of files) {
       if (file.type.startsWith('image/')) {
         const base64 = await fileToBase64(file);
@@ -195,61 +197,104 @@ const App: React.FC = () => {
           data: base64,
           fileName: file.name
         });
-        const img = await loadImageFromUrl(base64);
-        const pose = await poseDetectionService.detectPoseFromImage(img);
-        const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
-        if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0 });
-
       } else if (file.type.startsWith('video/')) {
-        const frameCount = 24;
-        const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
         const videoUrl = URL.createObjectURL(file);
+        // Fast thumbnail (first frame only)
+        const thumbnails = await extractVideoFrames(file, 1);
         attachments.push({
           id: Date.now().toString() + Math.random(),
           type: 'video',
           mimeType: file.type,
           data: videoUrl,
           fileName: file.name,
-          thumbnailData: frames[0]
+          thumbnailData: thumbnails[0]
         });
+      } else if (file.name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const text = await parseDocument(file);
+        attachments.push({
+          id: Date.now().toString() + Math.random(),
+          type: 'document',
+          mimeType: file.type,
+          data: '',
+          fileName: file.name,
+          textContent: text
+        });
+      }
+    }
 
-        for (let i = 0; i < frames.length; i++) {
-          const img = await loadImageFromUrl(frames[i]);
+    return { attachments, poseData: [], analysisFrames: [], debugFrames: [] };
+  };
+
+  const runBackgroundAnalysis = async (
+    messageId: string,
+    files: File[],
+    metadata?: { startTime?: number; endTime?: number }
+  ): Promise<{ poseData: PoseData[], analysisFrames: MediaData[] }> => {
+    setIsProcessing(true);
+    try {
+      const processedImages: { img: HTMLImageElement, pose: any, ball: any, timestamp: number }[] = [];
+      const debugFrames: string[] = [];
+      const analysisFrames: MediaData[] = [];
+
+      for (const file of files) {
+        if (file.type.startsWith('image/')) {
+          const base64 = await fileToBase64(file);
+          const img = await loadImageFromUrl(base64);
           const pose = await poseDetectionService.detectPoseFromImage(img);
           const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
-          if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
-        }
-      } else if (file.name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        try {
-          const text = await parseDocument(file);
-          attachments.push({
-            id: Date.now().toString() + Math.random(),
-            type: 'document',
-            mimeType: file.type,
-            data: '', // No visual data needed
-            fileName: file.name,
-            textContent: text
-          });
-        } catch (e) {
-          console.error("Failed to parse document", e);
-          alert(`Failed to read document ${file.name}`);
+          if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0 });
+
+        } else if (file.type.startsWith('video/')) {
+          const frameCount = 12;
+          const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
+            for (let i = 0; i < frames.length; i++) {
+                const img = await loadImageFromUrl(frames[i]);
+                try {
+                    const pose = await poseDetectionService.detectPoseFromImage(img);
+                    const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
+                    if (pose) {
+                        processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
+                    } else {
+                        console.warn(`⚠️ No pose detected in frame ${i}`);
+                    }
+                } catch (frameError) {
+                    console.error(`❌ Error processing frame ${i}:`, frameError);
+                }
+            }
         }
       }
-    }
 
-    let rawPoseData = processedImages.map(p => ({ ...p.pose, timestamp: p.timestamp, ball: p.ball }));
-    poseData = rawPoseData;
-
-    for (let i = 0; i < processedImages.length; i++) {
-      const data = processedImages[i];
-      const filteredPose = poseData[i];
-      const debugFrame = await poseDetectionService.drawPoseToImage(data.img, filteredPose, filteredPose.ball);
-      if (debugFrame) {
-        debugFrames.push(debugFrame);
-        analysisFrames.push({ mimeType: 'image/jpeg', data: debugFrame });
+      const poseData = processedImages.map(p => ({ ...p.pose, timestamp: p.timestamp, ball: p.ball }));
+      
+      for (let i = 0; i < processedImages.length; i++) {
+        const data = processedImages[i];
+        const filteredPose = poseData[i];
+        const debugFrame = await poseDetectionService.drawPoseToImage(data.img, filteredPose, filteredPose.ball);
+        if (debugFrame) {
+          debugFrames.push(debugFrame);
+          analysisFrames.push({ mimeType: 'image/jpeg', data: debugFrame });
+        }
       }
+
+      // Final Update to the Session Message (Visuals)
+      setSessions(prev => prev.map(s => ({
+        ...s,
+        messages: s.messages.map(m => {
+          if (m.id === messageId) {
+            return { ...m, poseData: poseData, analysisFrames: debugFrames };
+          }
+          return m;
+        })
+      })));
+
+      return { poseData, analysisFrames };
+
+    } catch (e) {
+      console.error("Background analysis failed", e);
+      return { poseData: [], analysisFrames: [] };
+    } finally {
+      setIsProcessing(false);
     }
-    return { attachments, poseData, analysisFrames, debugFrames };
   };
 
   const extractVideoFrames = (
@@ -348,47 +393,32 @@ const App: React.FC = () => {
     }
 
     let mediaAttachments: MediaAttachment[] | undefined;
-    let poseData: PoseData[] | undefined;
-    let analysisFrames: MediaData[] | undefined;
-    let debugFrames: string[] | undefined;
 
     if (files && files.length > 0) {
-      setIsProcessing(true);
-      try {
-        const processed = await processMediaFiles(files, metadata);
-        mediaAttachments = processed.attachments;
-        poseData = processed.poseData;
-        analysisFrames = processed.analysisFrames;
-        debugFrames = processed.debugFrames;
-      } finally {
-        setIsProcessing(false);
-      }
+      const processed = await processMediaFiles(files, metadata);
+      mediaAttachments = processed.attachments;
     }
 
+    const newMessageId = Date.now().toString();
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: newMessageId,
       text: text || (mediaAttachments ? 'Analyze this movement' : ''),
       sender: Sender.USER,
       timestamp: new Date(),
-      media: mediaAttachments,
-      poseData: poseData,
-      analysisFrames: debugFrames
+      media: mediaAttachments
     };
 
-    // UPDATE STATE: Optimistic Update
+    // UPDATE STATE: Optimistic Update (Immediate)
     const optimisticMessages = [...messages, newMessage];
-
+    
     // Auto-Title Logic on First Message
     let newTitle: string | undefined = undefined;
     if (messages.length <= 1) { // 1 because "Welcome" message is already there
       if (text && text.trim().length > 0) {
-        // Use user's text (truncated)
         newTitle = text.substring(0, 30) + (text.length > 30 ? '...' : '');
       } else if (skillContext) {
-        // Use declared skill
         newTitle = `Analysis: ${skillContext}`;
       } else if (mediaAttachments && mediaAttachments.length > 0) {
-        // Generic Media
         newTitle = 'Media Analysis';
       } else {
         newTitle = 'New Conversation';
@@ -396,13 +426,21 @@ const App: React.FC = () => {
     }
 
     handleUpdateCurrentSession(optimisticMessages, newTitle);
+
     setIsLoading(true);
 
     try {
       let response;
-      let contextPoseData = poseData;
-      let contextAnalysisFrames = analysisFrames;
+      let contextPoseData: PoseData[] | undefined;
+      let contextAnalysisFrames: MediaData[] | undefined;
 
+      // BACKGROUND: Run slow pose detection (Await here so AI waits, but UI is already updated)
+      if (files && files.length > 0) {
+        const result = await runBackgroundAnalysis(newMessageId, files, metadata);
+        contextPoseData = result.poseData;
+        contextAnalysisFrames = result.analysisFrames;
+      }
+      
       if (!contextPoseData || !contextAnalysisFrames) {
         for (let i = messages.length - 1; i >= 0; i--) {
           if (!contextPoseData && messages[i].poseData && messages[i].poseData!.length > 0) {
@@ -513,9 +551,22 @@ const App: React.FC = () => {
 
     } catch (error) {
       console.error("Error generating response:", error);
-      let errorText = `Error: ${error instanceof Error ? error.message : String(error)}`;
-      if (errorText.toLowerCase().includes('quota') || errorText.toLowerCase().includes('429')) {
-        errorText = "⚠️ API Limit Reached. Please wait.";
+      const rawError = error instanceof Error ? error.message : String(error);
+      let errorText: string;
+
+      const lower = rawError.toLowerCase();
+      if (lower.includes('429') || lower.includes('rate') && lower.includes('limit')) {
+        errorText = "⚠️ You're sending messages too fast. Please wait a moment and try again.";
+      } else if (lower.includes('quota') || lower.includes('resource_exhausted')) {
+        errorText = "⚠️ The AI service has reached its daily usage limit. Please try again later or switch to a different model.";
+      } else if (lower.includes('safety') || lower.includes('blocked') || lower.includes('recitation')) {
+        errorText = "⚠️ The AI couldn't respond to that — it may have been flagged by safety filters. Try rephrasing your question.";
+      } else if (lower.includes('empty') || lower.includes('no response') || lower.includes('no candidates')) {
+        errorText = "⚠️ The AI returned an empty response. This can happen with very complex questions — please try rephrasing or breaking it into smaller parts.";
+      } else if (lower.includes('api key') || lower.includes('unauthorized') || lower.includes('401')) {
+        errorText = "⚠️ API authentication failed. Please check the server configuration.";
+      } else {
+        errorText = `⚠️ Something went wrong: ${rawError}`;
       }
 
       const errorMessage: Message = {
@@ -545,8 +596,12 @@ const App: React.FC = () => {
     handleSendMessage("Analyze Now", undefined, { skillName: skillName, isVerified: true });
   };
 
+  const handleSelectSkill = (skillName: string) => {
+    handleSendMessage(`Analyze ${skillName}`, undefined, { skillName: skillName, isVerified: true });
+  };
+
   return (
-    <div className="flex h-screen bg-white dark:bg-slate-900 transition-colors overflow-x-hidden">
+    <div className="flex h-screen bg-white dark:bg-slate-950 transition-colors overflow-x-hidden">
 
       <SessionSidebar
         sessions={sessions}
@@ -558,14 +613,14 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col h-full relative bg-white dark:bg-slate-900">
+      <div className="flex-1 flex flex-col h-full relative bg-white dark:bg-slate-950">
         {/* Header */}
-        <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-4 shrink-0 flex items-center justify-between z-30 w-full relative">
+        <div className="bg-white/80 dark:bg-slate-950/70 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800/70 p-4 shrink-0 flex items-center justify-between z-30 w-full relative">
           <div className="flex items-center gap-2">
             {/* Mobile Toggle */}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="md:hidden p-3 -ml-1 mr-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              className="md:hidden p-3 -ml-1 mr-1 text-slate-700 dark:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 rounded-xl transition-colors"
               aria-label="Toggle History"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -573,7 +628,7 @@ const App: React.FC = () => {
               </svg>
             </button>
 
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 dark:shadow-none">
+            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200/60 dark:shadow-none ring-1 ring-indigo-500/20">
               <span className="text-2xl">🤸‍♂️</span>
             </div>
             <div>
@@ -588,7 +643,7 @@ const App: React.FC = () => {
             <div className="relative">
               <button
                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                className="px-3 py-2 rounded-xl border border-slate-200/70 dark:border-slate-700/70 bg-white/70 dark:bg-slate-900/40 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-white dark:hover:bg-slate-900 transition-colors"
               >
                 <img
                   src={`/assets/model-icons/${selectedModel === 'nemotron' ? 'nvidia' : selectedModel}.png`}
@@ -611,7 +666,7 @@ const App: React.FC = () => {
                     className="fixed inset-0 z-10"
                     onClick={() => setIsModelDropdownOpen(false)}
                   />
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-20 flex flex-col p-1 animate-scale-in">
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200/70 dark:border-slate-700/70 overflow-hidden z-20 flex flex-col p-1 animate-scale-in">
                     {[
                       { id: 'nemotron', name: 'Nemotron 12B', icon: 'nvidia.png' },
                       { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
@@ -643,8 +698,19 @@ const App: React.FC = () => {
             </div>
 
             <button
+              onClick={() => setIsPdfModalOpen(true)}
+              className="px-3 py-2 rounded-xl border border-indigo-200/60 dark:border-indigo-900/50 bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium flex items-center gap-2 hover:bg-indigo-100/80 dark:hover:bg-indigo-800/40 transition-colors shadow-sm"
+              title="Add Syllabus PDF"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span className="hidden sm:inline">Add PDF</span>
+            </button>
+
+            <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-400"
+              className="p-2 rounded-full hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors text-slate-700 dark:text-slate-300"
             >
               {isDarkMode ? '☀️' : '🌙'}
             </button>
@@ -652,7 +718,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Main Chat Area */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth bg-slate-50 dark:bg-slate-900/50">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-950">
           <div className="max-w-4xl mx-auto min-h-full flex flex-col justify-end">
 
             {/* Spacer for empty chat to push welcome down? No, standard flow */}
@@ -665,7 +731,7 @@ const App: React.FC = () => {
                     <button
                       key={idx}
                       onClick={() => handleChipClick(topic)}
-                      className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-sm text-slate-700 dark:text-slate-200 hover:bg-red-50 dark:hover:bg-red-900/40 hover:border-red-200 dark:hover:border-red-800 hover:text-red-700 dark:hover:text-red-300 transition-all shadow-sm"
+                      className="px-4 py-2 bg-white/80 dark:bg-slate-900/40 border border-slate-200/70 dark:border-slate-700/70 rounded-full text-sm text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-200/80 dark:hover:border-indigo-800 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all shadow-sm"
                     >
                       {topic}
                     </button>
@@ -683,6 +749,8 @@ const App: React.FC = () => {
                   handleUpdateCurrentSession(newMessages); // Use session updater
                 }}
                 onAnalyze={handleAnalyzeConfirm}
+                onSelectSkill={handleSelectSkill}
+                onShowAllSkills={() => setIsSkillSelectorOpen(true)}
               />
             ))}
 
@@ -713,7 +781,7 @@ const App: React.FC = () => {
         </main>
 
         {/* Footer Input */}
-        <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 z-10">
+        <div className="p-4 bg-transparent shrink-0 z-10">
           <div className="max-w-4xl mx-auto">
             {/* Model Selector Row */}
 
@@ -722,6 +790,59 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      <PdfUploaderModal 
+        isOpen={isPdfModalOpen} 
+        onClose={() => setIsPdfModalOpen(false)} 
+      />
+
+      {/* Manual Skill Selector Modal */}
+      {isSkillSelectorOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[80vh] animate-scale-in">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <span className="text-2xl">🔍</span>
+                Select Fundamental Skill
+              </h3>
+              <button 
+                onClick={() => setIsSkillSelectorOpen(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto grid grid-cols-1 gap-2">
+              <p className="text-xs text-slate-500 mb-2 px-2 uppercase tracking-widest font-bold">Supported FMS Skills</p>
+              {ALL_FMS_SKILLS.map((skill) => (
+                <button
+                  key={skill}
+                  onClick={() => {
+                    handleSelectSkill(skill);
+                    setIsSkillSelectorOpen(false);
+                  }}
+                  className="w-full text-left px-5 py-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 font-medium transition-all flex items-center justify-between group"
+                >
+                  <span>{skill}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+            
+            <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 shrink-0">
+              <p className="text-sm text-slate-600 dark:text-slate-400 italic">
+                Tip: If your skill isn't here, it may not be part of the current MOE PE Syllabus.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <Analytics />
     </div>
   );

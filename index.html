@@ -9,10 +9,23 @@
   <script>
     tailwind.config = {
       darkMode: 'class',
+      theme: {
+        extend: {
+          boxShadow: {
+            soft: '0 10px 30px rgba(2, 6, 23, 0.08)',
+          }
+        }
+      }
     }
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root{
+      color-scheme: light;
+    }
+    html.dark{
+      color-scheme: dark;
+    }
     body {
       font-family: 'Inter', sans-serif;
     }
@@ -23,7 +36,7 @@
     }
 
     ::-webkit-scrollbar-track {
-      background: #f1f1f1;
+      background: transparent;
     }
 
     ::-webkit-scrollbar-thumb {
@@ -34,6 +47,32 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #94a3b8;
     }
+
+    /* Firefox scrollbar */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    html.dark * {
+      scrollbar-color: #334155 transparent;
+    }
+
+    /* Utility classes used in components (Tailwind CDN won't generate these) */
+    .scrollbar-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    html.dark .scrollbar-thin::-webkit-scrollbar-thumb { background: #334155; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in { animation: fadeIn .18s ease-out both; }
+    .animate-fade-in-up { animation: fadeInUp .22s ease-out both; }
 
     .typing-dot {
       animation: typing 1.4s infinite ease-in-out both;
@@ -76,26 +115,12 @@
       animation: scaleIn 0.2s ease-out forwards;
     }
 
-    @keyframes scaleIn {
-      from {
-        opacity: 0;
-        transform: scale(0.95);
-      }
-
-      to {
-        opacity: 1;
-        transform: scale(1);
-      }
-    }
-
-    .animate-scale-in {
-      animation: scaleIn 0.2s ease-out forwards;
-    }
+    ::selection { background: rgba(99,102,241,.22); }
   </style>
   <link rel="icon" type="image/png" href="/favicon.png" />
 </head>
 
-<body class="bg-slate-50 dark:bg-slate-950 dark:text-white h-screen overflow-hidden transition-colors duration-200">
+<body class="bg-slate-50 dark:bg-slate-950 dark:text-white h-screen overflow-hidden transition-colors duration-200 antialiased">
   <div id="root" class="h-full"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script type="module" src="/src/index.tsx"></script>

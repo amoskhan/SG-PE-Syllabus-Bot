@@ -162,8 +162,15 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
                     ctx.stroke();
                 }
             } catch (err) {
-                setStatus('Error detecting pose');
-                console.error(err);
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                if (errorMsg.toLowerCase().includes('wasm') || errorMsg.toLowerCase().includes('model')) {
+                    setStatus('Model Load Error');
+                } else {
+                    setStatus('Detection Error');
+                }
+                console.error('Video Analysis Error:', err);
+                // Don't stop the loop immediately if it's a transient error, 
+                // but for model errors we should probably pause or show a retry
             }
 
             // FPS Calculation
@@ -200,7 +207,11 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
             {/* Debug Overlay */}
             {isPlaying && (
                 <div className="absolute top-2 right-2 flex flex-col items-end gap-1 pointer-events-none">
-                    <div className={`text-[10px] px-2 py-1 rounded font-mono text-white ${status.includes('Found') ? 'bg-green-500/80' : 'bg-red-500/50'}`}>
+                    <div className={`text-[10px] px-2 py-1 rounded font-mono text-white ${
+                        status.includes('Found') || status.includes('Tracking') ? 'bg-green-500/80' : 
+                        status.includes('Error') || status.includes('No Pose') ? 'bg-red-500/80' : 
+                        'bg-amber-500/80'
+                    }`}>
                         {status}
                     </div>
                     <div className="bg-black/50 text-white text-[10px] px-2 py-1 rounded font-mono">

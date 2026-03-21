@@ -36,8 +36,10 @@ class PoseDetectionService {
 
     // Helper to load vision tasks
     private async createVision() {
+        // Pinned version to match package.json to prevent WASM/JS mismatch
+        const MP_VERSION = '0.10.22-rc.20250304';
         return await FilesetResolver.forVisionTasks(
-            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+            `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`
         );
     }
 
@@ -60,10 +62,16 @@ class PoseDetectionService {
         if (this.initPromiseImage) return this.initPromiseImage;
 
         this.initPromiseImage = (async () => {
-            console.log('📷 Initializing MediaPipe Pose Landmarker (IMAGE Mode)...');
-            const vision = await this.createVision();
-            this.imageLandmarker = await PoseLandmarker.createFromOptions(vision, this.createOptions('IMAGE'));
-            console.log('✅ MediaPipe Pose Landmarker (IMAGE Mode) initialized');
+            try {
+                console.log('📷 Initializing MediaPipe Pose Landmarker (IMAGE Mode)...');
+                const vision = await this.createVision();
+                this.imageLandmarker = await PoseLandmarker.createFromOptions(vision, this.createOptions('IMAGE'));
+                console.log('✅ MediaPipe Pose Landmarker (IMAGE Mode) initialized');
+            } catch (error) {
+                console.error('❌ Failed to initialize MediaPipe Pose Landmarker (IMAGE Mode):', error);
+                this.initPromiseImage = null; // Reset to allow retry
+                throw error;
+            }
         })();
 
         return this.initPromiseImage;
@@ -73,10 +81,16 @@ class PoseDetectionService {
         if (this.initPromiseVideo) return this.initPromiseVideo;
 
         this.initPromiseVideo = (async () => {
-            console.log('🎥 Initializing MediaPipe Pose Landmarker (VIDEO Mode)...');
-            const vision = await this.createVision();
-            this.videoLandmarker = await PoseLandmarker.createFromOptions(vision, this.createOptions('VIDEO'));
-            console.log('✅ MediaPipe Pose Landmarker (VIDEO Mode) initialized');
+            try {
+                console.log('🎥 Initializing MediaPipe Pose Landmarker (VIDEO Mode)...');
+                const vision = await this.createVision();
+                this.videoLandmarker = await PoseLandmarker.createFromOptions(vision, this.createOptions('VIDEO'));
+                console.log('✅ MediaPipe Pose Landmarker (VIDEO Mode) initialized');
+            } catch (error) {
+                console.error('❌ Failed to initialize MediaPipe Pose Landmarker (VIDEO Mode):', error);
+                this.initPromiseVideo = null; // Reset to allow retry
+                throw error;
+            }
         })();
 
         return this.initPromiseVideo;
@@ -86,18 +100,24 @@ class PoseDetectionService {
         if (this.initPromiseObject) return this.initPromiseObject;
 
         this.initPromiseObject = (async () => {
-            console.log('⚽ Initializing MediaPipe Object Detector...');
-            const vision = await this.createVision();
-            this.objectDetector = await ObjectDetector.createFromOptions(vision, {
-                baseOptions: {
-                    modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite2/float16/1/efficientdet_lite2.tflite',
-                    delegate: 'CPU'
-                },
-                scoreThreshold: 0.15, // Lower threshold for better recall
-                runningMode: 'IMAGE',
-                // categoryAllowlist: ['sports ball'] // Removed to allow manual filtering of misclassifications
-            });
-            console.log('✅ MediaPipe Object Detector initialized');
+            try {
+                console.log('⚽ Initializing MediaPipe Object Detector...');
+                const vision = await this.createVision();
+                this.objectDetector = await ObjectDetector.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite2/float16/1/efficientdet_lite2.tflite',
+                        delegate: 'CPU'
+                    },
+                    scoreThreshold: 0.15, // Lower threshold for better recall
+                    runningMode: 'IMAGE',
+                    // categoryAllowlist: ['sports ball'] // Removed to allow manual filtering of misclassifications
+                });
+                console.log('✅ MediaPipe Object Detector initialized');
+            } catch (error) {
+                console.error('❌ Failed to initialize MediaPipe Object Detector:', error);
+                this.initPromiseObject = null; // Reset to allow retry
+                throw error;
+            }
         })();
 
         return this.initPromiseObject;
@@ -182,7 +202,7 @@ class PoseDetectionService {
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.strokeStyle = 'white';
-                ctx.lineWidth = 8;
+                ctx.lineWidth = 4;
                 ctx.stroke();
 
                 // Draw colored inner line based on side (Left=Cyan, Right=Orange)
@@ -199,7 +219,7 @@ class PoseDetectionService {
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.strokeStyle = color;
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 2;
                 ctx.stroke();
             }
         }
@@ -217,12 +237,12 @@ class PoseDetectionService {
 
             // Draw circle
             ctx.beginPath();
-            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.arc(x, y, 3, 0, 2 * Math.PI);
             ctx.fillStyle = color;
             ctx.fill();
 
             // White border
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1;
             ctx.strokeStyle = 'white';
             ctx.stroke();
         }
