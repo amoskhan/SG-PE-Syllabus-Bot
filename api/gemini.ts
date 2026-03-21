@@ -1,10 +1,10 @@
-// import type { VercelRequest, VercelResponse } from '@vercel/node'; 
-// Use 'any' to avoid adding new dependencies for now
+// Vercel Serverless Function - Gemini API Proxy
 import { GoogleGenAI } from '@google/genai';
 
-// Initialize the client with the server-side key
-// This key is ONLY available on the server (Vercel)
-const apiKey = process.env.GEMINI_API_KEY;
+// GEMINI_API_KEY  = production Vercel env var (set in Vercel Dashboard)
+// VITE_GEMINI_API_KEY = fallback for local 'vercel dev' (from .env.local)
+// Note: vercel dev exposes ALL .env.local vars to Node functions, including VITE_ ones
+const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
 export default async function handler(req: any, res: any) {
     // Handle CORS
@@ -26,7 +26,7 @@ export default async function handler(req: any, res: any) {
     }
 
     if (!apiKey) {
-        console.error('SERVER ERROR: GEMINI_API_KEY is missing in Vercel Environment Variables.');
+        console.error('SERVER ERROR: No API key found. Set GEMINI_API_KEY in Vercel Dashboard, or VITE_GEMINI_API_KEY in .env.local for local dev.');
         return res.status(500).json({
             error: 'Server Configuration Error: API Key missing. Please set GEMINI_API_KEY in Vercel Settings.'
         });
@@ -35,12 +35,14 @@ export default async function handler(req: any, res: any) {
     try {
         const { history, message, systemInstruction, tools } = req.body;
 
+        console.log(`[gemini] Request received. History length: ${history?.length ?? 0}, Has system instruction: ${!!systemInstruction}`);
+
         // Initialize GenAI
         const ai = new GoogleGenAI({ apiKey });
 
         // Create chat session
         const chat = ai.chats.create({
-            model: 'gemini-2.5-flash', // Keep consistent with service
+            model: 'gemini-2.5-flash',
             config: {
                 systemInstruction: systemInstruction,
                 tools: tools,
@@ -48,28 +50,44 @@ export default async function handler(req: any, res: any) {
             history: history || []
         });
 
-        // Send message (support text or parts for multimodal)
-        // Note: SDK usually expects 'message' for sendMessage to be string or Part[]
+        // Send message (supports text or multipart for images)
         const result = await chat.sendMessage({ message: message });
         const response = (result as any).response || result;
 
         const text = typeof response.text === 'function' ? response.text() :
-            (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
+            (response.candidates?.[0]?.content?.parts?.[0]?.text || '');
 
         const usage = response.usageMetadata?.totalTokenCount;
         const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const finishReason = response.candidates?.[0]?.finishReason;
+
+        console.log(`[gemini] Success. Tokens: ${usage}, FinishReason: ${finishReason}`);
 
         return res.status(200).json({
             text,
             tokenUsage: usage,
-            groundingChunks
+            groundingChunks,
+            finishReason
         });
 
     } catch (error: any) {
-        console.error('Gemini API Error (Server-Side):', error);
-        return res.status(500).json({
-            error: 'Error communicating with Google Gemini API',
-            details: error.message
+        // Log the FULL error object for debugging in Vercel logs
+        console.error('[gemini] Gemini API Error:', JSON.stringify({
+            message: error.message,
+            status: error.status,
+            code: error.code,
+            stack: error.stack?.substring(0, 500)
+        }));
+
+        // Forward the real HTTP status from Gemini if available (e.g. 429, 401)
+        const geminiStatus = error?.status || error?.response?.status;
+        const httpStatus = geminiStatus === 429 ? 429
+            : geminiStatus === 401 || geminiStatus === 403 ? 401
+            : 500;
+
+        return res.status(httpStatus).json({
+            error: error.message || 'Error communicating with Google Gemini API',
+            details: error?.errorDetails || undefined
         });
     }
 }
