@@ -247,25 +247,25 @@ const App: React.FC = () => {
         } else if (file.type.startsWith('video/')) {
           const frameCount = 12;
           const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
-            for (let i = 0; i < frames.length; i++) {
-                const img = await loadImageFromUrl(frames[i]);
-                try {
-                    const pose = await poseDetectionService.detectPoseFromImage(img);
-                    const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
-                    if (pose) {
-                        processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
-                    } else {
-                        console.warn(`⚠️ No pose detected in frame ${i}`);
-                    }
-                } catch (frameError) {
-                    console.error(`❌ Error processing frame ${i}:`, frameError);
-                }
+          for (let i = 0; i < frames.length; i++) {
+            const img = await loadImageFromUrl(frames[i]);
+            try {
+              const pose = await poseDetectionService.detectPoseFromImage(img);
+              const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
+              if (pose) {
+                processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
+              } else {
+                console.warn(`⚠️ No pose detected in frame ${i}`);
+              }
+            } catch (frameError) {
+              console.error(`❌ Error processing frame ${i}:`, frameError);
             }
+          }
         }
       }
 
       const poseData = processedImages.map(p => ({ ...p.pose, timestamp: p.timestamp, ball: p.ball }));
-      
+
       for (let i = 0; i < processedImages.length; i++) {
         const data = processedImages[i];
         const filteredPose = poseData[i];
@@ -410,7 +410,7 @@ const App: React.FC = () => {
 
     // UPDATE STATE: Optimistic Update (Immediate)
     const optimisticMessages = [...messages, newMessage];
-    
+
     // Auto-Title Logic on First Message
     let newTitle: string | undefined = undefined;
     if (messages.length <= 1) { // 1 because "Welcome" message is already there
@@ -440,7 +440,7 @@ const App: React.FC = () => {
         contextPoseData = result.poseData;
         contextAnalysisFrames = result.analysisFrames;
       }
-      
+
       if (!contextPoseData || !contextAnalysisFrames) {
         for (let i = messages.length - 1; i >= 0; i--) {
           if (!contextPoseData && messages[i].poseData && messages[i].poseData!.length > 0) {
@@ -557,14 +557,14 @@ const App: React.FC = () => {
       const lower = rawError.toLowerCase();
       if (lower.includes('429') || lower.includes('rate') && lower.includes('limit')) {
         errorText = "⚠️ You're sending messages too fast. Please wait a moment and try again.";
-      } else if (lower.includes('quota') || lower.includes('resource_exhausted')) {
+      } else if (lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('402')) {
         errorText = "⚠️ The AI service has reached its daily usage limit. Please try again later or switch to a different model.";
       } else if (lower.includes('safety') || lower.includes('blocked') || lower.includes('recitation')) {
         errorText = "⚠️ The AI couldn't respond to that — it may have been flagged by safety filters. Try rephrasing your question.";
       } else if (lower.includes('empty') || lower.includes('no response') || lower.includes('no candidates')) {
         errorText = "⚠️ The AI returned an empty response. This can happen with very complex questions — please try rephrasing or breaking it into smaller parts.";
       } else if (lower.includes('api key') || lower.includes('unauthorized') || lower.includes('401')) {
-        errorText = "⚠️ API authentication failed. Please check the server configuration.";
+        errorText = "⚠️ API authentication failed. Check the server configuration.";
       } else {
         errorText = `⚠️ Something went wrong: ${rawError}`;
       }
@@ -790,10 +790,10 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
-      
-      <PdfUploaderModal 
-        isOpen={isPdfModalOpen} 
-        onClose={() => setIsPdfModalOpen(false)} 
+
+      <PdfUploaderModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
       />
 
       {/* Manual Skill Selector Modal */}
@@ -805,7 +805,7 @@ const App: React.FC = () => {
                 <span className="text-2xl">🔍</span>
                 Select Fundamental Skill
               </h3>
-              <button 
+              <button
                 onClick={() => setIsSkillSelectorOpen(false)}
                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors"
               >
@@ -814,7 +814,7 @@ const App: React.FC = () => {
                 </svg>
               </button>
             </div>
-            
+
             <div className="p-4 overflow-y-auto grid grid-cols-1 gap-2">
               <p className="text-xs text-slate-500 mb-2 px-2 uppercase tracking-widest font-bold">Supported FMS Skills</p>
               {ALL_FMS_SKILLS.map((skill) => (
@@ -833,7 +833,7 @@ const App: React.FC = () => {
                 </button>
               ))}
             </div>
-            
+
             <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 shrink-0">
               <p className="text-sm text-slate-600 dark:text-slate-400 italic">
                 Tip: If your skill isn't here, it may not be part of the current MOE PE Syllabus.
@@ -842,7 +842,7 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       <Analytics />
     </div>
   );

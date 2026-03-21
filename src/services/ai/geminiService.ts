@@ -357,12 +357,12 @@ ${userTargetSkill}
 **Your task:**
 1. **Analyze the Kinetic Chain**: Look at the "Movement patterns" above. Is the movement fluid and sequential (e.g., legs -> torso -> arms) or "segmented" (robotic/broken)?
 2. **Biomechanics Check**: Read the "BIOMECHANICS ANALYSIS" above.
-3. ${isVerified ? 
-    `**IMMEDIATE ACTION**: Provide a full performance analysis for "${skillName || 'this movement'}" using the FMS Rubric.` : 
-    `**VERIFICATION PHASE**: You must identify the TOP 4 most likely skills from the Fundamental Movement Skills list. DO NOT grade the performance yet.`}
-4. ${isVerified ? 
-    'Ensure you site specific frames for any deductions.' : 
-    'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}`;
+3. ${isVerified ?
+          `**IMMEDIATE ACTION**: Provide a full performance analysis for "${skillName || 'this movement'}" using the FMS Rubric.` :
+          `**VERIFICATION PHASE**: You must identify the TOP 4 most likely skills from the Fundamental Movement Skills list. DO NOT grade the performance yet.`}
+4. ${isVerified ?
+          'Ensure you site specific frames for any deductions.' :
+          'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}`;
     }
 
     // Auto-detect skill from text if not explicitly provided to get specific rubric
@@ -381,15 +381,15 @@ ${userTargetSkill}
 
     let specificChecklistText = FUNDAMENTAL_MOVEMENT_SKILLS_TEXT;
     if (activeSkillName) {
-        const checklist = getSkillChecklist(activeSkillName);
-        if (checklist.length > 0) {
-            specificChecklistText = `*** OFFICIAL CHECKLIST FOR ${activeSkillName} ***
+      const checklist = getSkillChecklist(activeSkillName);
+      if (checklist.length > 0) {
+        specificChecklistText = `*** OFFICIAL CHECKLIST FOR ${activeSkillName} ***
 You MUST evaluate EACH of the following ${checklist.length} criteria. DO NOT SKIP ANY.
                   
 ${checklist.join('\n')}
                   
 (END OF CHECKLIST)`;
-        }
+      }
     }
 
     // Choose the appropriate system instruction based on context
@@ -400,21 +400,21 @@ ${checklist.join('\n')}
     // RAG RETRIEVAL: Fetch extra context from uploaded PDFs
     let ragContext = '';
     try {
-        if (currentMessage && currentMessage.trim().length > 3) {
-            console.log("🔍 Querying Vector DB for context...");
-            const ragResponse = await fetch('/api/rag-search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: currentMessage })
-            });
-            if (ragResponse.ok) {
-                const ragData = await ragResponse.json();
-                ragContext = ragData.context || '';
-                if (ragContext) console.log("✅ RAG Context Retrieved!");
-            }
+      if (currentMessage && currentMessage.trim().length > 3) {
+        console.log("🔍 Querying Vector DB for context...");
+        const ragResponse = await fetch('/api/rag-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: currentMessage })
+        });
+        if (ragResponse.ok) {
+          const ragData = await ragResponse.json();
+          ragContext = ragData.context || '';
+          if (ragContext) console.log("✅ RAG Context Retrieved!");
         }
-    } catch(e) {
-        console.warn('RAG Search failed:', e);
+      }
+    } catch (e) {
+      console.warn('RAG Search failed:', e);
     }
 
     // Generate dynamic list of valid skills for the prompt
@@ -494,11 +494,11 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 `;
       }
     } else {
-        // No pose data case already handled by initial systemInstruction value
+      // No pose data case already handled by initial systemInstruction value
     }
 
     if (ragContext) {
-        systemInstruction += `\n\n**ADDITIONAL RELEVANT KNOWLEDGE (From Uploaded Syllabus/PDF Documents):**\n${ragContext}\n\n*INSTRUCTION*: If this additional knowledge answers the user's question, prioritize it heavily and cite it.`;
+      systemInstruction += `\n\n**ADDITIONAL RELEVANT KNOWLEDGE (From Uploaded Syllabus/PDF Documents):**\n${ragContext}\n\n*INSTRUCTION*: If this additional knowledge answers the user's question, prioritize it heavily and cite it.`;
     }
 
     // Construct the message parts (text + images)
@@ -659,18 +659,6 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       text = typeof response.text === 'function' ? response.text() :
         (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
 
-      // Check for blocked/safety-filtered responses
-      const finishReason = response.candidates?.[0]?.finishReason;
-      if (!text || text.trim().length === 0) {
-        if (finishReason === 'SAFETY') {
-          throw new Error('safety: The response was blocked by safety filters. Try rephrasing your question.');
-        } else if (finishReason === 'RECITATION') {
-          throw new Error('recitation: The response was blocked due to recitation policy.');
-        } else {
-          throw new Error('no candidates: The AI returned an empty response. This may be due to a content policy or the question being too complex. Please try rephrasing.');
-        }
-      }
-
       groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
       tokenUsage = response.usageMetadata?.totalTokenCount || 0;
 
@@ -691,23 +679,29 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       });
 
       if (!response.ok) {
-        let errorDetail = response.statusText;
+        let errorMsg = response.statusText;
         try {
           const errorData = await response.json();
-          errorDetail = errorData.error || errorData.details || response.statusText;
-        } catch (_) { /* ignore parse error */ }
-        // Propagate HTTP status code so App.tsx can detect 429 etc.
-        throw new Error(`${response.status}: ${errorDetail}`);
+          errorMsg = errorData.error || errorData.details || response.statusText;
+        } catch (_) { /* ignore JSON parse error */ }
+        throw new Error(`${response.status}: ${errorMsg}`);
       }
 
       const data = await response.json();
-      text = data.text;
-      groundingChunks = data.groundingChunks;
-      tokenUsage = data.tokenUsage;
+      text = data.text || '';
+      groundingChunks = data.groundingChunks || [];
+      tokenUsage = data.tokenUsage || 0;
 
-      // Check for empty response from server proxy
+      // Detect empty / blocked responses
       if (!text || text.trim().length === 0) {
-        throw new Error('no candidates: The AI returned an empty response. This may be due to a content policy or the question being too complex. Please try rephrasing.');
+        const reason = data.finishReason;
+        if (reason === 'SAFETY') {
+          throw new Error('safety: The AI blocked this response. Try rephrasing your question.');
+        } else if (reason === 'RECITATION') {
+          throw new Error('recitation: The AI blocked this response due to recitation policy.');
+        } else {
+          throw new Error('no candidates: The AI returned an empty response. Please try rephrasing.');
+        }
       }
     }
 
