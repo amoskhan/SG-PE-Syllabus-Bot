@@ -156,7 +156,7 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
 
                 {/* Footer/About */}
                 <div className="p-4 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 text-center">
-                    SG PE Syllabus Bot | Last updated: 6 Feb 2026
+                    SG PE Syllabus Bot | Last updated: 21 March 2026
                 </div>
             </div>
         </>
