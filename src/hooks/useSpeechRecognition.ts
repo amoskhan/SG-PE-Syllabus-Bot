@@ -27,14 +27,12 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
             };
 
             recognition.onresult = (event: any) => {
-                let finalTranscript = '';
+                let currentTranscript = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
-                    }
+                    currentTranscript += event.results[i][0].transcript;
                 }
-                if (finalTranscript) {
-                    setTranscript(prev => prev + (prev ? ' ' : '') + finalTranscript);
+                if (currentTranscript) {
+                    setTranscript(currentTranscript);
                 }
             };
 
@@ -77,6 +75,6 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
         startListening,
         stopListening,
         resetTranscript,
-        hasRecognitionSupport: !!recognitionRef.current
+        hasRecognitionSupport: typeof window !== 'undefined' && (!!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition)
     };
 };

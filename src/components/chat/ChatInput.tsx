@@ -22,17 +22,32 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
   // Voice Input Hook
   const { isListening, transcript, startListening, stopListening, resetTranscript, hasRecognitionSupport } = useSpeechRecognition();
 
+  const [finalTranscript, setFinalTranscript] = useState('');
+
   // Sync Voice Transcript to Input
   useEffect(() => {
     if (transcript) {
       setInput(prev => {
-        // Avoid duplicate appending if the user stopped speaking briefly
-        if (prev.endsWith(transcript)) return prev;
-        return prev + (prev && !prev.endsWith(' ') ? ' ' : '') + transcript;
+        // Remove the previous interim transcript if it exists in the input
+        let baseInput = prev;
+        if (finalTranscript && prev.endsWith(finalTranscript)) {
+          baseInput = prev.substring(0, prev.length - finalTranscript.length).trim();
+        }
+        
+        const newInput = baseInput + (baseInput ? ' ' : '') + transcript;
+        setFinalTranscript(transcript);
+        return newInput;
       });
-      resetTranscript(); // Clear hook buffer so next sentence appends correctly
     }
-  }, [transcript, resetTranscript]);
+  }, [transcript]);
+
+  // Handle stop listening cleanup
+  useEffect(() => {
+    if (!isListening) {
+      setFinalTranscript('');
+      resetTranscript();
+    }
+  }, [isListening, resetTranscript]);
 
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -111,7 +126,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
     <>
       <form
         onSubmit={handleSubmit}
-        className="p-2 md:p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 max-w-4xl mx-auto w-full sticky bottom-0 transition-colors duration-200"
+        className="p-2 md:p-4 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/70 dark:border-slate-700/70 max-w-4xl mx-auto w-full rounded-2xl shadow-soft transition-colors duration-200"
       >
         {/* File Preview Area */}
         {selectedFiles.length > 0 && (
@@ -202,7 +217,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             onKeyDown={handleKeyDown}
             placeholder={isListening ? "Listening..." : "Ask about PE syllabus or upload..."}
             disabled={isLoading}
-            className="w-full md:flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden order-1 md:order-2 text-base md:text-base"
+            className="w-full md:flex-1 px-4 py-3 border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-800/70 text-slate-900 dark:text-white rounded-2xl resize-none focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-400 dark:focus:border-indigo-500 disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden order-1 md:order-2 text-base md:text-base shadow-sm"
             rows={1}
           />
 
@@ -217,7 +232,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
-                className="p-2.5 md:p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent"
+                className="p-2.5 md:p-2.5 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent"
                 title="Upload image or video"
               >
                 <svg className="w-6 h-6 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -230,7 +245,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                 type="button"
                 onClick={() => setShowCamera(true)}
                 disabled={isLoading}
-                className="p-2.5 md:p-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent"
+                className="p-2.5 md:p-2.5 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent"
                 title="Record video"
               >
                 <svg className="w-6 h-6 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -249,9 +264,9 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                   isListening ? stopListening() : startListening();
                 }}
                 disabled={isLoading}
-                className={`p-2.5 md:p-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-transparent dark:bg-slate-800 md:bg-transparent ${isListening
-                  ? 'text-white bg-red-500 animate-pulse shadow-md'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30'
+                className={`p-2.5 md:p-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-transparent ${isListening
+                  ? 'text-white bg-indigo-600 animate-pulse shadow-md'
+                  : 'text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
                   }`}
                 title={isListening ? "Stop listening" : "Start voice input"}
               >
@@ -266,7 +281,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
               <button
                 type="submit"
                 disabled={(!input.trim() && selectedFiles.length === 0) || isLoading}
-                className="p-2 md:p-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 disabled:from-slate-300 disabled:to-slate-600 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
+                className="p-2.5 md:p-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-2xl hover:from-indigo-700 hover:to-indigo-800 disabled:from-slate-300 disabled:to-slate-500 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98]"
               >
                 {isLoading ? (
                   <svg className="w-5 h-5 md:w-6 md:h-6 animate-spin" fill="none" viewBox="0 0 24 24">

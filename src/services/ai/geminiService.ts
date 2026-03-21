@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { GroundingChunk } from '../../types';
-import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES } from '../../data/fundamentalMovementSkillsData';
+import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist } from '../../data/fundamentalMovementSkillsData';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 
 const MODEL_NAME = 'gemini-2.5-flash';
@@ -87,10 +87,13 @@ IF a Reference Image is provided (labeled "Gold Standard"):
 
 **STEP 1 - OBSERVE AND HYPOTHESIZE:**
 - Look at the pose data and the visual input.
-- Make a cautious educated guess about which fundamental movement skill is being performed.
-- Respond: "Based on the pose data, I believe this might be a **[movement name]**. Is this correct?"
+- Identify the **TOP 4** most likely fundamental movement skills from the official list.
+- Respond: "I've detected your movement! Based on the patterns, it looks like one of these 4 skills. Which one is it?"
+- You MUST include the following tag at the end of your response:
+  '[[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]]'
 
-**STEP 2A - IF USER CONFIRMS (yes/confirm):**
+**STEP 2 - FULL ANALYSIS (AFTER CONFIRMATION):**
+- Once the user confirms the skill, proceed to grade the performance strictly based on the FMS Checklist and Rubric.
 - **CRITICAL**: You must grade the performance by checking off EACH critical feature from the Checklist for that skill.
 - **Do NOT** use joint angles as the primary grade. Use the Checklist.
 - **DETERMINE LEVEL**:
@@ -115,9 +118,6 @@ IF a Reference Image is provided (labeled "Gold Standard"):
   **Feedback for Improvement:**
   1. [Specific correction for the missed feature]
   2. [Cue to remember]
-
-**STEP 2B - IF USER SAYS NO:**
-- Ask for the correct movement name, then apply the same grading logic as above.
 `;
 
 
@@ -345,7 +345,7 @@ Ball Detected: ${hasBall}
       `;
       }).join('\n');
 
-      const userTargetSkill = skillName ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.` : '';
+      const userTargetSkill = (skillName && isVerified) ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.` : (skillName ? `\nNote: The user mentioned "${skillName}", but we are still in the verification phase. Provide the Top 4 choices anyway to confirm.` : '');
 
       enhancedMessage = `I've captured pose data from ${poseData.length} keyframes extracted evenly across the video duration.
 
@@ -357,24 +357,65 @@ ${userTargetSkill}
 **Your task:**
 1. **Analyze the Kinetic Chain**: Look at the "Movement patterns" above. Is the movement fluid and sequential (e.g., legs -> torso -> arms) or "segmented" (robotic/broken)?
 2. **Biomechanics Check**: Read the "BIOMECHANICS ANALYSIS" above.
-   - If "IPSILATERAL ERROR", deduct points immediately.
-   - If "Hand raised ABOVE HEAD", check if this skill (e.g. Underarm Roll) permits high hands. If not, mark as "Excessive Movement" or "Poor Control".
-3. ${skillName ? `**IMMEDIATE ACTION**: Analyze "${skillName}" using the FMS Checklist & Rubric. (Confirmation step is SKIPPED).` : `**Observe and Hypothesize**: Based on the pose data and movement flow, make your best educated guess about which fundamental movement skill this is.`}
-${skillName ? '' : `4. Respond in this format: "Based on the pose data, I believe this is a **[movement name]**. Is this correct?" then wait for confirmation.`}
-5. ${skillName ? 'Assessment' : 'If confirmed -> Grade'} using the FMS Checklist & Rubric.
-   - **Step Verification**: If "DISTINCT STEP DETECTED", credit the step criteria.
-   - **Quality Control**: Even if all checkboxes are technically met, if the movement looks "Chaotic", "Excessive", or "Segmented", you MUST downgrade the Proficiency Level to "Developing" or "Beginning" and explain why.`;
+3. ${isVerified ? 
+    `**IMMEDIATE ACTION**: Provide a full performance analysis for "${skillName || 'this movement'}" using the FMS Rubric.` : 
+    `**VERIFICATION PHASE**: You must identify the TOP 4 most likely skills from the Fundamental Movement Skills list. DO NOT grade the performance yet.`}
+4. ${isVerified ? 
+    'Ensure you site specific frames for any deductions.' : 
+    'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}`;
+    }
+
+    // Auto-detect skill from text if not explicitly provided to get specific rubric
+    let activeSkillName = skillName;
+    if (!activeSkillName) {
+      const lowerMsg = currentMessage.toLowerCase();
+      const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
+      for (const skill of knownSkills) {
+        if (lowerMsg.includes(skill.toLowerCase())) {
+          console.log(`🧠 Text Context detected skill: ${skill}`);
+          activeSkillName = skill;
+          break;
+        }
+      }
+    }
+
+    let specificChecklistText = FUNDAMENTAL_MOVEMENT_SKILLS_TEXT;
+    if (activeSkillName) {
+        const checklist = getSkillChecklist(activeSkillName);
+        if (checklist.length > 0) {
+            specificChecklistText = `*** OFFICIAL CHECKLIST FOR ${activeSkillName} ***
+You MUST evaluate EACH of the following ${checklist.length} criteria. DO NOT SKIP ANY.
+                  
+${checklist.join('\n')}
+                  
+(END OF CHECKLIST)`;
+        }
     }
 
     // Choose the appropriate system instruction based on context
-    const baseInstruction = poseData && poseData.length > 0
-      ? MOTION_ANALYSIS_INSTRUCTION
+    let systemInstruction = poseData && poseData.length > 0
+      ? MOTION_ANALYSIS_INSTRUCTION.replace(FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, specificChecklistText)
       : FULL_SYSTEM_INSTRUCTION;
 
-
-
-    // Enhance system instruction when pose data is present - append dynamic data description
-    let systemInstruction = '';
+    // RAG RETRIEVAL: Fetch extra context from uploaded PDFs
+    let ragContext = '';
+    try {
+        if (currentMessage && currentMessage.trim().length > 3) {
+            console.log("🔍 Querying Vector DB for context...");
+            const ragResponse = await fetch('/api/rag-search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: currentMessage })
+            });
+            if (ragResponse.ok) {
+                const ragData = await ragResponse.json();
+                ragContext = ragData.context || '';
+                if (ragContext) console.log("✅ RAG Context Retrieved!");
+            }
+        }
+    } catch(e) {
+        console.warn('RAG Search failed:', e);
+    }
 
     // Generate dynamic list of valid skills for the prompt
     const validSkillsList = Object.keys(SKILL_REFERENCE_IMAGES).join(', ');
@@ -392,36 +433,32 @@ ${biomechanicsReport || ''}
 
 **YOUR GOAL (VERIFICATION PHASE):**
 You must complete TWO phases before analysis can begin.
-**PHASE 1**: Identify the FMS Skill.
+**PHASE 1**: Identify the Top 4 likely FMS Skills.
 **PHASE 2**: Verify the Computer Vision data (Ball detection).
 
 **VALID SKILLS LIST**: ${validSkillsList}
 
 **INSTRUCTIONS:**
 1. **Observe**: Look at the pose data and the visual input.
-2. **Validate**: Is this a valid FMS from the list above?
-   - If **NO** (e.g. Push Up, Squat, Random Movement):
-     - Response: "❌ **Unknown Movement**. This movement is not in the official FMS Checklist. Please upload a specific skill like ${Object.keys(SKILL_REFERENCE_IMAGES).slice(0, 3).join(', ')}."
-     - **DO NOT** proceed to Phase 2.
-   - If **YES** (e.g. Kick):
-     - Response: "Phase 1: I have detected a **[Skill Name]**."
-       (IMPORTANT: You MUST wrap the skill name in double asterisks like **Kick** so the system can read it).
-
-3. **Verify**: Ask the user to check the frames.
-   - Response: "Phase 2: Please review the frames below to verify the ball detection."
+2. **Identify**: Pick the **TOP 4** most likely skills from the VALID SKILLS LIST.
+   - If the movement is definitely NOT an FMS (e.g. Squat, Push-up), say it's an "Unknown Movement".
+   - Otherwise, provide the 4 closest matches.
+3. **Format**: Use the following tag at the end of your response:
+   '[[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]]'
+   Example: '[[SKILL_CHOICES: Underhand Throw, Overhand Throw, Underhand Roll, Bounce Pass]]'
 
 4. **Call to Action**:
-   - Response: "Once you have confirmed the Skill and the Frames, click 'Analyze Now' to proceed to grading."
+   - Ask: "I've detected your movement! Which of these 4 skills is it?"
+   - Mention: "Once you select one, I'll proceed to the full analysis."
 
 **RESTRICTIONS:**
 - **DO NOT GRADE** the performance yet.
 - **DO NOT** output the FMS Rubric or Checklist.
-- **DO NOT** give feedback on knees, arms, or technique.
-- JUST Identify and Verify.
+- JUST Identify the top 4 choices.
 `;
       } else {
         // FULL ANALYSIS MODE
-        systemInstruction = `${baseInstruction}
+        systemInstruction += `
 
 **CURRENT POSE DATA CONTEXT:**
 I have captured pose data from ${poseData.length} keyframes extracted evenly across the video.
@@ -432,8 +469,8 @@ ${biomechanicsReport || ''}
 ${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
 
 **Immediate Task:**
-${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. Refer to Biomechanics Report for critical errors.` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE".`}
-// ... existing code ...
+${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. Refer to Biomechanics Report for critical errors.` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE". Identify top 4 likely skills.`}
+
 **IMPORTANT**:
 - **Visual Evidence**: You MUST add a section called "**Visual Evidence**" where you quote specific differences between the provided Reference Image ("Gold Standard") and the User's Video ("Actual Performance").
 - **CITATION RULE**: You MUST cite the specific frame number (e.g. "At Frame 12...") where the error or key event occurred. Do NOT say "consistent across all frames". Use the 'Ball Detected' status to confirm release points.
@@ -457,7 +494,11 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 `;
       }
     } else {
-      systemInstruction = baseInstruction;
+        // No pose data case already handled by initial systemInstruction value
+    }
+
+    if (ragContext) {
+        systemInstruction += `\n\n**ADDITIONAL RELEVANT KNOWLEDGE (From Uploaded Syllabus/PDF Documents):**\n${ragContext}\n\n*INSTRUCTION*: If this additional knowledge answers the user's question, prioritize it heavily and cite it.`;
     }
 
     // Construct the message parts (text + images)
@@ -465,21 +506,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
     // 1. ATTACH REFERENCE IMAGE (IF SKILL IS KNOWN OR DETECTED)
     // This gives the AI the "Gold Standard" to compare against
-
-    // Auto-detect skill from text if not explicitly provided
-    let activeSkillName = skillName;
-    if (!activeSkillName) {
-      const lowerMsg = currentMessage.toLowerCase();
-      // Sort keys by length desc to match "Underhand Throw" before "Throw" if that existed
-      const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
-      for (const skill of knownSkills) {
-        if (lowerMsg.includes(skill.toLowerCase())) {
-          console.log(`🧠 Text Context detected skill: ${skill}`);
-          activeSkillName = skill;
-          break;
-        }
-      }
-    }
+    // (activeSkillName was already detected earlier)
 
     if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
       console.log(`📘 Injecting Reference Image for: ${activeSkillName}`);
@@ -632,6 +659,18 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       text = typeof response.text === 'function' ? response.text() :
         (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
 
+      // Check for blocked/safety-filtered responses
+      const finishReason = response.candidates?.[0]?.finishReason;
+      if (!text || text.trim().length === 0) {
+        if (finishReason === 'SAFETY') {
+          throw new Error('safety: The response was blocked by safety filters. Try rephrasing your question.');
+        } else if (finishReason === 'RECITATION') {
+          throw new Error('recitation: The response was blocked due to recitation policy.');
+        } else {
+          throw new Error('no candidates: The AI returned an empty response. This may be due to a content policy or the question being too complex. Please try rephrasing.');
+        }
+      }
+
       groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
       tokenUsage = response.usageMetadata?.totalTokenCount || 0;
 
@@ -652,14 +691,24 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Server Error: ${errorData.error || response.statusText}`);
+        let errorDetail = response.statusText;
+        try {
+          const errorData = await response.json();
+          errorDetail = errorData.error || errorData.details || response.statusText;
+        } catch (_) { /* ignore parse error */ }
+        // Propagate HTTP status code so App.tsx can detect 429 etc.
+        throw new Error(`${response.status}: ${errorDetail}`);
       }
 
       const data = await response.json();
       text = data.text;
       groundingChunks = data.groundingChunks;
       tokenUsage = data.tokenUsage;
+
+      // Check for empty response from server proxy
+      if (!text || text.trim().length === 0) {
+        throw new Error('no candidates: The AI returned an empty response. This may be due to a content policy or the question being too complex. Please try rephrasing.');
+      }
     }
 
     // Check for DISPLAY_REFERENCE tag in text

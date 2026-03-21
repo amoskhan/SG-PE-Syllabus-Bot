@@ -151,6 +151,19 @@ export const PROFICIENCY_RUBRIC = `
 - **Visual Comparison**: The movement should closely mirror the form shown in the provided textbook reference image.
 `;
 
+export const ALL_FMS_SKILLS = [
+    "Underhand Throw",
+    "Underhand Roll",
+    "Overhand Throw",
+    "Kick",
+    "Dribble with hands",
+    "Dribble with feet",
+    "Chest Pass",
+    "Catch above waist",
+    "Bounce pass",
+    "Bounce"
+];
+
 export const SKILL_REFERENCE_IMAGES: Record<string, string> = {
     "Underhand Throw": "/assets/reference_images/underhand_throw.jpg",
     "Underhand Roll": "/assets/reference_images/underhand_roll.jpg",

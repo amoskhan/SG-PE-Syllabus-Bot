@@ -8,9 +8,11 @@ interface ChatMessageProps {
   message: Message;
   onUpdateMessage?: (message: Message) => void;
   onAnalyze?: (message: Message) => void;
+  onSelectSkill?: (skillName: string) => void;
+  onShowAllSkills?: () => void;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onShowAllSkills }) => {
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
@@ -89,18 +91,53 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
             <div className={`px-4 py-3 rounded-2xl shadow-sm break-words overflow-hidden ${isError
               ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
               : isBot
-                ? 'bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-slate-200'
-                : 'bg-blue-600 text-white'
+                ? 'bg-white/85 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-700/70 text-slate-800 dark:text-slate-200 backdrop-blur'
+                : 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white shadow-md'
               } ${isBot ? 'rounded-tl-none' : 'rounded-tr-none'}`}>
 
               {isBot ? (
-                <MarkdownRenderer content={message.text} />
+                <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '')} />
               ) : (
                 <p className="whitespace-pre-wrap text-sm md:text-base">{message.text}</p>
               )}
 
+              {/* Skill Choices (4 Choices Flow) */}
+              {isBot && message.text.includes('[[SKILL_CHOICES:') && (
+                <div className="mt-4 flex flex-col gap-2">
+                  <div className="text-[10px] uppercase tracking-wider font-bold text-indigo-500/80 mb-1">Select the correct skill:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {message.text.match(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/)?.[1].split(',').map((skill, idx) => {
+                      const trimmedSkill = skill.trim();
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => onSelectSkill?.(trimmedSkill)}
+                          className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/40 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 border border-indigo-100 dark:border-indigo-800/50 rounded-xl text-sm font-medium text-indigo-700 dark:text-indigo-300 transition-all text-left flex items-center justify-between group"
+                        >
+                          <span>{trimmedSkill}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* None of these button */}
+                  <button
+                    onClick={() => onShowAllSkills?.()}
+                    className="mt-1 text-xs text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 px-2 py-1 transition-colors group"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                    </svg>
+                    <span>None of these? Search all skills...</span>
+                  </button>
+                </div>
+              )}
+
               {/* Reference Image Display (TEACHER VERIFICATION MODE) */}
-              {isBot && message.referenceImageURI && (
+              {isBot && message.referenceImageURI && !message.text.includes('[[SKILL_CHOICES:') && (
                 <div className="mt-4 mb-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 rounded-lg flex flex-col sm:flex-row gap-4 items-center">
                   <div className="flex-shrink-0 w-24 h-24 bg-white dark:bg-slate-700 rounded border border-red-200 dark:border-red-800 p-1">
                     <img
@@ -168,7 +205,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                     <span className="bg-green-100 text-green-700 px-1 rounded text-[9px]">AI DEBUG</span>
                   </div>
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200 w-full max-w-[85vw] md:max-w-full mx-auto touch-pan-x">
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin w-full max-w-[85vw] md:max-w-full mx-auto touch-pan-x">
                   {message.analysisFrames.map((frame, idx) => {
                     // Correctly find the pose data for this specific frame index
                     // poseData.timestamp corresponds to the frame index 'idx'
@@ -183,7 +220,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                             toggleBallValidity(idx);
                           }
                         }}
-                        className={`flex-shrink-0 w-48 h-64 md:w-60 md:h-80 bg-black rounded-xl overflow-hidden border shadow-sm relative group cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all ${ball?.isValid ? 'border-green-500 ring-2 ring-green-500/50' : 'border-slate-200'
+                        className={`flex-shrink-0 w-48 h-64 md:w-60 md:h-80 bg-black rounded-2xl overflow-hidden border shadow-sm relative group cursor-pointer hover:ring-4 hover:ring-indigo-500/20 transition-all ${ball?.isValid ? 'border-green-500 ring-2 ring-green-500/50' : 'border-slate-200'
                           }`}
                       >
                         <img src={frame} alt={`Analysis Frame ${idx}`} className="w-full h-full object-cover" />
@@ -233,7 +270,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
 
                 {/* Actions Row (Bottom) */}
                 {!isBot && onUpdateMessage && (
-                  <div className="flex items-center justify-between mt-2 px-1">
+                  <div className="flex items-center mt-2 px-1">
                     <button
                       onClick={(e) => { e.stopPropagation(); omitAllBalls(); }}
                       className="text-xs text-red-500 hover:text-red-700 underline cursor-pointer"
@@ -241,19 +278,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                     >
                       Omit All Balls
                     </button>
-
-                    {onAnalyze && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onAnalyze(message); }}
-                        className="text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow-md transition-all flex items-center gap-2 animate-pulse hover:scale-105 active:scale-95"
-                        title="Submit these frames for grading"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                        </svg>
-                        Analyze Now
-                      </button>
-                    )}
                   </div>
                 )}
               </div>

@@ -73,7 +73,8 @@ IF a Reference Image is provided (labeled "Gold Standard"):
 **STEP 1 - OBSERVE AND HYPOTHESIZE:**
 - Look at the pose data calculation stats provided.
 - Make a cautious educated guess about which fundamental movement skill is being performed.
-- Respond: "Based on the pose data, I believe this might be a **[movement name]**. Is this correct?"
+- Respond: "I've detected your movement! Based on the patterns, it looks like one of these 4 skills. Which one is it?"
+- YOU MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag.
 
 **STEP 2A - IF USER CONFIRMS (yes/confirm):**
 - **CRITICAL**: You must grade the performance by checking off EACH critical feature from the Checklist for that skill.
@@ -355,7 +356,7 @@ export const sendMessageToOpenRouter = async (
             `;
             }).join('\n');
 
-            const userTargetSkill = skillName ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.` : '';
+            const userTargetSkill = (skillName && isVerified) ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.` : (skillName ? `\nNote: The user mentioned "${skillName}", but we are still in the verification phase. Provide the Top 4 choices anyway to confirm.` : '');
 
             enhancedMessage = `I've captured pose data from ${poseData.length} keyframes extracted evenly across the video duration.
 
@@ -368,11 +369,12 @@ export const sendMessageToOpenRouter = async (
             **Your task:**
             1. **Analyze the Kinetic Chain**: Look at the "Movement patterns" above. Is the movement fluid and sequential (e.g., legs -> torso -> arms) or "segmented" (robotic/broken)?
             2. **Biomechanics Check**: Read the "BIOMECHANICS ANALYSIS" above.
-            3. ${activeSkillName ? `**IMMEDIATE ACTION**: Analyze "${activeSkillName}" using the FMS Checklist & Rubric. (Confirmation step is SKIPPED).` : `**Observe and Hypothesize**: Based on the pose data and movement flow, make your best educated guess about which fundamental movement skill this is.`}
-            ${activeSkillName ? '' : `4. Respond in this format: "Based on the pose data, I believe this is a **[movement name]**. Is this correct?" then wait for confirmation.`}
-            5. ${activeSkillName ? 'Assessment' : 'If confirmed -> Grade'} using the FMS Checklist & Rubric.
-            - **Step Verification**: If "DISTINCT STEP DETECTED", credit the step criteria.
-            - **Quality Control**: Even if all checkboxes are technically met, if the movement looks "Chaotic", "Excessive", or "Segmented", you MUST downgrade the Proficiency Level to "Developing" or "Beginning" and explain why.
+            3. ${isVerified ? 
+                `**IMMEDIATE ACTION**: Provide a full performance analysis for "${skillName || 'this movement'}" using the FMS Rubric.` : 
+                `**VERIFICATION PHASE**: You must identify the TOP 4 most likely skills from the Fundamental Movement Skills list. DO NOT grade the performance yet.`}
+            4. ${isVerified ? 
+                'Ensure you site specific frames for any deductions.' : 
+                'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}
 
             **CRITICAL CONSISTENCY RULE (PROFICIENCY VS CHECKLIST):**
             - If you grade the Proficiency Level as "Keeping it Real" / "Developing" / "Beginning", you **MUST** have at least one ❌ or ⚠️ in the Checklist Assessment.
@@ -403,7 +405,7 @@ export const sendMessageToOpenRouter = async (
         }
 
         const baseInstruction = poseData && poseData.length > 0
-            ? MOTION_ANALYSIS_INSTRUCTION
+            ? MOTION_ANALYSIS_INSTRUCTION.replace(FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, specificChecklistText)
             : FULL_SYSTEM_INSTRUCTION;
 
         if (poseData && poseData.length > 0 && (isFirstMessage || isVerified)) {
@@ -594,10 +596,8 @@ export const sendMessageToOpenRouter = async (
 
         // If we have media attachments (images/frames), attach them for the model to SEE
         if (mediaAttachments && mediaAttachments.length > 0) {
-            let processedAttachments = mediaAttachments;
-
-            // Molmo has strict 6-image limit per prompt
             const maxUserFrames = 6;
+            const processedAttachments = mediaAttachments.slice(0, maxUserFrames);
 
             processedAttachments.forEach(media => {
                 // Ensure data URL proper format
