@@ -56,3 +56,24 @@ export const PE_TOPICS = [
   "Games Concept Approach",
   "Fundamental Movement Skills",
 ];
+
+export interface CustomRubricLevel {
+  id: string; // unique ID for DND
+  label: string; // Custom arbitrary label, e.g., "Pray", "Setup", etc.
+  originalCriteriaIndices: number[]; // e.g. [0, 1, 2] corresponding to the standard criteria lines in fundamentalMovementSkillsData
+}
+
+export interface CustomSkillRubric {
+  beginning?: CustomRubricLevel[];
+  developing: CustomRubricLevel[];
+  competent: CustomRubricLevel[];
+  accomplished: CustomRubricLevel[];
+}
+
+export interface TeacherProfile {
+  id: string;      // maps to Supabase user.id
+  email?: string;  
+  name?: string;
+  avatar_url?: string;
+  customRubrics?: Record<string, CustomSkillRubric>; // skillName -> custom rubric
+}

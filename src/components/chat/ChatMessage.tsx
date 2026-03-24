@@ -67,19 +67,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
       <div className={`flex w-full ${isBot ? 'justify-start' : 'justify-end'} mb-6 animate-fade-in-up`}>
         <div className={`flex max-w-[90%] md:max-w-[80%] gap-3 ${isBot ? 'flex-row' : 'flex-row-reverse'}`}>
 
-          {/* Avatar */}
-          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isBot ? 'bg-gradient-to-br from-red-500 to-red-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-            }`}>
-            {isBot ? (
+          {/* Avatar (Only for Bot) */}
+          {isBot && (
+            <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm mt-1">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
               </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-              </svg>
-            )}
-          </div>
+            </div>
+          )}
 
 
 
@@ -88,12 +83,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
             id={`message-${message.id}`}
             className={`flex flex-col gap-2 w-full min-w-0`}
           >
-            <div className={`px-4 py-3 rounded-2xl shadow-sm break-words overflow-hidden ${isError
+            <div className={`px-4 py-3 rounded-2xl break-words overflow-hidden ${isError
               ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
               : isBot
-                ? 'bg-white/85 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-700/70 text-slate-800 dark:text-slate-200 backdrop-blur'
-                : 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white shadow-md'
-              } ${isBot ? 'rounded-tl-none' : 'rounded-tr-none'}`}>
+                ? 'bg-transparent text-slate-800 dark:text-slate-200'
+                : 'bg-[#f4f4f4] dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 border border-transparent dark:border-zinc-700'
+              } ${isBot ? '' : 'rounded-tr-sm'}`}>
 
               {isBot ? (
                 <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '')} />

@@ -126,7 +126,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
     <>
       <form
         onSubmit={handleSubmit}
-        className="p-2 md:p-4 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/70 dark:border-slate-700/70 max-w-4xl mx-auto w-full rounded-2xl shadow-soft transition-colors duration-200"
+        className="p-2 md:p-3 bg-slate-50 dark:bg-zinc-800/80 max-w-3xl mx-auto w-full rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-700 transition-colors duration-200 flex flex-col"
       >
         {/* File Preview Area */}
         {selectedFiles.length > 0 && (
@@ -197,7 +197,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
         )}
 
         {/* Input Area - RESPONSIVE LAYOUT */}
-        <div className="flex flex-col md:flex-row md:items-end gap-2 md:gap-2">
+        <div className="flex flex-col gap-1 w-full relative">
 
           {/* Hidden File Input */}
           <input
@@ -209,33 +209,33 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
             className="hidden"
           />
 
-          {/* Text Input (Top on Mobile, Middle on Desktop) */}
+          {/* Text Input */}
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isListening ? "Listening..." : "Ask about PE syllabus or upload..."}
+            placeholder={isListening ? "Listening..." : "Message SG PE Syllabus..."}
             disabled={isLoading}
-            className="w-full md:flex-1 px-4 py-3 border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-800/70 text-slate-900 dark:text-white rounded-2xl resize-none focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-400 dark:focus:border-indigo-500 disabled:bg-slate-50 disabled:cursor-not-allowed min-h-[48px] max-h-[120px] placeholder-slate-400 dark:placeholder-slate-500 [&::-webkit-scrollbar]:hidden order-1 md:order-2 text-base md:text-base shadow-sm"
+            className="w-full px-2 pt-2 bg-transparent text-slate-900 dark:text-white resize-none focus:outline-none disabled:opacity-50 min-h-[44px] max-h-[200px] placeholder-slate-500 dark:placeholder-slate-400 [&::-webkit-scrollbar]:hidden text-[15px] leading-relaxed"
             rows={1}
           />
 
-          {/* Actions Bar (Bottom on Mobile, Left/Right on Desktop) */}
-          <div className="flex items-center justify-between md:contents order-2 md:order-1 pt-2 md:pt-0">
+          {/* Actions Bar */}
+          <div className="flex items-center justify-between w-full pt-1">
 
             {/* Left Tools Group (Attach, Camera, Voice) */}
-            <div className="flex items-center gap-2 md:gap-2 md:order-1">
+            <div className="flex items-center gap-1">
 
               {/* Attachment Button */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
-                className="p-2.5 md:p-2.5 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent"
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-zinc-700/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Upload image or video"
               >
-                <svg className="w-6 h-6 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                 </svg>
               </button>
@@ -245,11 +245,11 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                 type="button"
                 onClick={() => setShowCamera(true)}
                 disabled={isLoading}
-                className="p-2.5 md:p-2.5 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-transparent"
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-zinc-700/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Record video"
               >
-                <svg className="w-6 h-6 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               </button>
 
@@ -264,33 +264,37 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
                   isListening ? stopListening() : startListening();
                 }}
                 disabled={isLoading}
-                className={`p-2.5 md:p-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-transparent ${isListening
-                  ? 'text-white bg-indigo-600 animate-pulse shadow-md'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                className={`p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isListening
+                  ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-zinc-700/50'
                   }`}
                 title={isListening ? "Stop listening" : "Start voice input"}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 md:w-6 md:h-6">
+                <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-5 h-5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
                 </svg>
               </button>
             </div>
 
-            {/* SEND Button - Right Side (Mobile) or Right Side (Desktop) */}
-            <div className="md:order-3">
+            {/* SEND Button - Right Side */}
+            <div>
               <button
                 type="submit"
                 disabled={(!input.trim() && selectedFiles.length === 0) || isLoading}
-                className="p-2.5 md:p-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-2xl hover:from-indigo-700 hover:to-indigo-800 disabled:from-slate-300 disabled:to-slate-500 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98]"
+                className={`p-1.5 rounded-lg transition-all duration-200 flex items-center justify-center border ${(!input.trim() && selectedFiles.length === 0) || isLoading
+                    ? 'text-slate-300 dark:text-slate-600 bg-transparent border-transparent'
+                    : 'text-white bg-slate-900 border-slate-900 dark:bg-slate-100 dark:border-slate-100 dark:text-slate-900 hover:opacity-90 shadow-sm'
+                  }`}
+                style={{ width: '36px', height: '36px' }}
               >
                 {isLoading ? (
-                  <svg className="w-5 h-5 md:w-6 md:h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  <svg className="w-5 h-5 transform -rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>
                 )}
               </button>

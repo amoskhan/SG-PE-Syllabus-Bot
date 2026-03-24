@@ -139,7 +139,8 @@ export const sendMessageToGemini = async (
   mediaAttachments?: MediaData[],
   skillName?: string,
   isVerified?: boolean,
-  sessionId?: string
+  sessionId?: string,
+  teacherProfile?: import('../../types').TeacherProfile | null
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
   try {
     let enhancedMessage = currentMessage;
@@ -382,7 +383,30 @@ ${userTargetSkill}
     let specificChecklistText = FUNDAMENTAL_MOVEMENT_SKILLS_TEXT;
     if (activeSkillName) {
       const checklist = getSkillChecklist(activeSkillName);
-      if (checklist.length > 0) {
+      const customRubric = teacherProfile?.customRubrics?.[activeSkillName];
+
+      if (customRubric) {
+        specificChecklistText = `*** TEACHER'S CUSTOM RUBRIC FOR ${activeSkillName} ***
+The teacher has provided a custom rubric with specific labels and groupings for this class.
+When grading "Beginning", "Developing", "Competent", or "Accomplished", you MUST use these groupings and criteria below:
+
+**Level: Beginning**
+${customRubric.beginning?.map(g => `- Label: "${g.label}" (Requires you to observe: ${g.originalCriteriaIndices.length > 0 ? g.originalCriteriaIndices.map(i => checklist[i].replace(/^\\d+\\.\\s*/, '')).join(' AND ') : 'No sub-criteria, label stands alone'})`).join('\n') || 'No specific criteria set. If they fail Developing, default to generic "Beginning".'}
+
+**Level: Developing**
+${customRubric.developing.map(g => `- Label: "${g.label}" (Requires you to observe: ${g.originalCriteriaIndices.length > 0 ? g.originalCriteriaIndices.map(i => checklist[i].replace(/^\\d+\\.\\s*/, '')).join(' AND ') : 'No sub-criteria, label stands alone'})`).join('\n') || 'No specific criteria set'}
+
+**Level: Competent**
+${customRubric.competent.map(g => `- Label: "${g.label}" (Requires you to observe: ${g.originalCriteriaIndices.length > 0 ? g.originalCriteriaIndices.map(i => checklist[i].replace(/^\\d+\\.\\s*/, '')).join(' AND ') : 'No sub-criteria, label stands alone'})`).join('\n') || 'No specific criteria set'}
+
+**Level: Accomplished**
+${customRubric.accomplished.map(g => `- Label: "${g.label}" (Requires you to observe: ${g.originalCriteriaIndices.length > 0 ? g.originalCriteriaIndices.map(i => checklist[i].replace(/^\\d+\\.\\s*/, '')).join(' AND ') : 'No sub-criteria, label stands alone'})`).join('\n') || 'No specific criteria set'}
+
+If the student only demonstrates the "Beginning" characteristics (or fails to meet Developing), grade them as "Beginning".
+When giving feedback, refer to the teacher's Labels (e.g. "You missed the '${customRubric.developing[0]?.label || 'Setup'}' position", or "You are at '${customRubric.beginning?.[0]?.label || 'Beginning'}'").
+Your Checklist Assessment MUST be grouped by these Levels and Labels instead of the standard 10 criteria.
+(END OF CUSTOM RUBRIC)`;
+      } else if (checklist.length > 0) {
         specificChecklistText = `*** OFFICIAL CHECKLIST FOR ${activeSkillName} ***
 You MUST evaluate EACH of the following ${checklist.length} criteria. DO NOT SKIP ANY.
                   

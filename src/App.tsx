@@ -11,9 +11,12 @@ import { getAIService } from './services/ai/aiServiceRegistry';
 import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
 import { parseDocument } from './services/documentService';
 import PdfUploaderModal from './components/admin/PdfUploaderModal';
+import RubricBuilderModal from './components/admin/RubricBuilderModal';
 import { ALL_FMS_SKILLS } from './data/fundamentalMovementSkillsData';
+import { useAuth } from './hooks/useAuth';
 
 const App: React.FC = () => {
+  const { user, teacherProfile, signInWithGoogle, signOut, updateTeacherProfile } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -71,6 +74,7 @@ const App: React.FC = () => {
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isSkillSelectorOpen, setIsSkillSelectorOpen] = useState(false);
+  const [isRubricBuilderOpen, setIsRubricBuilderOpen] = useState(false);
 
   // Sync Current Session ID if sessions change (e.g. deletion)
   useEffect(() => {
@@ -501,7 +505,8 @@ const App: React.FC = () => {
         contextAnalysisFrames,
         skillContext,
         isVerifying,
-        currentSessionId
+        currentSessionId,
+        teacherProfile
       );
 
       const botMessage: Message = {
@@ -609,97 +614,38 @@ const App: React.FC = () => {
         onSwitchSession={setCurrentSessionId}
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
+        onRenameSession={(id, title) => handleUpdateCurrentSession(messages, title)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        user={user}
+        teacherProfile={teacherProfile}
+        signInWithGoogle={signInWithGoogle}
+        signOut={signOut}
+        onOpenSettings={() => setIsRubricBuilderOpen(true)}
       />
 
       <div className="flex-1 flex flex-col h-full relative bg-white dark:bg-slate-950">
-        {/* Header */}
-        <div className="bg-white/80 dark:bg-slate-950/70 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800/70 p-4 shrink-0 flex items-center justify-between z-30 w-full relative">
-          <div className="flex items-center gap-2">
-            {/* Mobile Toggle */}
+        
+        {/* Minimalist Floating Top Bar */}
+        <div className="absolute top-0 left-0 right-0 z-30 p-3 md:p-4 flex items-center justify-between pointer-events-none">
+          {/* Left: Mobile Sidebar Toggle */}
+          <div className="pointer-events-auto">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="md:hidden p-3 -ml-1 mr-1 text-slate-700 dark:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 rounded-xl transition-colors"
-              aria-label="Toggle History"
+              className="md:hidden p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+              aria-label="Toggle Menu"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
             </button>
-
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200/60 dark:shadow-none ring-1 ring-indigo-500/20">
-              <span className="text-2xl">🤸‍♂️</span>
-            </div>
-            <div>
-              <h1 className="font-bold text-xl text-slate-800 dark:text-white hidden sm:block">
-                SG PE Chatbot
-              </h1>
-              <h1 className="font-bold text-lg text-slate-800 dark:text-white sm:hidden">SG PE Chatbot</h1>
-            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <button
-                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                className="px-3 py-2 rounded-xl border border-slate-200/70 dark:border-slate-700/70 bg-white/70 dark:bg-slate-900/40 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-white dark:hover:bg-slate-900 transition-colors"
-              >
-                <img
-                  src={`/assets/model-icons/${selectedModel === 'nemotron' ? 'nvidia' : selectedModel}.png`}
-                  alt={selectedModel}
-                  className="w-5 h-5 object-contain"
-                />
-                <span className="hidden sm:inline">
-                  {selectedModel === 'nemotron' ? 'Nemotron 12B' :
-                    selectedModel === 'gemini' ? 'Gemini 3 Flash' :
-                      'Bedrock'}
-                </span>
-                <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {isModelDropdownOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setIsModelDropdownOpen(false)}
-                  />
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200/70 dark:border-slate-700/70 overflow-hidden z-20 flex flex-col p-1 animate-scale-in">
-                    {[
-                      { id: 'nemotron', name: 'Nemotron 12B', icon: 'nvidia.png' },
-                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
-                      { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' }
-                    ].map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => {
-                          setSelectedModel(model.id as any);
-                          setIsModelDropdownOpen(false);
-                        }}
-                        className={`w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-3 ${selectedModel === model.id
-                          ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-slate-200'
-                          }`}
-                      >
-                        <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-5 h-5 object-contain" />
-                        {model.name}
-                        {selectedModel === model.id && (
-                          <svg className="w-4 h-4 ml-auto text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
+          {/* Right: Actions Cluster */}
+          <div className="flex items-center gap-2 pointer-events-auto">
             <button
               onClick={() => setIsPdfModalOpen(true)}
-              className="px-3 py-2 rounded-xl border border-indigo-200/60 dark:border-indigo-900/50 bg-indigo-50/70 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium flex items-center gap-2 hover:bg-indigo-100/80 dark:hover:bg-indigo-800/40 transition-colors shadow-sm"
+              className="px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur text-slate-600 dark:text-slate-300 text-sm font-medium flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors shadow-sm"
               title="Add Syllabus PDF"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -710,15 +656,64 @@ const App: React.FC = () => {
 
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-full hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors text-slate-700 dark:text-slate-300"
+              className="p-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors text-slate-600 dark:text-slate-300 shadow-sm"
             >
               {isDarkMode ? '☀️' : '🌙'}
             </button>
+
+            <div className="relative">
+              <button
+                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                className="px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <img
+                  src={`/assets/model-icons/${selectedModel === 'nemotron' ? 'nvidia' : selectedModel}.png`}
+                  alt={selectedModel}
+                  className="w-4 h-4 object-contain"
+                />
+                <span className="hidden sm:inline">
+                  {selectedModel === 'nemotron' ? 'Nemotron' :
+                    selectedModel === 'gemini' ? 'Gemini 3 Flash' :
+                      'Bedrock'}
+                </span>
+                <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {isModelDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsModelDropdownOpen(false)} />
+                  <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-slate-200 dark:border-zinc-800 overflow-hidden z-20 flex flex-col p-1">
+                    {[
+                      { id: 'nemotron', name: 'Nemotron', icon: 'nvidia.png' },
+                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
+                      { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' }
+                    ].map((model) => (
+                      <button
+                        key={model.id}
+                        onClick={() => {
+                          setSelectedModel(model.id as any);
+                          setIsModelDropdownOpen(false);
+                        }}
+                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${selectedModel === model.id
+                          ? 'bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-slate-100'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                          }`}
+                      >
+                        <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-4 h-4 object-contain" />
+                        {model.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Main Chat Area */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-950">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth bg-white dark:bg-zinc-900 pt-16 md:pt-6">
           <div className="max-w-4xl mx-auto min-h-full flex flex-col justify-end">
 
             {/* Spacer for empty chat to push welcome down? No, standard flow */}
@@ -794,6 +789,13 @@ const App: React.FC = () => {
       <PdfUploaderModal
         isOpen={isPdfModalOpen}
         onClose={() => setIsPdfModalOpen(false)}
+      />
+
+      <RubricBuilderModal
+        isOpen={isRubricBuilderOpen}
+        onClose={() => setIsRubricBuilderOpen(false)}
+        profile={teacherProfile}
+        onSave={(updatedProfile) => updateTeacherProfile(updatedProfile)}
       />
 
       {/* Manual Skill Selector Modal */}
