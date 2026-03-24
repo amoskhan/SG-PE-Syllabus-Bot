@@ -781,7 +781,11 @@ const App: React.FC = () => {
             {/* Model Selector Row */}
 
 
-            <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading || isProcessing} />
+            <ChatInput 
+              onSendMessage={handleSendMessage} 
+              isLoading={isLoading || isProcessing} 
+              selectedModel={selectedModel}
+            />
           </div>
         </div>
       </div>
