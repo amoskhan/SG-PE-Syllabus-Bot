@@ -12,7 +12,8 @@ export type AIServiceFunction = (
     mediaAttachments?: MediaData[],
     skillName?: string,
     isVerified?: boolean,
-    sessionId?: string
+    sessionId?: string,
+    teacherProfile?: import('../../types').TeacherProfile | null
 ) => Promise<ChatResponse & { tokenUsage?: number }>;
 
 // Wrapper for Bedrock to match the interface (ignoring extra args)
@@ -21,19 +22,19 @@ const bedrockWrapper: AIServiceFunction = async (history, currentMessage) => {
 };
 
 // Wrapper for Gemini to convert standard history to Google Content format
-const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId) => {
+const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile) => {
     // Convert { role: 'user'|'assistant', content: string }[] to Google Content[]
     const googleHistory: Content[] = history.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }] as import('@google/genai').Part[]
     }));
 
-    return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId);
+    return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile);
 };
 
 // Wrapper for OpenRouter (Nemotron)
-const nemotronWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId) => {
-    return sendMessageToOpenRouter(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, 'nemotron', sessionId);
+const nemotronWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile) => {
+    return sendMessageToOpenRouter(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, 'nemotron', sessionId, teacherProfile);
 };
 
 // Start with a registry that returns the FUNCTION
