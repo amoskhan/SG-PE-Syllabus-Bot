@@ -41,20 +41,7 @@ async function extractPdfText(dataBuffer: Buffer): Promise<{ text: string; metho
     }
   } catch (_) {}
 
-  // Strategy 3: raw text extraction from PDF (emergency fallback)
-  try {
-    const rawText = dataBuffer.toString('latin1');
-    // Extract text between BT (Begin Text) and ET (End Text) PDF operators
-    const matches = rawText.match(/BT[\s\S]*?ET/g) || [];
-    const extracted = matches
-      .map(block => block.replace(/BT|ET|Tf|Td|TD|Tm|T\*|Tj|TJ|'|"/g, ' '))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (extracted.length > 100) {
-      return { text: extracted, method: 'raw PDF BT/ET extraction' };
-    }
-  } catch (_) {}
+  // Strategy 3 is removed. Raw PDF parsing without decompression produces binary garbage.
 
   throw new Error(
     'Could not extract text from PDF. All 3 strategies failed. ' +
