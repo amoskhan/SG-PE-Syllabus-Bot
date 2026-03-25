@@ -26,6 +26,7 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
   }>({ beginning: [], developing: [], competent: [], accomplished: [] });
 
   const [draggedItem, setDraggedItem] = useState<{ sourceLoc: string; index: number; text: string } | null>(null);
+  const [activeTouchItem, setActiveTouchItem] = useState<{ index: number; text: string } | null>(null);
 
   // Load skill data
   useEffect(() => {
@@ -141,6 +142,47 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
     setDraggedItem(null);
   };
 
+  const handleTouchAssign = (level: 'beginning' | 'developing' | 'competent' | 'accomplished', groupId?: string) => {
+    if (!activeTouchItem) return;
+    
+    const index = activeTouchItem.index;
+
+    // Deep clone state
+    setLevels(prevLevels => {
+      const nextLevels = {
+        beginning: prevLevels.beginning.map(g => ({ ...g, originalCriteriaIndices: [...g.originalCriteriaIndices] })),
+        developing: prevLevels.developing.map(g => ({ ...g, originalCriteriaIndices: [...g.originalCriteriaIndices] })),
+        competent: prevLevels.competent.map(g => ({ ...g, originalCriteriaIndices: [...g.originalCriteriaIndices] })),
+        accomplished: prevLevels.accomplished.map(g => ({ ...g, originalCriteriaIndices: [...g.originalCriteriaIndices] }))
+      };
+
+      let targetGroup;
+      if (groupId) {
+        targetGroup = nextLevels[level].find(g => g.id === groupId);
+      } else if (nextLevels[level].length > 0) {
+        targetGroup = nextLevels[level][0];
+      }
+
+      if (targetGroup) {
+        if (!targetGroup.originalCriteriaIndices.includes(index)) {
+          targetGroup.originalCriteriaIndices.push(index);
+          targetGroup.originalCriteriaIndices.sort((a, b) => a - b);
+        }
+      } else {
+         // Create a default group if none exists
+         nextLevels[level].push({
+            id: 'touch-' + level + '-' + Date.now(),
+            label: 'Group 1',
+            originalCriteriaIndices: [index]
+         });
+      }
+
+      return nextLevels;
+    });
+
+    setActiveTouchItem(null);
+  };
+
   const addGroup = (level: 'beginning' | 'developing' | 'competent' | 'accomplished') => {
     const labelName = prompt('Enter a label for this criteria group (e.g., "Pray", "Setup", "Follow Through"):');
     if (!labelName || !labelName.trim()) return;
@@ -198,12 +240,12 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
   const standardCriteria = getSkillChecklist(selectedSkill);
 
   const renderLevelColumn = (levelId: 'beginning' | 'developing' | 'competent' | 'accomplished', title: string) => (
-    <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 min-w-[280px] lg:min-w-0 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 md:p-4 border border-slate-200 dark:border-slate-700 flex flex-col h-full overflow-hidden shrink-0 lg:shrink">
       <div className="flex justify-between items-center mb-3">
-        <h4 className="font-bold text-slate-700 dark:text-slate-200">{title}</h4>
+        <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm md:text-base">{title}</h4>
         <button 
           onClick={() => addGroup(levelId)}
-          className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 p-1 px-3 rounded text-xs font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
+          className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 p-1 px-3 rounded text-[10px] md:text-xs font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
         >
           + Add Label
         </button>
@@ -252,20 +294,20 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-[90rem] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col h-[90vh] animate-scale-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-[90rem] rounded-2xl md:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col h-[95vh] md:h-[90vh] animate-scale-in">
         
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-white/80 dark:bg-slate-950/70">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-            <span className="text-2xl">⚙️</span>
+        <div className="p-3 md:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between shrink-0 bg-white/80 dark:bg-slate-950/70 gap-3">
+          <h2 className="text-lg md:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2 md:gap-3">
+            <span className="text-xl md:text-2xl">⚙️</span>
             Custom School Rubrics
           </h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto">
             <select
               value={selectedSkill}
               onChange={(e) => setSelectedSkill(e.target.value)}
-              className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200"
+              className="flex-1 md:flex-none px-3 md:py-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-xs md:text-sm font-medium text-slate-700 dark:text-slate-200"
             >
               {ALL_FMS_SKILLS.map(skill => (
                 <option key={skill} value={skill}>{skill}</option>
@@ -273,9 +315,9 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
             </select>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors"
+              className="p-1.5 md:p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -283,11 +325,11 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
         </div>
 
         {/* Builder Area */}
-        <div className="flex-1 flex overflow-hidden p-4 gap-4 bg-slate-100/50 dark:bg-slate-950/50">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2 md:p-4 gap-2 md:gap-4 bg-slate-100/50 dark:bg-slate-950/50">
           
           {/* Unassigned Pool */}
           <div 
-            className="w-1/4 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden"
+            className="w-full lg:w-1/4 h-1/3 lg:h-full bg-white dark:bg-slate-900 rounded-xl md:rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden shrink-0"
             onDragOver={handleDragOver}
             onDrop={handleDropToUnassigned}
           >
@@ -311,18 +353,55 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
 
                 return standardCriteria.map((text, index) => {
                   const isAssigned = assignedIndices.has(index);
+                  const isActive = activeTouchItem?.index === index;
+
                   return (
                     <div
                       key={index}
                       draggable
                       onDragStart={(e) => handleDragStart(e, 'unassigned', index, text)}
-                      className={`bg-white dark:bg-slate-800 p-3.5 rounded-xl border ${isAssigned ? 'border-indigo-100 dark:border-slate-700 shadow-none' : 'border-slate-200 dark:border-slate-700 shadow-sm'} cursor-move hover:border-indigo-400 hover:shadow-md transition-all group shrink-0 flex items-start gap-2`}
+                      className={`relative bg-white dark:bg-slate-800 p-3 rounded-xl border ${isAssigned ? 'border-indigo-100 dark:border-slate-800 opacity-80' : 'border-slate-200 dark:border-slate-700 shadow-sm'} ${isActive ? 'ring-2 ring-indigo-500 border-transparent shadow-lg' : ''} cursor-move hover:border-indigo-400 hover:shadow-md transition-all group shrink-0 flex flex-col gap-2`}
                     >
-                      <span className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-400 shrink-0 mt-0.5 select-none text-xs">⋮⋮</span>
-                      <p className={`text-sm font-medium ${isAssigned ? 'text-slate-500 dark:text-slate-400 opacity-90' : 'text-slate-700 dark:text-slate-200'} leading-snug flex-1 break-words`}>
-                        {text.replace(/^\d+\.\s*/, '')}
-                      </p>
-                      {isAssigned && <div className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-900/40 text-indigo-500 dark:text-indigo-400 font-bold text-[10px]" title="Assigned to at least one label">✓</div>}
+                      <div className="flex items-start gap-2">
+                        <span className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-400 shrink-0 mt-0.5 select-none text-xs">⋮⋮</span>
+                        <p className={`text-sm font-medium ${isAssigned ? 'text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200'} leading-snug flex-1 break-words`} onClick={() => setActiveTouchItem(isActive ? null : { index, text })}>
+                          {text.replace(/^\d+\.\s*/, '')}
+                        </p>
+                        {isAssigned && <div className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-900/40 text-indigo-500 dark:text-indigo-400 font-bold text-[10px]">✓</div>}
+                      </div>
+
+                      {/* Touch Quick Actions */}
+                      {isActive && (
+                        <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-slate-100 dark:border-slate-700 animate-fade-in lg:hidden">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Assign to:</span>
+                          
+                          {(['beginning', 'developing', 'competent', 'accomplished'] as const).map(lKey => (
+                            <div key={lKey} className="flex flex-col gap-1">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">{lKey}</span>
+                              <div className="flex flex-wrap gap-1">
+                                {levels[lKey].length === 0 ? (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleTouchAssign(lKey); }}
+                                    className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] rounded hover:bg-slate-200"
+                                  >
+                                    + Add to {lKey.toUpperCase()}
+                                  </button>
+                                ) : (
+                                  levels[lKey].map(g => (
+                                    <button
+                                      key={g.id}
+                                      onClick={(e) => { e.stopPropagation(); handleTouchAssign(lKey, g.id); }}
+                                      className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-[10px] rounded hover:bg-indigo-100 border border-indigo-100/50"
+                                    >
+                                      {g.label}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 });
@@ -332,7 +411,7 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
           </div>
 
           {/* Grading Levels Matrix */}
-          <div className="flex-1 flex gap-4 overflow-x-auto">
+          <div className="flex-1 flex gap-2 md:gap-4 overflow-x-auto pb-2 scrollbar-thin">
             {renderLevelColumn('beginning', 'Level: Beginning')}
             {renderLevelColumn('developing', 'Level: Developing')}
             {renderLevelColumn('competent', 'Level: Competent')}

@@ -33,42 +33,103 @@ export const useAuth = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadTeacherProfile = (authUser: User) => {
-    // Load local rubrics keyed by the user ID to avoid DB schema changes.
-    // In a prod app, this would be fetched from a 'teacher_profiles' table.
-    const storageKey = `sg_pe_profile_${authUser.id}`;
-    const saved = localStorage.getItem(storageKey);
-    
-    let profile: TeacherProfile = {
-      id: authUser.id,
-      email: authUser.email,
-      name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0],
-      avatar_url: authUser.user_metadata?.avatar_url,
-      customRubrics: {}
-    };
+  const loadTeacherProfile = async (authUser: User) => {
+    setLoading(true);
+    try {
+      // 1. Try to fetch from Supabase
+      const { data, error } = await supabase
+        .from('teacher_profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle();
 
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Merge saved rubrics with current user info
-        profile = { ...profile, customRubrics: parsed.customRubrics || {} };
-      } catch (e) {
-        console.error("Failed to parse teacher profile from localStorage", e);
+      if (error) {
+         console.error("Error fetching teacher profile from Supabase", error);
       }
-    } else {
-      // Save initial profile
-      localStorage.setItem(storageKey, JSON.stringify(profile));
-    }
 
-    setTeacherProfile(profile);
-    setLoading(false);
+      const storageKey = `sg_pe_profile_${authUser.id}`;
+      const localSaved = localStorage.getItem(storageKey);
+      let localProfile: TeacherProfile | null = null;
+
+      if (localSaved) {
+        try {
+          localProfile = JSON.parse(localSaved);
+        } catch (e) {
+          console.error("Failed to parse local profile", e);
+        }
+      }
+
+      let profile: TeacherProfile;
+
+      if (data) {
+        // We have data in Supabase - this is the source of truth
+        profile = {
+          id: data.id,
+          email: data.email,
+          name: data.name,
+          avatar_url: data.avatar_url,
+          customRubrics: data.custom_rubrics || {}
+        };
+        
+        // Sync local storage just in case (offline support)
+        localStorage.setItem(storageKey, JSON.stringify(profile));
+      } else {
+        // No data in Supabase - check if we need to migrate from local storage
+        profile = localProfile || {
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0],
+          avatar_url: authUser.user_metadata?.avatar_url,
+          customRubrics: {}
+        };
+
+        // Create the profile in Supabase
+        const { error: insertError } = await supabase
+          .from('teacher_profiles')
+          .upsert({
+            id: profile.id,
+            email: profile.email,
+            name: profile.name,
+            avatar_url: profile.avatar_url,
+            custom_rubrics: profile.customRubrics
+          });
+
+        if (insertError) {
+          console.error("Failed to push initial profile to Supabase", insertError);
+        }
+      }
+
+      setTeacherProfile(profile);
+    } catch (err) {
+      console.error("Unexpected error loading teacher profile", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const updateTeacherProfile = (updatedProfile: TeacherProfile) => {
+  const updateTeacherProfile = async (updatedProfile: TeacherProfile) => {
     if (!user) return;
+    
+    // Update local state and storage
+    setTeacherProfile(updatedProfile);
     const storageKey = `sg_pe_profile_${user.id}`;
     localStorage.setItem(storageKey, JSON.stringify(updatedProfile));
-    setTeacherProfile(updatedProfile);
+
+    // Consistently push to Supabase
+    const { error } = await supabase
+      .from('teacher_profiles')
+      .upsert({
+        id: updatedProfile.id,
+        email: updatedProfile.email,
+        name: updatedProfile.name,
+        avatar_url: updatedProfile.avatar_url,
+        custom_rubrics: updatedProfile.customRubrics,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) {
+       console.error("Failed to sync profile change to Supabase", error);
+    }
   };
 
   const signInWithGoogle = async () => {
