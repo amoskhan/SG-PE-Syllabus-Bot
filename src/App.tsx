@@ -14,6 +14,7 @@ import PdfUploaderModal from './components/admin/PdfUploaderModal';
 import RubricBuilderModal from './components/admin/RubricBuilderModal';
 import { ALL_FMS_SKILLS } from './data/fundamentalMovementSkillsData';
 import { useAuth } from './hooks/useAuth';
+import { supabase } from './services/db/supabaseClient';
 
 const App: React.FC = () => {
   const { user, teacherProfile, signInWithGoogle, signOut, updateTeacherProfile } = useAuth();
@@ -30,13 +31,12 @@ const App: React.FC = () => {
     timestamp: new Date(),
   });
 
-  // State: Sessions Dictionary
+  // 1. Initial Load from LocalStorage (Offline/Instant UI)
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Revive Date objects
         return parsed.map((s: any) => ({
           ...s,
           createdAt: new Date(s.createdAt),
@@ -45,9 +45,8 @@ const App: React.FC = () => {
         }));
       }
     } catch (e) {
-      console.error("Failed to load sessions:", e);
+      console.error("Failed to load local sessions:", e);
     }
-    // Default: One empty session
     const initialId = Date.now().toString();
     return [{
       id: initialId,
@@ -63,6 +62,70 @@ const App: React.FC = () => {
     return '';
   });
 
+  // 2. Fetch from Supabase on Login and handle Migration
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchSessions = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chat_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false });
+
+        if (error) {
+           console.error("Error fetching sessions from Supabase", error);
+           return;
+        }
+
+        if (data && data.length > 0) {
+          // We have cloud data - this is the source of truth
+          const cloudSessions: ChatSession[] = data.map(s => ({
+            id: s.id,
+            title: s.title,
+            messages: (s.messages as any[]).map(m => ({
+               ...m,
+               timestamp: new Date(m.timestamp)
+            })),
+            createdAt: new Date(s.created_at),
+            updatedAt: new Date(s.updated_at)
+          }));
+          
+          setSessions(cloudSessions);
+        } else {
+          // No cloud data - check if we should migrate from local storage
+          const localSaved = localStorage.getItem(STORAGE_KEY);
+          if (localSaved) {
+            try {
+              const parsed: any[] = JSON.parse(localSaved);
+              if (parsed.length > 0) {
+                console.log("Migrating local history to Supabase...");
+                for (const sess of parsed) {
+                  await supabase.from('chat_sessions').insert({
+                    user_id: user.id,
+                    title: sess.title,
+                    messages: sess.messages, // media data already stripped in the sync effect
+                    created_at: sess.createdAt,
+                    updated_at: sess.updatedAt
+                  });
+                }
+                // Refresh to get back the real IDs
+                fetchSessions();
+              }
+            } catch (e) {
+              console.error("Migration failed", e);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Unexpected error in fetchSessions", err);
+      }
+    };
+
+    fetchSessions();
+  }, [user]);
+
   // Derived State: Current Messages
   const currentSession = sessions.find(s => s.id === currentSessionId);
   const messages = currentSession ? currentSession.messages : [];
@@ -76,17 +139,16 @@ const App: React.FC = () => {
   const [isSkillSelectorOpen, setIsSkillSelectorOpen] = useState(false);
   const [isRubricBuilderOpen, setIsRubricBuilderOpen] = useState(false);
 
-  // Sync Current Session ID if sessions change (e.g. deletion)
+  // Sync Current Session ID if sessions change
   useEffect(() => {
     if (!sessions.find(s => s.id === currentSessionId) && sessions.length > 0) {
       setCurrentSessionId(sessions[0].id);
     } else if (sessions.length === 0) {
-      // Force create new if empty
       handleNewSession();
     }
   }, [sessions, currentSessionId]);
 
-  // Save Persistence
+  // Persistence to LocalStorage (Instant Feedback)
   useEffect(() => {
     // Strip heavy data before saving
     const safeSessions = sessions.map(s => ({
@@ -111,7 +173,7 @@ const App: React.FC = () => {
 
 
   // Session Management Actions
-  const handleNewSession = () => {
+  const handleNewSession = async () => {
     const newId = Date.now().toString();
     const newSession: ChatSession = {
       id: newId,
@@ -120,32 +182,75 @@ const App: React.FC = () => {
       createdAt: new Date(),
       updatedAt: new Date()
     };
+    
     setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newId);
-    if (window.innerWidth < 768) setIsSidebarOpen(false); // Close on mobile
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+
+    // Sync to Supabase
+    if (user) {
+      const { data, error } = await supabase.from('chat_sessions').insert({
+        user_id: user.id,
+        title: newSession.title,
+        messages: newSession.messages
+      }).select().single();
+      
+      if (!error && data) {
+         // Update state with the real UUID from database
+         setSessions(prev => prev.map(s => s.id === newId ? { ...s, id: data.id } : s));
+         setCurrentSessionId(data.id);
+      }
+    }
   };
 
-  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Are you sure you want to delete this chat?")) {
       const remaining = sessions.filter(s => s.id !== sessionId);
       setSessions(remaining);
-      // Auto-switch handled by useEffect
+      
+      if (user && sessionId.includes('-')) { // UUIDs have hyphens, local IDs are numeric Date.now()
+         await supabase.from('chat_sessions').delete().eq('id', sessionId);
+      }
     }
   };
 
+  const syncSessionToSupabase = async (session: ChatSession) => {
+    if (!user || !session.id.includes('-')) return; // Only sync persistent UUID sessions
+    
+    // Strip data for cloud storage
+    const cloudMessages = session.messages.map(m => ({
+      ...m,
+      media: m.media?.map(m => ({ ...m, data: '', thumbnailData: undefined })),
+      analysisFrames: []
+    }));
+
+    await supabase.from('chat_sessions').update({
+       title: session.title,
+       messages: cloudMessages,
+       updated_at: new Date().toISOString()
+    }).eq('id', session.id);
+  };
+
   const handleUpdateCurrentSession = (updatedMessages: Message[], newTitle?: string) => {
+    let updated: ChatSession | undefined;
+    
     setSessions(prev => prev.map(s => {
       if (s.id === currentSessionId) {
-        return {
+        updated = {
           ...s,
           messages: updatedMessages,
           title: newTitle || s.title,
           updatedAt: new Date()
         };
+        return updated;
       }
       return s;
     }));
+
+    if (updated) {
+       syncSessionToSupabase(updated);
+    }
   };
 
   // -------------------------------------------------------------------------------- //
