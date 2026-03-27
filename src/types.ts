@@ -36,6 +36,7 @@ export interface Message {
   isAmbiguous?: boolean; // Flag if AI is unsure and needs teacher review
   tokenUsage?: number; // Estimated tokens used for this response
   modelId?: string; // ID of the AI model that generated this message
+  hasMedia?: boolean; // NEW: Flag if the message/conversation context includes media
 }
 
 export interface ChatState {

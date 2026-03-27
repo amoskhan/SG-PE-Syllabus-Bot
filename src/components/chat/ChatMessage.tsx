@@ -15,6 +15,7 @@ interface ChatMessageProps {
 const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onShowAllSkills }) => {
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [showAllSkillsGrid, setShowAllSkillsGrid] = useState(false);
 
   const handleExportPdf = async () => {
     setIsGeneratingPdf(true);
@@ -96,20 +97,24 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                 <p className="whitespace-pre-wrap text-sm md:text-base">{message.text}</p>
               )}
 
-              {/* Skill Choices (4 Choices Flow) */}
+              {/* Interactive Choice Chips (General Navigation or Skill Selection) */}
               {isBot && message.text.includes('[[SKILL_CHOICES:') && (
                 <div className="mt-4 flex flex-col gap-2">
-                  <div className="text-[10px] uppercase tracking-wider font-bold text-indigo-500/80 mb-1">Select the correct skill:</div>
+                  <div className="text-[10px] uppercase tracking-wider font-bold text-indigo-500/80 mb-1">
+                    {message.hasMedia ? "Select the correct skill to analyze:" : "What would you like to explore next?"}
+                  </div>
+
+                  {/* The Suggested Chips */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {message.text.match(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/)?.[1].split(',').map((skill, idx) => {
-                      const trimmedSkill = skill.trim();
+                    {message.text.match(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/)?.[1].split(',').map((choice, idx) => {
+                      const trimmedChoice = choice.trim();
                       return (
                         <button
                           key={idx}
-                          onClick={() => onSelectSkill?.(trimmedSkill)}
+                          onClick={() => onSelectSkill?.(trimmedChoice)}
                           className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/40 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 border border-indigo-100 dark:border-indigo-800/50 rounded-xl text-sm font-medium text-indigo-700 dark:text-indigo-300 transition-all text-left flex items-center justify-between group"
                         >
-                          <span>{trimmedSkill}</span>
+                          <span>{trimmedChoice}</span>
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
@@ -118,16 +123,45 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                     })}
                   </div>
 
-                  {/* None of these button */}
-                  <button
-                    onClick={() => onShowAllSkills?.()}
-                    className="mt-1 text-xs text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 px-2 py-1 transition-colors group"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                    </svg>
-                    <span>None of these? Search all skills...</span>
-                  </button>
+                  {/* 'None of these' options - Only show for video analysis (skill guesses) */}
+                  {!showAllSkillsGrid && message.hasMedia ? (
+                    <button
+                      onClick={() => setShowAllSkillsGrid(true)}
+                      className="mt-1 text-xs text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 px-2 py-1 transition-colors group"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                      </svg>
+                      <span>None of these? Select from all 10 FMS skills...</span>
+                    </button>
+                  ) : (
+                    showAllSkillsGrid && (
+                      <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">All 10 Fundamental Movement Skills:</div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            'Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick',
+                            'Dribble with Feet', 'Dribble with Hands', 'Chest Pass', 'Bounce Pass',
+                            'Bounce', 'Above the Waist Catch'
+                          ].map((skill, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => onSelectSkill?.(skill)}
+                              className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium transition-all text-left"
+                            >
+                              {skill}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setShowAllSkillsGrid(false)}
+                          className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 uppercase font-bold"
+                        >
+                          ← Back to guesses
+                        </button>
+                      </div>
+                    )
+                  )}
                 </div>
               )}
 

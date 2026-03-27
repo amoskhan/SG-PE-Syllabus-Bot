@@ -588,7 +588,8 @@ const App: React.FC = () => {
       text: text || (mediaAttachments ? 'Analyze this movement' : ''),
       sender: Sender.USER,
       timestamp: new Date(),
-      media: mediaAttachments
+      media: mediaAttachments,
+      hasMedia: !!(mediaAttachments && mediaAttachments.length > 0) || currentMessages.some(m => m.media && m.media.length > 0)
     };
 
     // UPDATE STATE: Optimistic Update (Immediate)
@@ -696,7 +697,9 @@ const App: React.FC = () => {
         groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined,
         referenceImageURI: response.referenceImageURI,
         tokenUsage: response.tokenUsage,
-        modelId: selectedModel
+        modelId: selectedModel,
+        // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
+        hasMedia: newMessage.hasMedia || !!(contextPoseData && contextPoseData.length > 0)
       };
 
       const skillMatch = response.text.match(/(?:I believe this is a|this looks like a|I have detected a|Performance Analysis for) (?:\*\*|)?([^*:\n]+)(?:\*\*|:)?/i);
@@ -782,7 +785,15 @@ const App: React.FC = () => {
   };
 
   const handleSelectSkill = (skillName: string) => {
-    handleSendMessage(`Analyze ${skillName}`, undefined, { skillName: skillName, isVerified: true });
+    // Check if the current session has any media uploaded
+    const currentSession = sessions.find(s => s.id === currentSessionId);
+    const hasMedia = currentSession?.messages.some(m => m.media && m.media.length > 0);
+
+    if (hasMedia) {
+      handleSendMessage(`Analyze ${skillName}`, undefined, { skillName: skillName, isVerified: true });
+    } else {
+      handleSendMessage(`Tell me more about ${skillName}`);
+    }
   };
 
   return (
