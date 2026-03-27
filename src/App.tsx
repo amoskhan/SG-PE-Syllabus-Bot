@@ -23,6 +23,11 @@ const App: React.FC = () => {
 
   const STORAGE_KEY = 'sg_pe_syllabus_bot_history_v2'; // Changed key for new schema
 
+  // Maps temp numeric IDs -> real Supabase UUIDs, so pending syncs can be flushed
+  const tempToRealIdRef = React.useRef<Record<string, string>>({});
+  // Queue of sessions that need to be synced once their real UUID is known
+  const pendingSyncRef = React.useRef<ChatSession[]>([]);
+
   // DEFAULT WELCOME MESSAGE
   const getWelcomeMessage = (): Message => ({
     id: 'welcome-' + Date.now(),
@@ -80,7 +85,6 @@ const App: React.FC = () => {
         }
 
         if (data && data.length > 0) {
-          // We have cloud data - this is the source of truth
           const cloudSessions: ChatSession[] = data.map(s => ({
             id: s.id,
             title: s.title,
@@ -91,10 +95,17 @@ const App: React.FC = () => {
             createdAt: new Date(s.created_at),
             updatedAt: new Date(s.updated_at)
           }));
-          
-          setSessions(cloudSessions);
+
+          // Merge: keep any local sessions that are NOT yet in the cloud (temp IDs)
+          // These are sessions the user started before the cloud fetch returned.
+          setSessions(prev => {
+            const cloudIds = new Set(cloudSessions.map(s => s.id));
+            // Local sessions without a cloud counterpart (still have temp numeric IDs)
+            const unseenLocal = prev.filter(s => !cloudIds.has(s.id) && !s.id.includes('-'));
+            return [...unseenLocal, ...cloudSessions];
+          });
         } else {
-          // No cloud data - check if we should migrate from local storage
+          // No cloud data – migrate from localStorage
           const localSaved = localStorage.getItem(STORAGE_KEY);
           if (localSaved) {
             try {
@@ -105,12 +116,11 @@ const App: React.FC = () => {
                   await supabase.from('chat_sessions').insert({
                     user_id: user.id,
                     title: sess.title,
-                    messages: sess.messages, // media data already stripped in the sync effect
+                    messages: sess.messages,
                     created_at: sess.createdAt,
                     updated_at: sess.updatedAt
                   });
                 }
-                // Refresh to get back the real IDs
                 fetchSessions();
               }
             } catch (e) {
@@ -138,6 +148,12 @@ const App: React.FC = () => {
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isSkillSelectorOpen, setIsSkillSelectorOpen] = useState(false);
   const [isRubricBuilderOpen, setIsRubricBuilderOpen] = useState(false);
+
+  // Ref to always have the latest currentSessionId in async callbacks
+  const currentSessionIdRef = React.useRef(currentSessionId);
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
 
   // Sync Current Session ID if sessions change
   useEffect(() => {
@@ -187,18 +203,41 @@ const App: React.FC = () => {
     setCurrentSessionId(newId);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
 
-    // Sync to Supabase
+    // Sync to Supabase and swap temp ID for real UUID
     if (user) {
       const { data, error } = await supabase.from('chat_sessions').insert({
         user_id: user.id,
         title: newSession.title,
         messages: newSession.messages
       }).select().single();
-      
+
       if (!error && data) {
-         // Update state with the real UUID from database
-         setSessions(prev => prev.map(s => s.id === newId ? { ...s, id: data.id } : s));
-         setCurrentSessionId(data.id);
+        const realId = data.id;
+        // Record the mapping so pending syncs can use the real ID
+        tempToRealIdRef.current[newId] = realId;
+
+        // Swap temp ID for real UUID in state and ref
+        setSessions(prev => prev.map(s => s.id === newId ? { ...s, id: realId } : s));
+        if (currentSessionIdRef.current === newId) {
+          currentSessionIdRef.current = realId;
+          setCurrentSessionId(realId);
+        }
+
+        // Flush any messages that were queued while waiting for the real UUID
+        const queued = pendingSyncRef.current.filter(s => s.id === newId);
+        pendingSyncRef.current = pendingSyncRef.current.filter(s => s.id !== newId);
+        for (const pending of queued) {
+          const cloudMessages = pending.messages.map(m => ({
+            ...m,
+            media: m.media?.map(med => ({ ...med, data: '', thumbnailData: undefined })),
+            analysisFrames: []
+          }));
+          await supabase.from('chat_sessions').update({
+            title: pending.title,
+            messages: cloudMessages,
+            updated_at: new Date().toISOString()
+          }).eq('id', realId);
+        }
       }
     }
   };
@@ -216,37 +255,56 @@ const App: React.FC = () => {
   };
 
   const syncSessionToSupabase = async (session: ChatSession) => {
-    if (!user || !session.id.includes('-')) return; // Only sync persistent UUID sessions
-    
-    // Strip data for cloud storage
+    if (!user) return;
+
+    // Resolve temp IDs to real UUIDs if the mapping is known
+    const resolvedId = tempToRealIdRef.current[session.id] || session.id;
+
+    if (!resolvedId.includes('-')) {
+      // Real UUID not yet available – queue this sync to flush after Supabase responds
+      console.log(`⏳ Queuing sync for temp session ${session.id} until real UUID is assigned`);
+      // Replace any existing queued entry for this session with the latest state
+      pendingSyncRef.current = [
+        ...pendingSyncRef.current.filter(s => s.id !== session.id),
+        session
+      ];
+      return;
+    }
+
+    // Strip heavy data for cloud storage
     const cloudMessages = session.messages.map(m => ({
       ...m,
-      media: m.media?.map(m => ({ ...m, data: '', thumbnailData: undefined })),
+      media: m.media?.map(med => ({ ...med, data: '', thumbnailData: undefined })),
       analysisFrames: []
     }));
 
-    await supabase.from('chat_sessions').update({
+    const { error } = await supabase.from('chat_sessions').update({
        title: session.title,
        messages: cloudMessages,
        updated_at: new Date().toISOString()
-    }).eq('id', session.id);
+    }).eq('id', resolvedId);
+
+    if (error) {
+      console.error("Failed to sync session to Supabase:", error);
+    }
   };
 
   const handleUpdateCurrentSession = (updatedMessages: Message[], newTitle?: string) => {
     let updated: ChatSession | undefined;
-    
-    setSessions(prev => prev.map(s => {
-      if (s.id === currentSessionId) {
-        updated = {
-          ...s,
-          messages: updatedMessages,
-          title: newTitle || s.title,
-          updatedAt: new Date()
-        };
-        return updated;
-      }
-      return s;
-    }));
+
+    setSessions(prev => {
+      const session = prev.find(s => s.id === currentSessionId);
+      if (!session) return prev;
+
+      updated = {
+        ...session,
+        messages: updatedMessages,
+        title: newTitle || session.title,
+        updatedAt: new Date()
+      };
+
+      return prev.map(s => s.id === currentSessionId ? updated : s);
+    });
 
     if (updated) {
        syncSessionToSupabase(updated);
@@ -386,15 +444,27 @@ const App: React.FC = () => {
       }
 
       // Final Update to the Session Message (Visuals)
-      setSessions(prev => prev.map(s => ({
-        ...s,
-        messages: s.messages.map(m => {
-          if (m.id === messageId) {
-            return { ...m, poseData: poseData, analysisFrames: debugFrames };
+      // Use functional update with ref to ensure we're targeting the right session
+      setSessions(prev => {
+        const targetId = currentSessionIdRef.current;
+        const session = prev.find(s => s.id === targetId);
+        if (!session) return prev;
+
+        return prev.map(s => {
+          if (s.id === targetId) {
+            return {
+              ...s,
+              messages: s.messages.map(m => {
+                if (m.id === messageId) {
+                  return { ...m, poseData: poseData, analysisFrames: debugFrames };
+                }
+                return m;
+              })
+            };
           }
-          return m;
-        })
-      })));
+          return s;
+        });
+      });
 
       return { poseData, analysisFrames };
 
@@ -478,6 +548,10 @@ const App: React.FC = () => {
     let isVerifying = metadata?.isVerified;
     let skillContext = metadata?.skillName;
 
+    // Get fresh messages from state (not from closure)
+    const currentSessionNow = sessions.find(s => s.id === currentSessionIdRef.current);
+    const currentMessages = currentSessionNow?.messages || [];
+
     // Logic for Auto-Verification / Skill Correction
     if (!isVerifying && text) {
       const lowerText = text.toLowerCase().trim();
@@ -488,7 +562,7 @@ const App: React.FC = () => {
         'dribble with feet', 'dribble with hands', 'chest pass', 'bounce pass', 'bounce', 'above the waist catch',
       ];
       const matchedSkill = knownSkills.sort((a, b) => b.length - a.length).find(skill => lowerText.includes(skill));
-      const lastMsg = messages[messages.length - 1];
+      const lastMsg = currentMessages[currentMessages.length - 1];
       if (lastMsg && lastMsg.sender === Sender.BOT && lastMsg.text.includes("Phase 1")) {
         if (isConfirmation) {
           isVerifying = true;
@@ -518,11 +592,11 @@ const App: React.FC = () => {
     };
 
     // UPDATE STATE: Optimistic Update (Immediate)
-    const optimisticMessages = [...messages, newMessage];
+    const optimisticMessages = [...currentMessages, newMessage];
 
     // Auto-Title Logic on First Message
     let newTitle: string | undefined = undefined;
-    if (messages.length <= 1) { // 1 because "Welcome" message is already there
+    if (currentMessages.length <= 1) { // 1 because "Welcome" message is already there
       if (text && text.trim().length > 0) {
         newTitle = text.substring(0, 30) + (text.length > 30 ? '...' : '');
       } else if (skillContext) {
@@ -551,19 +625,19 @@ const App: React.FC = () => {
       }
 
       if (!contextPoseData || !contextAnalysisFrames) {
-        for (let i = messages.length - 1; i >= 0; i--) {
-          if (!contextPoseData && messages[i].poseData && messages[i].poseData!.length > 0) {
-            contextPoseData = messages[i].poseData;
+        for (let i = currentMessages.length - 1; i >= 0; i--) {
+          if (!contextPoseData && currentMessages[i].poseData && currentMessages[i].poseData!.length > 0) {
+            contextPoseData = currentMessages[i].poseData;
           }
           if (!contextAnalysisFrames) {
-            if (messages[i].analysisFrames && messages[i].analysisFrames!.length > 0) {
-              contextAnalysisFrames = messages[i].analysisFrames!.map(f => ({
+            if (currentMessages[i].analysisFrames && currentMessages[i].analysisFrames!.length > 0) {
+              contextAnalysisFrames = currentMessages[i].analysisFrames!.map(f => ({
                 mimeType: f.match(/^data:([^;]+);/)?.[1] || 'image/jpeg',
                 data: f
               }));
             }
-            else if (messages[i].media && messages[i].media!.length > 0) {
-              const images = messages[i].media!.filter(m => m.type === 'image');
+            else if (currentMessages[i].media && currentMessages[i].media!.length > 0) {
+              const images = currentMessages[i].media!.filter(m => m.type === 'image');
               if (images.length > 0) {
                 contextAnalysisFrames = images.map(img => ({
                   mimeType: img.mimeType,
@@ -576,7 +650,7 @@ const App: React.FC = () => {
         }
       }
 
-      const standardHistory = messages.map(m => {
+      const standardHistory = currentMessages.map(m => {
         let content = m.text;
         // Append document content to history if present
         if (m.media) {
@@ -610,7 +684,7 @@ const App: React.FC = () => {
         contextAnalysisFrames,
         skillContext,
         isVerifying,
-        currentSessionId,
+        currentSessionIdRef.current,
         teacherProfile
       );
 
@@ -629,25 +703,28 @@ const App: React.FC = () => {
       const detectedSkill = skillMatch ? skillMatch[1].trim() : undefined;
 
       // UPDATE STATE: Bot Response
-      // We need to fetch FRESH state (messages could have changed in background?) - for now using valid function closure or state setter updater
+      // Use functional update to ensure we're working with the latest state
       setSessions(prev => prev.map(s => {
-        if (s.id === currentSessionId) {
-          const updatedMsgs = [...s.messages]; // Note: s.messages here might be stale if we don't use functional update correctly. 
-          // Actually, we should rebuild from 'optimisticMessages' + botMessage
-          // But wait, 'optimisticMessages' is local.
-          // Let's just append to the specific session we are targeting.
-
-          // ...BUT we also updated the video message with predicted skill...
-          // Let's re-run that logic on the session's messages
-          const finalMessages = [...s.messages];
-          if (detectedSkill) {
-            for (let i = finalMessages.length - 1; i >= 0; i--) {
-              if (finalMessages[i].sender === Sender.USER && finalMessages[i].media?.some(m => m.type === 'video')) {
-                finalMessages[i] = { ...finalMessages[i], predictedSkill: detectedSkill };
-                break;
-              }
-            }
+        const targetId = currentSessionIdRef.current;
+        if (s.id === targetId) {
+          // Find the user message we just added and build on top of it
+          const userMsgIndex = s.messages.findIndex(m => m.id === newMessageId);
+          if (userMsgIndex === -1) {
+            // User message not found - prepend to existing messages safely
+            return {
+              ...s,
+              messages: [...s.messages, botMessage],
+              updatedAt: new Date()
+            };
           }
+
+          // Build final messages including detected skill on user message
+          const finalMessages = s.messages.map((m, idx) => {
+            if (idx === userMsgIndex && detectedSkill) {
+              return { ...m, predictedSkill: detectedSkill };
+            }
+            return m;
+          });
 
           return {
             ...s,
@@ -719,7 +796,12 @@ const App: React.FC = () => {
         onSwitchSession={setCurrentSessionId}
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
-        onRenameSession={(id, title) => handleUpdateCurrentSession(messages, title)}
+        onRenameSession={(id, title) => {
+          const session = sessions.find(s => s.id === id);
+          if (session) {
+            handleUpdateCurrentSession(session.messages, title);
+          }
+        }}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         user={user}
@@ -845,8 +927,15 @@ const App: React.FC = () => {
                 key={msg.id}
                 message={msg}
                 onUpdateMessage={(updatedMsg) => {
-                  const newMessages = messages.map(m => m.id === updatedMsg.id ? updatedMsg : m);
-                  handleUpdateCurrentSession(newMessages); // Use session updater
+                  // Use functional update to avoid stale closure
+                  setSessions(prev => {
+                    const session = prev.find(s => s.id === currentSessionIdRef.current);
+                    if (!session) return prev;
+                    const newMessages = session.messages.map(m => m.id === updatedMsg.id ? updatedMsg : m);
+                    const updated = { ...session, messages: newMessages, updatedAt: new Date() };
+                    syncSessionToSupabase(updated);
+                    return prev.map(s => s.id === currentSessionIdRef.current ? updated : s);
+                  });
                 }}
                 onAnalyze={handleAnalyzeConfirm}
                 onSelectSkill={handleSelectSkill}

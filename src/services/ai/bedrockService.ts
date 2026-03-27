@@ -1,11 +1,12 @@
+// Client-side service — calls the server-side /api/bedrock proxy.
+// AWS credentials never touch the browser; all auth happens server-side.
+// The system prompt (with PE syllabus data) is built client-side from already-bundled data files,
+// then sent to the API route — matching the same pattern used by geminiService.ts.
+
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT } from '../../data/fundamentalMovementSkillsData';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 
-// Get bearer token from environment - this is actually a base64-encoded pre-signed URL
-const BEDROCK_BEARER_TOKEN = import.meta.env.VITE_BEDROCK_BEARER_TOKEN || "";
-
-const SYSTEM_PROMPT = `
-You are the Singapore PE Syllabus Assistant, an expert on the Physical Education (PE) syllabus provided by the Ministry of Education (MOE) Singapore.
+const SYSTEM_PROMPT = `You are the Singapore PE Syllabus Assistant, an expert on the Physical Education (PE) syllabus provided by the Ministry of Education (MOE) Singapore.
 
 You have access to two primary sources of truth:
 1. **2024 PE Syllabus** (Primary, Secondary, Pre-University)
@@ -31,120 +32,47 @@ ${FUNDAMENTAL_MOVEMENT_SKILLS_TEXT}
 **Key Topics You Know:**
 - Goals & Core Values (Respect, Resilience, etc.)
 - Learning Areas: Physical Activity (Sports, Dance, Gym, Athletics, Swim), Outdoor Ed, Health & Safety.
-- Fundamental Movement Skills (Throwing, Catching, Dribbling, etc.) - **Use the FMS Checklist for these.**
+- Fundamental Movement Skills (Throwing, Catching, Dribbling, etc.) — **Use the FMS Checklist for these.**
 - CCE Developmental Milestones.
 - Pedagogy (Game-Based Approach, Place-Responsive, etc.).
 - Assessment (Holistic Development Profile).
 
-If you are unsure, state that it is not explicitly mentioned in the syllabus text.
-`;
+If you are unsure, state that it is not explicitly mentioned in the syllabus text.`;
 
 export interface ChatResponse {
     text: string;
-}
-
-// Decode base64 URL
-function decodeBedrockUrl(token: string): string {
-    // Remove 'bedrock-api-key-' prefix if present
-    const base64Part = token.replace(/^bedrock-api-key-/i, '');
-
-    // Decode base64
-    try {
-        const decodedUrl = atob(base64Part);
-        return decodedUrl;
-    } catch (error) {
-        console.error('Error decoding bearer token:', error);
-        throw new Error('Invalid bearer token format');
-    }
 }
 
 export const sendMessageToBedrock = async (
     history: { role: string; content: string }[],
     currentMessage: string
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
-    try {
-        if (!BEDROCK_BEARER_TOKEN) {
-            throw new Error("Bedrock bearer token not configured. Please add VITE_BEDROCK_BEARER_TOKEN to your .env.local file.");
+    const response = await fetch('/api/bedrock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            history,
+            message: currentMessage,
+            systemPrompt: SYSTEM_PROMPT,
+        }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+
+        if (response.status === 429) {
+            throw new Error('Bedrock usage limit exceeded (429). Please try again later.');
+        }
+        if (response.status === 403) {
+            throw new Error('Bedrock access denied (403). Check your IAM permissions for Bedrock in ap-southeast-1.');
         }
 
-        // Decode the pre-signed URL from the bearer token
-        let fullPresignedUrl = decodeBedrockUrl(BEDROCK_BEARER_TOKEN);
-        if (!fullPresignedUrl.startsWith('http')) {
-            fullPresignedUrl = `https://${fullPresignedUrl}`;
-        }
-
-        // Extract region from the signed URL (e.g. ap-southeast-1)
-        // Format checks for region in X-Amz-Credential OR host
-        // Default to ap-southeast-1 if finding fails, but usually signed URL has it.
-
-
-        // Use the local proxy path instead of the direct URL to avoid CORS
-        // Note: Can't modify the path as the AWS signature is tied to it
-        const urlObj = new URL(fullPresignedUrl);
-        const proxyUrl = `/bedrock-api${urlObj.search}`;
-
-        const messages = history.map((msg) => ({
-            role: msg.role === "user" ? "user" : "assistant",
-            content: [{ text: msg.content }],
-        }));
-
-        // Add current message
-        messages.push({
-            role: "user",
-            content: [{ text: currentMessage }],
-        });
-
-        // Prepare the request body for Bedrock Converse API
-        const requestBody = {
-            modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-            messages: messages,
-            system: [{ text: SYSTEM_PROMPT }],
-            inferenceConfig: {
-                maxTokens: 2048,
-                temperature: 0.7,
-                topP: 0.9,
-            },
-        };
-
-        // Make the API call using the proxy URL
-        const response = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Bedrock API error response:', errorText);
-
-            if (response.status === 429) {
-                throw new Error("Bedrock usage limit exceeded (429). Please try again later.");
-            }
-
-            throw new Error(`Bedrock API error (${response.status}): ${errorText}`);
-        }
-
-        const data = await response.json();
-
-        // Extract text from response
-        const outputMessage = data.output?.message;
-        const contentBlocks = outputMessage?.content || [];
-
-        let text = "";
-        for (const block of contentBlocks) {
-            if (block.text) {
-                text += block.text;
-            }
-        }
-
-        return {
-            text: text || "I couldn't generate a response. Please try again.",
-            tokenUsage: (data.usage?.inputTokens || 0) + (data.usage?.outputTokens || 0)
-        };
-    } catch (error) {
-        console.error("Bedrock API Error:", error);
-        throw error;
+        throw new Error(errorData.error || `Bedrock API error (${response.status})`);
     }
+
+    const data = await response.json();
+    return {
+        text: data.text || "I couldn't generate a response. Please try again.",
+        tokenUsage: data.tokenUsage,
+    };
 };
