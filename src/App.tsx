@@ -703,37 +703,35 @@ const App: React.FC = () => {
       const detectedSkill = skillMatch ? skillMatch[1].trim() : undefined;
 
       // UPDATE STATE: Bot Response
-      // Use functional update to ensure we're working with the latest state
-      setSessions(prev => prev.map(s => {
+      let sessionToSync: ChatSession | undefined;
+      setSessions(prev => {
         const targetId = currentSessionIdRef.current;
-        if (s.id === targetId) {
-          // Find the user message we just added and build on top of it
-          const userMsgIndex = s.messages.findIndex(m => m.id === newMessageId);
-          if (userMsgIndex === -1) {
-            // User message not found - prepend to existing messages safely
-            return {
+        return prev.map(s => {
+          if (s.id === targetId) {
+            const userMsgIndex = s.messages.findIndex(m => m.id === newMessageId);
+            let finalMessages = s.messages;
+
+            if (userMsgIndex !== -1 && detectedSkill) {
+              finalMessages = s.messages.map((m, idx) =>
+                idx === userMsgIndex ? { ...m, predictedSkill: detectedSkill } : m
+              );
+            }
+
+            sessionToSync = {
               ...s,
-              messages: [...s.messages, botMessage],
+              messages: [...finalMessages, botMessage],
               updatedAt: new Date()
             };
+            return sessionToSync;
           }
+          return s;
+        });
+      });
 
-          // Build final messages including detected skill on user message
-          const finalMessages = s.messages.map((m, idx) => {
-            if (idx === userMsgIndex && detectedSkill) {
-              return { ...m, predictedSkill: detectedSkill };
-            }
-            return m;
-          });
-
-          return {
-            ...s,
-            messages: [...finalMessages, botMessage],
-            updatedAt: new Date()
-          };
-        }
-        return s;
-      }));
+      // CRITICAL: Must trigger sync for the new bot message too
+      if (sessionToSync) {
+        syncSessionToSupabase(sessionToSync);
+      }
 
 
     } catch (error) {
