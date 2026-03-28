@@ -36,7 +36,6 @@ const App: React.FC = () => {
     timestamp: new Date(),
   });
 
-  // 1. Initial Load from LocalStorage (Offline/Instant UI)
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -61,6 +60,13 @@ const App: React.FC = () => {
       updatedAt: new Date()
     }];
   });
+
+  // Track the most recent sessions state to allow synchronous reading inside helpers
+  const sessionsRef = React.useRef<ChatSession[]>(sessions);
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
 
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
     if (sessions.length > 0) return sessions[0].id;
@@ -289,25 +295,40 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateCurrentSession = (updatedMessages: Message[], newTitle?: string) => {
-    setSessions(prev => {
-      const sessionId = currentSessionIdRef.current;
-      const session = prev.find(s => s.id === sessionId);
-      if (!session) return prev;
+  // A clean utility to safely update a session's state and trigger its associated sync side-effect 
+  // without coupling it to React's internal asynchronous rendering lifecycle.
+  const updateSessionAndSync = (
+    targetSessionId: string,
+    updater: (session: ChatSession) => ChatSession
+  ) => {
+    // 1. Resolve to permanent UUID if a mapping exists (to handle temp -> real ID transitions)
+    const resolvedId = tempToRealIdRef.current[targetSessionId] || targetSessionId;
 
-      const updated = {
-        ...session,
-        messages: updatedMessages,
-        title: newTitle || session.title,
-        updatedAt: new Date()
-      };
-
-      // CRITICAL: Sync must be triggered with the actual updated session
-      syncSessionToSupabase(updated);
-
-      return prev.map(s => s.id === sessionId ? updated : s);
-    });
+    // 2. Read synchronously from the latest stored ref (bypassing stale closures)
+    const currentSessions = sessionsRef.current;
+    const sessionToUpdate = currentSessions.find(s => s.id === resolvedId);
+    
+    if (!sessionToUpdate) return;
+    
+    // 3. Compute the new state strictly once
+    const updatedSession = updater(sessionToUpdate);
+    
+    // 4. Update the React UI
+    setSessions(prev => prev.map(s => s.id === resolvedId ? updatedSession : s));
+    
+    // 5. Fire external side-effect cleanly (isolated from React's state setter internals)
+    syncSessionToSupabase(updatedSession);
   };
+
+  const handleUpdateCurrentSession = (updatedMessages: Message[], newTitle?: string) => {
+    updateSessionAndSync(currentSessionIdRef.current, session => ({
+      ...session,
+      messages: updatedMessages,
+      title: newTitle || session.title,
+      updatedAt: new Date()
+    }));
+  };
+
 
   // -------------------------------------------------------------------------------- //
   //  Existing Logic Adapted for Multi-Session
@@ -391,6 +412,7 @@ const App: React.FC = () => {
   };
 
   const runBackgroundAnalysis = async (
+    originatingSessionId: string,
     messageId: string,
     files: File[],
     metadata?: { startTime?: number; endTime?: number }
@@ -442,27 +464,13 @@ const App: React.FC = () => {
       }
 
       // Final Update to the Session Message (Visuals)
-      // Use functional update with ref to ensure we're targeting the right session
-      setSessions(prev => {
-        const targetId = currentSessionIdRef.current;
-        const session = prev.find(s => s.id === targetId);
-        if (!session) return prev;
+      updateSessionAndSync(originatingSessionId, session => ({
+        ...session,
+        messages: session.messages.map(m => 
+          m.id === messageId ? { ...m, poseData: poseData, analysisFrames: debugFrames } : m
+        )
+      }));
 
-        const updated = {
-          ...session,
-          messages: session.messages.map(m => {
-            if (m.id === messageId) {
-              return { ...m, poseData: poseData, analysisFrames: debugFrames };
-            }
-            return m;
-          })
-        };
-
-        // Sync background analysis frames too
-        syncSessionToSupabase(updated);
-
-        return prev.map(s => s.id === targetId ? updated : s);
-      });
 
       return { poseData, analysisFrames };
 
@@ -543,11 +551,14 @@ const App: React.FC = () => {
     files?: File[],
     metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean }
   ) => {
+    // LOCK TARGET SESSION ID context to heavily prevent "chat-swapping" side effects
+    const originatingSessionId = currentSessionIdRef.current;
+    
     let isVerifying = metadata?.isVerified;
     let skillContext = metadata?.skillName;
 
     // Get fresh messages from state (not from closure)
-    const currentSessionNow = sessions.find(s => s.id === currentSessionIdRef.current);
+    const currentSessionNow = sessionsRef.current.find(s => s.id === originatingSessionId);
     const currentMessages = currentSessionNow?.messages || [];
 
     // Logic for Auto-Verification / Skill Correction
@@ -607,7 +618,12 @@ const App: React.FC = () => {
       }
     }
 
-    handleUpdateCurrentSession(optimisticMessages, newTitle);
+    updateSessionAndSync(originatingSessionId, session => ({
+      ...session,
+      messages: optimisticMessages,
+      title: newTitle || session.title,
+      updatedAt: new Date()
+    }));
 
     setIsLoading(true);
 
@@ -618,7 +634,7 @@ const App: React.FC = () => {
 
       // BACKGROUND: Run slow pose detection (Await here so AI waits, but UI is already updated)
       if (files && files.length > 0) {
-        const result = await runBackgroundAnalysis(newMessageId, files, metadata);
+        const result = await runBackgroundAnalysis(originatingSessionId, newMessageId, files, metadata);
         contextPoseData = result.poseData;
         contextAnalysisFrames = result.analysisFrames;
       }
@@ -704,11 +720,7 @@ const App: React.FC = () => {
       const detectedSkill = skillMatch ? skillMatch[1].trim() : undefined;
 
       // UPDATE STATE: Bot Response
-      setSessions(prev => {
-        const targetId = currentSessionIdRef.current;
-        const session = prev.find(s => s.id === targetId);
-        if (!session) return prev;
-
+      updateSessionAndSync(originatingSessionId, session => {
         const userMsgIndex = session.messages.findIndex(m => m.id === newMessageId);
         let finalMessages = session.messages;
 
@@ -718,16 +730,11 @@ const App: React.FC = () => {
           );
         }
 
-        const updatedSession = {
+        return {
           ...session,
           messages: [...finalMessages, botMessage],
           updatedAt: new Date()
         };
-
-        // CRITICAL: Sync must be triggered inside to ensure messages are saved
-        syncSessionToSupabase(updatedSession);
-
-        return prev.map(s => s.id === targetId ? updatedSession : s);
       });
 
 
@@ -758,17 +765,12 @@ const App: React.FC = () => {
         timestamp: new Date(),
         isError: true
       };
-      setSessions(prev => {
-        const targetId = currentSessionIdRef.current;
-        return prev.map(s => {
-          if (s.id === targetId) {
-            const updated = { ...s, messages: [...s.messages, errorMessage], updatedAt: new Date() };
-            syncSessionToSupabase(updated);
-            return updated;
-          }
-          return s;
-        });
-      });
+      
+      updateSessionAndSync(originatingSessionId, session => ({
+        ...session,
+        messages: [...session.messages, errorMessage],
+        updatedAt: new Date()
+      }));
     } finally {
       setIsLoading(false);
     }
@@ -935,15 +937,11 @@ const App: React.FC = () => {
                 key={msg.id}
                 message={msg}
                 onUpdateMessage={(updatedMsg) => {
-                  // Use functional update to avoid stale closure
-                  setSessions(prev => {
-                    const session = prev.find(s => s.id === currentSessionIdRef.current);
-                    if (!session) return prev;
-                    const newMessages = session.messages.map(m => m.id === updatedMsg.id ? updatedMsg : m);
-                    const updated = { ...session, messages: newMessages, updatedAt: new Date() };
-                    syncSessionToSupabase(updated);
-                    return prev.map(s => s.id === currentSessionIdRef.current ? updated : s);
-                  });
+                  updateSessionAndSync(currentSessionIdRef.current, session => ({
+                    ...session,
+                    messages: session.messages.map(m => m.id === updatedMsg.id ? updatedMsg : m),
+                    updatedAt: new Date()
+                  }));
                 }}
                 onAnalyze={handleAnalyzeConfirm}
                 onSelectSkill={handleSelectSkill}
