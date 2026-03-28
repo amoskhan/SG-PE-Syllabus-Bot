@@ -290,25 +290,23 @@ const App: React.FC = () => {
   };
 
   const handleUpdateCurrentSession = (updatedMessages: Message[], newTitle?: string) => {
-    let updated: ChatSession | undefined;
-
     setSessions(prev => {
-      const session = prev.find(s => s.id === currentSessionId);
+      const sessionId = currentSessionIdRef.current;
+      const session = prev.find(s => s.id === sessionId);
       if (!session) return prev;
 
-      updated = {
+      const updated = {
         ...session,
         messages: updatedMessages,
         title: newTitle || session.title,
         updatedAt: new Date()
       };
 
-      return prev.map(s => s.id === currentSessionId ? updated : s);
-    });
+      // CRITICAL: Sync must be triggered with the actual updated session
+      syncSessionToSupabase(updated);
 
-    if (updated) {
-       syncSessionToSupabase(updated);
-    }
+      return prev.map(s => s.id === sessionId ? updated : s);
+    });
   };
 
   // -------------------------------------------------------------------------------- //
@@ -450,20 +448,20 @@ const App: React.FC = () => {
         const session = prev.find(s => s.id === targetId);
         if (!session) return prev;
 
-        return prev.map(s => {
-          if (s.id === targetId) {
-            return {
-              ...s,
-              messages: s.messages.map(m => {
-                if (m.id === messageId) {
-                  return { ...m, poseData: poseData, analysisFrames: debugFrames };
-                }
-                return m;
-              })
-            };
-          }
-          return s;
-        });
+        const updated = {
+          ...session,
+          messages: session.messages.map(m => {
+            if (m.id === messageId) {
+              return { ...m, poseData: poseData, analysisFrames: debugFrames };
+            }
+            return m;
+          })
+        };
+
+        // Sync background analysis frames too
+        syncSessionToSupabase(updated);
+
+        return prev.map(s => s.id === targetId ? updated : s);
       });
 
       return { poseData, analysisFrames };
@@ -706,35 +704,31 @@ const App: React.FC = () => {
       const detectedSkill = skillMatch ? skillMatch[1].trim() : undefined;
 
       // UPDATE STATE: Bot Response
-      let sessionToSync: ChatSession | undefined;
       setSessions(prev => {
         const targetId = currentSessionIdRef.current;
-        return prev.map(s => {
-          if (s.id === targetId) {
-            const userMsgIndex = s.messages.findIndex(m => m.id === newMessageId);
-            let finalMessages = s.messages;
+        const session = prev.find(s => s.id === targetId);
+        if (!session) return prev;
 
-            if (userMsgIndex !== -1 && detectedSkill) {
-              finalMessages = s.messages.map((m, idx) =>
-                idx === userMsgIndex ? { ...m, predictedSkill: detectedSkill } : m
-              );
-            }
+        const userMsgIndex = session.messages.findIndex(m => m.id === newMessageId);
+        let finalMessages = session.messages;
 
-            sessionToSync = {
-              ...s,
-              messages: [...finalMessages, botMessage],
-              updatedAt: new Date()
-            };
-            return sessionToSync;
-          }
-          return s;
-        });
+        if (userMsgIndex !== -1 && detectedSkill) {
+          finalMessages = session.messages.map((m, idx) =>
+            idx === userMsgIndex ? { ...m, predictedSkill: detectedSkill } : m
+          );
+        }
+
+        const updatedSession = {
+          ...session,
+          messages: [...finalMessages, botMessage],
+          updatedAt: new Date()
+        };
+
+        // CRITICAL: Sync must be triggered inside to ensure messages are saved
+        syncSessionToSupabase(updatedSession);
+
+        return prev.map(s => s.id === targetId ? updatedSession : s);
       });
-
-      // CRITICAL: Must trigger sync for the new bot message too
-      if (sessionToSync) {
-        syncSessionToSupabase(sessionToSync);
-      }
 
 
     } catch (error) {
@@ -764,12 +758,17 @@ const App: React.FC = () => {
         timestamp: new Date(),
         isError: true
       };
-      setSessions(prev => prev.map(s => {
-        if (s.id === currentSessionId) {
-          return { ...s, messages: [...s.messages, errorMessage], updatedAt: new Date() };
-        }
-        return s;
-      }));
+      setSessions(prev => {
+        const targetId = currentSessionIdRef.current;
+        return prev.map(s => {
+          if (s.id === targetId) {
+            const updated = { ...s, messages: [...s.messages, errorMessage], updatedAt: new Date() };
+            syncSessionToSupabase(updated);
+            return updated;
+          }
+          return s;
+        });
+      });
     } finally {
       setIsLoading(false);
     }
