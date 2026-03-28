@@ -280,7 +280,7 @@ export const sendMessageToGemini = async (
         const handRatio = Math.max(totalRightHandMove, totalLeftHandMove) / Math.min(totalRightHandMove, totalLeftHandMove);
         const confidence = handRatio > 1.2 ? '(High Confidence)' : '(Low Confidence)';
 
-        // Stepping foot 
+        // Stepping foot
         const strideExpansion = maxAnkleDist / (initialAnkleDist + 0.001); // Avoid div/0
         const stepDetected = strideExpansion > 1.2;
         const steppingFoot = maxRightFootVel > maxLeftFootVel * 1.2 ? 'Right' : (maxLeftFootVel > maxRightFootVel * 1.2 ? 'Left' : 'None/Both');
@@ -304,18 +304,114 @@ export const sendMessageToGemini = async (
 
         // Excessive High Swing Check (Consistency)
         let highSwingCheck = '✅ Hand Height Controlled (Below Head Level)';
+        let highSwingFailed = false;
         // Y increases downwards. Smaller Y = Higher.
         const highPoint = dominantHand === 'Right' ? maxRightHandHighY : maxLeftHandHighY;
         const highPointFrame = dominantHand === 'Right' ? maxRightHandHighFrame : maxLeftHandHighFrame;
 
         if (highPoint < noseY) {
-          highSwingCheck = `⚠️ Hand raised ABOVE HEAD level (High Backswing/Follow-through). Check if excessive for this skill. (Evidence: Frame ${highPointFrame})`;
+          highSwingCheck = `❌ EXCESSIVE BACKSWING: Hand raised ABOVE HEAD level at Frame ${highPointFrame}. This violates the controlled backswing requirement for Underhand Roll/Throw.`;
+          highSwingFailed = true;
         }
 
-        // Knee Bend Check
-        const kneeBendCheck = minKneeAngle < 170.0
-          ? `✅ Knees Bent Detected (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}). Credit "knees bent" criteria.`
-          : `⚠️ Knees appear straight (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}).`;
+        // Knee Bend Check - SETUP PHASE (First 2 frames) vs MOVEMENT PHASE
+        // Critical for "Pray" position assessment - check ONLY the initial setup
+        let setupKneeBendStatus = '⚠️ Unable to assess';
+        let setupKneeBendFailed = false;
+        let setupKneeAngle = 180;
+
+        if (poseData.length >= 2) {
+          // Check first 2 frames for setup knee bend (the "Pray" position)
+          const firstFrame = poseData[0].landmarks;
+          const secondFrame = poseData[1].landmarks;
+
+          // Calculate knee angles for first frame
+          const getKneeAngle = (landmarks: any[]) => {
+            // Hip (23/24), Knee (25/26), Ankle (27/28)
+            const hip = landmarks[24];
+            const knee = landmarks[26];
+            const ankle = landmarks[28];
+            // Simple angle approximation using Y positions
+            const vec1 = { x: hip.x - knee.x, y: hip.y - knee.y };
+            const vec2 = { x: ankle.x - knee.x, y: ankle.y - knee.y };
+            const dot = vec1.x * vec2.x + vec1.y * vec2.y;
+            const mag1 = Math.sqrt(vec1.x ** 2 + vec1.y ** 2);
+            const mag2 = Math.sqrt(vec2.x ** 2 + vec2.y ** 2);
+            if (mag1 === 0 || mag2 === 0) return 180;
+            const cosAngle = Math.max(-1, Math.min(1, dot / (mag1 * mag2)));
+            return Math.acos(cosAngle) * (180 / Math.PI);
+          };
+
+          const firstFrameRightKnee = getKneeAngle(firstFrame);
+          const firstFrameLeftKnee = getKneeAngle(firstFrame);
+          const firstFrameMinKnee = Math.min(firstFrameRightKnee, firstFrameLeftKnee);
+
+          const secondFrameRightKnee = getKneeAngle(secondFrame);
+          const secondFrameLeftKnee = getKneeAngle(secondFrame);
+          const secondFrameMinKnee = Math.min(secondFrameRightKnee, secondFrameLeftKnee);
+
+          // Use the MORE bent knee from first 2 frames as setup indicator
+          setupKneeAngle = Math.min(firstFrameMinKnee, secondFrameMinKnee);
+
+          if (setupKneeAngle < 170.0) {
+            setupKneeBendStatus = `✅ SETUP KNEE BEND DETECTED: Initial knee angle ${setupKneeAngle.toFixed(0)}° in Frame 1-2. "Pray" position correct.`;
+          } else {
+            setupKneeBendStatus = `❌ STRAIGHT KNEES IN SETUP: Initial knee angle ${setupKneeAngle.toFixed(0)}° in Frame 1-2. User did NOT start with "slightly bent knees" as required by the "Pray" position.`;
+            setupKneeBendFailed = true;
+          }
+        }
+
+        // Movement phase knee bend (for "Sweep the floor" / lowering phase)
+        const movementKneeBendCheck = minKneeAngle < 170.0
+          ? `✅ Knees Bent During Movement (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}).`
+          : `⚠️ Knees appear straight during movement (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}).`;
+
+        // Ball Release Analysis - Critical for distinguishing throw vs roll
+        let releaseAnalysis = 'N/A (No ball data available)';
+        let releasePoint = 'unknown';
+        let releaseFrameIndex = -1;
+
+        if (poseData && poseData.length > 0) {
+          // Find the frame where ball disappears or has maximum downward velocity
+          let ballReleaseFrames: number[] = [];
+          for (let i = 0; i < poseData.length; i++) {
+            const ball = poseData[i].ball;
+            if (ball && ball.isValid) {
+              // Track ball Y position - release typically at lowest point before upward trajectory
+              if (ball.center.y > 0.5) { // Ball is in lower portion of frame
+                ballReleaseFrames.push(i);
+                releaseFrameIndex = i;
+              }
+            }
+          }
+
+          if (releaseFrameIndex >= 0 && poseData[releaseFrameIndex].ball) {
+            const releaseY = poseData[releaseFrameIndex].ball!.center.y;
+            const kneeY = poseData[releaseFrameIndex].landmarks[26]?.y || 0.5; // Right knee
+            const waistY = poseData[releaseFrameIndex].landmarks[24]?.y || 0.3; // Right hip
+
+            if (releaseY > kneeY) {
+              releasePoint = 'below-knee';
+              releaseAnalysis = `✅ Ball released BELOW KNEE level (Frame ${releaseFrameIndex + 1}). Consistent with Underhand Roll.`;
+            } else if (releaseY > waistY) {
+              releasePoint = 'between-knee-waist';
+              releaseAnalysis = `✅ Ball released BETWEEN KNEE and WAIST (Frame ${releaseFrameIndex + 1}). Consistent with Underhand Throw.`;
+            } else {
+              releasePoint = 'above-waist';
+              releaseAnalysis = `⚠️ Ball released ABOVE WAIST (Frame ${releaseFrameIndex + 1}, Y=${releaseY.toFixed(2)}). This is atypical for Underhand Roll/Throw.`;
+            }
+          }
+        }
+
+        // Skill Differentiation Summary
+        let skillDifferentiation = '';
+        if (skillName === 'Underhand Roll' || skillName === 'Underhand Throw') {
+          skillDifferentiation = `\n**SKILL DIFFERENTIATION (Throw vs Roll):**
+- Release Point: ${releasePoint === 'below-knee' ? 'BELOW KNEE (Roll pattern)' : releasePoint === 'between-knee-waist' ? 'BETWEEN KNEE-WAIST (Throw pattern)' : 'UNCLEAR'}
+- Backswing Control: ${highSwingFailed ? 'EXCESSIVE (Above head - violates controlled underhand motion)' : 'Controlled'}
+- Setup Knee Bend: ${setupKneeBendFailed ? 'MISSING (Straight knees in "Pray" position)' : 'Present'}
+`;
+        }
 
         // Step Check Report
         const stepNote = stepDetected
@@ -329,9 +425,16 @@ export const sendMessageToGemini = async (
 3. **Coordination**: ${coordinationCheck}
 4. **Stance**: ${stanceIssue}
 5. **Wind-up (Depth)**: ${windUpCheck}
-6. **Arm Height**: ${highSwingCheck}
-7. **Knee Bend**: ${kneeBendCheck}
-8. **Step Verification**: ${stepNote}
+6. **Backswing Height**: ${highSwingCheck} ${highSwingFailed ? '**FAILURE**' : ''}
+7. **Setup Knee Bend ("Pray" Position)**: ${setupKneeBendStatus} ${setupKneeBendFailed ? '**FAILURE**' : ''}
+8. **Movement Knee Bend**: ${movementKneeBendCheck}
+9. **Ball Release Point**: ${releaseAnalysis}
+10. **Step Verification**: ${stepNote}
+${skillDifferentiation}
+**KEY FRAMES FOR GRADING:**
+- Setup Phase (Pray Position): Frames 1-2 → Check knee angle ${setupKneeAngle.toFixed(0)}°
+- Backswing Peak: Frame ${highPointFrame} → Hand Y position ${highPoint.toFixed(3)} (nose Y = ${noseY.toFixed(3)})
+- Release: Frame ${releaseFrameIndex >= 0 ? releaseFrameIndex + 1 : 'N/A'} → ${releasePoint === 'unknown' ? 'Ball not tracked' : releasePoint}
 `;
 
         movementPattern = `\n\n**Movement patterns (Kinetic Chain indicators):**\n${changes.slice(0, 30).map((c, i) => `• Frame ${i + 1}→${i + 2}: ${c}`).join('\n')}`;
@@ -468,10 +571,19 @@ You must complete TWO phases before analysis can begin.
 **VALID SKILLS LIST**: ${validSkillsList}
 
 **INSTRUCTIONS:**
-1. **Observe**: Look at the pose data and the visual input.
-2. **Identify**: Pick the **TOP 4** most likely skills from the VALID SKILLS LIST.
-   - If the movement is definitely NOT an FMS (e.g. Squat, Push-up), say it's an "Unknown Movement".
-   - Otherwise, provide the 4 closest matches.
+1. **Observe**: Look at the pose data and the visual input. Pay special attention to:
+   - **Release Point**: Where is the ball released? (Below knee = Roll, Knee-Waist = Throw, Above waist = Overhand/Catch)
+   - **Arm Trajectory**: Does the arm swing downward (Underhand) or upward/overhead (Overhand)?
+   - **Body Orientation**: Is the user facing the target or sideways (Overhand Throw/Kick often use side stance)?
+   - **Leg Movement**: Is there a step? Which foot steps?
+
+2. **Identify**: Pick the **TOP 4** most likely skills from the VALID SKILLS LIST using these discriminators:
+   - **Underhand Roll vs Underhand Throw**: Roll releases BELOW KNEE (ball rolls on ground), Throw releases BETWEEN KNEE-WAIST (ball travels in air)
+   - **Overhand Throw vs Chest Pass**: Overhand has arm going overhead and across body, Chest Pass extends straight forward from chest
+   - **Kick**: Non-dominant foot plants beside ball, dominant leg swings through
+   - **Dribble (hands)**: Repeated downward push, ball returns to hand
+   - **Dribble (feet)**: Ball stays on ground, tapped with inside of foot
+
 3. **Format**: Use the following tag at the end of your response:
    '[[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]]'
    Example: '[[SKILL_CHOICES: Underhand Throw, Overhand Throw, Underhand Roll, Bounce Pass]]'
@@ -498,7 +610,7 @@ ${biomechanicsReport || ''}
 ${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
 
 **Immediate Task:**
-${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. Refer to Biomechanics Report for critical errors.` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE". Identify top 4 likely skills.`}
+${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. CRITICAL: Use the Biomechanics Report's specific findings for Setup Knee Bend, Backswing Height, and Ball Release Point as definitive evidence. If the report shows failures (marked with ❌ or **FAILURE**), you MUST reflect these as ❌ in your Checklist Assessment.` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE". Identify top 4 likely skills.`}
 
 **IMPORTANT**:
 - **Visual Evidence**: You MUST add a section called "**Visual Evidence**" where you quote specific differences between the provided Reference Image ("Gold Standard") and the User's Video ("Actual Performance").
@@ -509,13 +621,27 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 **CRITICAL CONSISTENCY RULE (PROFICIENCY VS CHECKLIST):**
 - If you grade the Proficiency Level as "Keeping it Real" / "Developing" / "Beginning", you **MUST** have at least one ❌ or ⚠️ in the Checklist Assessment.
 - **You cannot have a "Competent" checklist (all ✅) and a "Developing" grade.** They must tell the same story.
-- **SPECIFIC OVERRIDE FOR UNDERHAND ROLL**: 
-  - IF "Hand raised ABOVE HEAD" is detected in the Biomechanics Report, you **MUST MARK CHECKLIST ITEM #5 ("Swing dominant hand back at least to waist level") as ❌ OR ⚠️**.
-  - Reason: "Excessive backswing violates the controlled nature of the skill."
-  - **DO NOT** give a "Pass" just because it went *past* the waist. It must be *controlled* at the waist. "Too much" is a failure of the specific criteria.
+
+**MANDATORY CHECKLIST RULES FOR UNDERHAND ROLL:**
+The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use it:
+
+1. **Checklist Item #3 "Keep knees slightly bent" (Pray Position / Setup Phase)**:
+   - Look at "**Setup Knee Bend ("Pray" Position)**" in the biomechanics report
+   - If it says "❌ STRAIGHT KNEES IN SETUP" or "**FAILURE**" → You MUST mark Item #3 as ❌
+   - Evidence format: "At Frame 1-2, knee angle was XX° (straight). The 'Pray' position requires slightly bent knees from the start."
+
+2. **Checklist Item #5 "Swing dominant hand back at least to waist level" (Controlled Backswing)**:
+   - Look at "**Backswing Height**" in the biomechanics report
+   - If it says "❌ EXCESSIVE BACKSWING" or "ABOVE HEAD" or "**FAILURE**" → You MUST mark Item #5 as ❌
+   - Evidence format: "At Frame X, hand reached Y position (above head level). The backswing must be CONTROLLED at waist level, not excessively high."
+   - **DO NOT** give a "Pass" just because the hand went *past* the waist. "At least to waist level" means the MINIMUM is waist, but for Underhand Roll the MAXIMUM is also waist (controlled). "Too much" is a failure.
+
+3. **Checklist Item #8 "Release ball on the ground"**:
+   - Look at "**Ball Release Point**" in the biomechanics report
+   - If release point is "above-waist" or "between-knee-waist" → You MUST mark Item #8 as ❌
+   - Evidence format: "At Frame X, ball was released at Y position (above ground). For Underhand Roll, the ball must contact the ground before rolling."
 
 - Pay close attention to the \`biomechanicsReport\` for definitive pass/fail on Step and Wind-up.
-- **QUALITY CHECK**: If "Arm Height" is "ABOVE HEAD" for a low-skill like Underarm Roll, penalize it as "Excessive Movement" and FAIL the backswing criteria.
 - **CAMERA ANGLE AWARENESS**:
   - The video might be filmed from the **Front** OR the **Side**.
   - **"Face Target"** means the user is looking towards *their* throwing direction.
