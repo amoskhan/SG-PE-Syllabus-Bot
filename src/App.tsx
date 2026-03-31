@@ -956,6 +956,7 @@ const App: React.FC = () => {
                 onAnalyze={handleAnalyzeConfirm}
                 onSelectSkill={handleSelectSkill}
                 onShowAllSkills={() => setIsSkillSelectorOpen(true)}
+                disabled={isLoading || isProcessing}
               />
             ))}
 
