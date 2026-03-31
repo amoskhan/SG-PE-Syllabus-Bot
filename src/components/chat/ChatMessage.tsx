@@ -10,9 +10,10 @@ interface ChatMessageProps {
   onAnalyze?: (message: Message) => void;
   onSelectSkill?: (skillName: string) => void;
   onShowAllSkills?: () => void;
+  disabled?: boolean;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onShowAllSkills }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onShowAllSkills, disabled = false }) => {
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showAllSkillsGrid, setShowAllSkillsGrid] = useState(false);
@@ -111,8 +112,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                       return (
                         <button
                           key={idx}
-                          onClick={() => onSelectSkill?.(trimmedChoice)}
-                          className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/40 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 border border-indigo-100 dark:border-indigo-800/50 rounded-xl text-sm font-medium text-indigo-700 dark:text-indigo-300 transition-all text-left flex items-center justify-between group"
+                          onClick={() => !disabled && onSelectSkill?.(trimmedChoice)}
+                          disabled={disabled}
+                          className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/40 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 border border-indigo-100 dark:border-indigo-800/50 rounded-xl text-sm font-medium text-indigo-700 dark:text-indigo-300 transition-all text-left flex items-center justify-between group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-indigo-50 disabled:hover:text-indigo-700 dark:disabled:hover:bg-indigo-900/40 dark:disabled:hover:text-indigo-300"
                         >
                           <span>{trimmedChoice}</span>
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
