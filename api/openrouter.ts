@@ -9,7 +9,7 @@ export default async function handler(req: Request) {
         return new Response(null, {
             status: 200,
             headers: {
-                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
                 'Access-Control-Allow-Methods': 'POST, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Title, HTTP-Referer',
             },
@@ -53,14 +53,14 @@ export default async function handler(req: Request) {
             status: response.status,
             headers: {
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
             },
         });
 
     } catch (error: any) {
         return new Response(
             JSON.stringify({ error: 'Failed to communicate with OpenRouter', details: error.message }),
-            { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+            { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*' } }
         );
     }
 }

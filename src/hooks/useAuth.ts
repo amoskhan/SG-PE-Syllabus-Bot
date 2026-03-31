@@ -149,6 +149,9 @@ export const useAuth = () => {
 
   const signOut = async () => {
     setLoading(true);
+    if (user) {
+      localStorage.removeItem(`sg_pe_profile_${user.id}`);
+    }
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Error logging out:', error);

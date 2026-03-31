@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '../../services/db/supabaseClient';
 
 interface PdfUploaderModalProps {
   isOpen: boolean;
@@ -21,8 +22,16 @@ const PdfUploaderModal: React.FC<PdfUploaderModalProps> = ({ isOpen, onClose }) 
     formData.append('file', file);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setStatus({ type: 'error', text: 'You must be logged in to upload PDFs.' });
+        setIsUploading(false);
+        return;
+      }
+
       const response = await fetch('/api/upload-pdf', {
         method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
         body: formData,
       });
 

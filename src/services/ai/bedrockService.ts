@@ -47,6 +47,8 @@ export const sendMessageToBedrock = async (
     history: { role: string; content: string }[],
     currentMessage: string
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
     const response = await fetch('/api/bedrock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -55,7 +57,8 @@ export const sendMessageToBedrock = async (
             message: currentMessage,
             systemPrompt: SYSTEM_PROMPT,
         }),
-    });
+        signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));

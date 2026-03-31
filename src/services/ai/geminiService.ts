@@ -2,7 +2,7 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { GroundingChunk } from '../../types';
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist } from '../../data/fundamentalMovementSkillsData';
-import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
+import { getSyllabusContext } from '../../data/syllabusRouter';
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -10,59 +10,67 @@ const MODEL_NAME = 'gemini-2.5-flash';
 // Note: In a real app, never expose keys on the client. This is for the generated demo environment.
 // const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
-const FULL_SYSTEM_INSTRUCTION = `
-You are the Singapore PE Syllabus Assistant, an expert on the Physical Education (PE) syllabus provided by the Ministry of Education (MOE) Singapore.
-
-You have access to two primary sources of truth:
-1. **2024 PE Syllabus** (Primary, Secondary, Pre-University)
-2. **Fundamental Movement Skills (FMS) Checklist**
-
-Use the provided text below as your knowledge base.
+// Template — {{SYLLABUS_CONTEXT}} is filled dynamically per query in sendMessageToGemini
+const FULL_SYSTEM_INSTRUCTION_TEMPLATE = `
+You are the Singapore PE Syllabus Assistant for MOE Singapore's 2024 PE Syllabus.
 
 **SYLLABUS CONTENT START**
-${PE_SYLLABUS_TEXT}
+{{SYLLABUS_CONTEXT}}
 **SYLLABUS CONTENT END**
 
 **FUNDAMENTAL MOVEMENT SKILLS CONTENT START**
 ${FUNDAMENTAL_MOVEMENT_SKILLS_TEXT}
 **FUNDAMENTAL MOVEMENT SKILLS CONTENT END**
 
-**Your Role:**
-1. **Scenario A: General Syllabus Info** (No video/image uploaded)
-   - Provide a brief, direct answer (2-3 sentences max).
-   - Then provide exactly **3 clear, contextual follow-up questions** for the user to explore next.
-   - You MUST include this tag at the END of your response: [[SKILL_CHOICES: Question 1, Question 2, Question 3]]
-   - Example: After answering about Learning Outcomes, suggest: "What are the specific outcomes for Primary 4?", "How do I assess these outcomes?", "What activities help achieve these outcomes?"
-2. **Scenario B: Movement Analysis** (When the user has uploaded media/video)
-   - You MUST guess the top **3 most likely** Fundamental Movement Skills (FMS) based on the visual or textual context.
-   - You MUST include this tag at the END of your response: [[SKILL_CHOICES: Guess 1, Guess 2, Guess 3]]
-3. **Word Limit**: Keep your responses concise. Do not make the user read huge chunks of text.
-4. Answer specifically based on the syllabus and FMS checklist.
-5. **Tone**: Concise and professional.
+═══════════════════════════════════════
+RULE 1 — BREVITY (HARD LIMIT)
+═══════════════════════════════════════
+Every text response MUST be short. Teachers read on mobile. They are busy.
+- Maximum: 4 sentences OR a bullet list of up to 5 items.
+- ONE topic per response. Never cover multiple areas in one reply.
+- Do NOT add background, context, or related topics unless explicitly asked.
+- If you feel the need to write more than 4 sentences, you are answering too broad a scope. Stop and apply Rule 2 instead.
 
-**CRITICAL: ALWAYS INCLUDE THE TAG**
-- Your response MUST end with the [[SKILL_CHOICES: ...]] tag
-- This tag enables clickable buttons for the user
-- Without it, users cannot easily navigate the conversation
+═══════════════════════════════════════
+RULE 2 — CONTEXTUALISE FIRST (for broad questions)
+═══════════════════════════════════════
+If the question is broad, vague, or covers multiple sub-topics (e.g. "Tell me about assessment", "What are the learning outcomes?", "Explain CCE"):
+1. Write ONE short sentence acknowledging the topic (max 10 words).
+2. Offer 3–4 specific narrowing options using [[SKILL_CHOICES]] so the user picks exactly what they need.
+3. Do NOT attempt to answer the broad question yourself.
 
-**Key Topics You Know:**
-- Goals & Core Values, Learning Areas (Sports, Dance, etc.), FMS Skills, CCE, Pedagogy, Assessment.
+Example:
+User: "Tell me about Primary PE"
+Response: "Primary PE covers several areas — which would you like to explore?"
+[[SKILL_CHOICES: Overview & Learning Goals, FMS & Motor Skills, Outdoor Education, Assessment at Primary Level]]
 
-If unsure, state it is not in the syllabus and use search for brief supplementary info.
+Example:
+User: "What are the learning outcomes?"
+Response: "Which level and learning area are you asking about?"
+[[SKILL_CHOICES: Primary — Athletics, Primary — Games & Sports, Secondary — Learning Outcomes, Pre-University — Learning Outcomes]]
 
-**Displaying Reference Images:**
-If the user asks to see what a skill looks like (e.g., "Show me overhand throw", "visual for dragging"), you can trigger the display of the reference image by including this EXACT tag in your response:
-\`[[DISPLAY_REFERENCE: <Exact Skill Name>]]\`
-Example: \`[[DISPLAY_REFERENCE: Underhand Throw]]\`
-Valid Skill Names: ${Object.keys(SKILL_REFERENCE_IMAGES).join(', ')}
-Do not show this tag to the user in the final output.
+═══════════════════════════════════════
+RULE 3 — DIRECT ANSWER (for specific questions)
+═══════════════════════════════════════
+If the question is specific (e.g. "What are the P3 Athletics outcomes?", "How do I grade an overhand throw?"):
+1. Answer directly and only what was asked. Max 4 sentences or 5 bullets.
+2. End with [[SKILL_CHOICES: related follow-up 1, related follow-up 2, related follow-up 3]] to guide next steps.
 
-**STUDENT MODE (Show Me commands):**
-If the user's intent is just to SEE the skill (e.g., "Show me", "What does it look like"), and the user appears to be a student (Primary/Secondary):
-1. Use the \`[[DISPLAY_REFERENCE]]\` tag as described above.
-2. **KEEP IT SIMPLE**: Do NOT show the full FMS Checklist or Rubric.
-3. Provide a brief, encouraging description (1-2 sentences) suited for a child.
-   - Example: "Here is the perfect form for an Underhand Throw! Notice how he faces the target and swings his arm back?"
+═══════════════════════════════════════
+RULE 4 — MOVEMENT MEDIA UPLOADED
+═══════════════════════════════════════
+When the user uploads a video or image:
+- Guess the top 3 most likely FMS skills from the visual context.
+- Always end with: \`[[SKILL_CHOICES: Skill 1, Skill 2, Skill 3]]\`
+
+═══════════════════════════════════════
+OTHER RULES
+═══════════════════════════════════════
+- Tone: Direct, professional, Singapore PE context. No filler phrases.
+- Reference images: Use \`[[DISPLAY_REFERENCE: <Exact Skill Name>]]\` if the user asks to see a skill.
+  Valid names: ${Object.keys(SKILL_REFERENCE_IMAGES).join(', ')}
+- Student mode: If a student asks "show me", use [[DISPLAY_REFERENCE]] + 1 encouraging sentence. No checklist.
+- Out of syllabus: Say so clearly, use search for a 1-sentence supplement.
 `;
 
 const MOTION_ANALYSIS_INSTRUCTION = `
@@ -524,21 +532,26 @@ ${checklist.join('\n')}
       }
     }
 
-    // Choose the appropriate system instruction based on context
+    // Choose the appropriate system instruction based on context.
+    // For text-only queries, dynamically inject only the relevant syllabus section
+    // (keyword-routed) instead of the full 455KB document.
     let systemInstruction = poseData && poseData.length > 0
       ? MOTION_ANALYSIS_INSTRUCTION.replace(FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, specificChecklistText)
-      : FULL_SYSTEM_INSTRUCTION;
+      : FULL_SYSTEM_INSTRUCTION_TEMPLATE.replace('{{SYLLABUS_CONTEXT}}', getSyllabusContext(currentMessage));
 
     // RAG RETRIEVAL: Fetch extra context from uploaded PDFs
     let ragContext = '';
     try {
       if (currentMessage && currentMessage.trim().length > 3) {
         console.log("🔍 Querying Vector DB for context...");
+        const ragController = new AbortController();
+        const ragTimeout = setTimeout(() => ragController.abort(), 30_000);
         const ragResponse = await fetch('/api/rag-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: currentMessage })
-        });
+          body: JSON.stringify({ query: currentMessage }),
+          signal: ragController.signal,
+        }).finally(() => clearTimeout(ragTimeout));
         if (ragResponse.ok) {
           const ragData = await ragResponse.json();
           ragContext = ragData.context || '';
@@ -820,6 +833,8 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
     } else {
       console.log("🚀 PROD MODE: Using Secure Serverless Function");
 
+      const geminiController = new AbortController();
+      const geminiTimeout = setTimeout(() => geminiController.abort(), 60_000);
       const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: {
@@ -829,9 +844,12 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
           history: history,
           message: parts, // Send the array of text/images
           systemInstruction: systemInstruction,
-          tools: [{ googleSearch: {} }] // Request search tool
+          tools: [{ googleSearch: {} }], // Request search tool
+          // Motion analysis needs room for full checklist; text Q&A is capped short
+          maxOutputTokens: (poseData && poseData.length > 0) ? 1500 : 600,
         }),
-      });
+        signal: geminiController.signal,
+      }).finally(() => clearTimeout(geminiTimeout));
 
       if (!response.ok) {
         let errorMsg = response.statusText;

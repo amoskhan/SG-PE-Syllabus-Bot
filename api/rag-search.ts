@@ -8,14 +8,14 @@ const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || 
 export default async function handler(req: any, res: any) {
   // CORS handles
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).end();
   
   if (!apiKey || !supabaseUrl || !supabaseKey) {
-     return res.status(200).json({ context: '' }); // Graceful fail if not configured
+     return res.status(503).json({ context: '', error: 'RAG service not configured' });
   }
 
   try {
@@ -37,7 +37,7 @@ export default async function handler(req: any, res: any) {
       null;
 
     if (!embedding || embedding.length === 0) {
-        return res.status(200).json({ context: '' });
+        return res.status(502).json({ context: '', error: 'Embedding service returned no values' });
     }
 
     // Truncate to 768 dims to match vector(768) column (gemini-embedding-001 returns 3072)
@@ -52,7 +52,7 @@ export default async function handler(req: any, res: any) {
 
     if (error) {
        console.error("Supabase RAG Search Error:", error);
-       return res.status(200).json({ context: '' }); 
+       return res.status(502).json({ context: '', error: 'Database search failed' });
     }
 
     if (!chunks || chunks.length === 0) {
@@ -65,6 +65,6 @@ export default async function handler(req: any, res: any) {
 
   } catch (err: any) {
     console.error("RAG Search failed:", err);
-    return res.status(200).json({ context: '' }); 
+    return res.status(500).json({ context: '', error: 'RAG search failed' });
   }
 }

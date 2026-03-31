@@ -672,6 +672,8 @@ ${checklist.join('\n')}
         }
 
         // This is a TRUE MULTIMODAL model (Vision + Text)
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60_000);
         const response = await fetch(endpoint, {
             method: "POST",
             headers: headers,
@@ -681,8 +683,9 @@ ${checklist.join('\n')}
                 "temperature": 0.5,
                 "max_tokens": 5000,
                 "transforms": ["middle-out"]
-            })
-        });
+            }),
+            signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
 
         if (!response.ok) {
             const errorText = await response.text();

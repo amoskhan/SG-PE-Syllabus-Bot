@@ -231,7 +231,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                 <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1 ml-1 flex items-center justify-between">
                   <div className="flex items-center gap-1">
                     <span>Analysis Breakdown</span>
-                    <span className="bg-green-100 text-green-700 px-1 rounded text-[9px]">AI DEBUG</span>
                   </div>
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin w-full max-w-[85vw] md:max-w-full mx-auto touch-pan-x">
