@@ -803,7 +803,7 @@ const App: React.FC = () => {
     if (hasMedia) {
       handleSendMessage(`Analyze ${skillName}`, undefined, { skillName: skillName, isVerified: true });
     } else {
-      handleSendMessage(`Tell me more about ${skillName}`);
+      handleSendMessage(skillName);
     }
   };
 
