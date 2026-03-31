@@ -41,12 +41,22 @@ const App: React.FC = () => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.map((s: any) => ({
-          ...s,
-          createdAt: new Date(s.createdAt),
-          updatedAt: new Date(s.updatedAt),
-          messages: s.messages.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }))
-        }));
+        if (!Array.isArray(parsed)) throw new Error('Stored sessions is not an array');
+        return parsed.map((s: any) => {
+          const createdAt = new Date(s.createdAt);
+          const updatedAt = new Date(s.updatedAt);
+          return {
+            ...s,
+            createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
+            updatedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
+            messages: Array.isArray(s.messages)
+              ? s.messages.map((m: any) => {
+                  const ts = new Date(m.timestamp);
+                  return { ...m, timestamp: isNaN(ts.getTime()) ? new Date() : ts };
+                })
+              : []
+          };
+        });
       }
     } catch (e) {
       console.error("Failed to load local sessions:", e);

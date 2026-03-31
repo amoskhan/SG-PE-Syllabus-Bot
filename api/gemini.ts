@@ -9,7 +9,7 @@ const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 export default async function handler(req: any, res: any) {
     // Handle CORS
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader(
         'Access-Control-Allow-Headers',
@@ -33,7 +33,7 @@ export default async function handler(req: any, res: any) {
     }
 
     try {
-        const { history, message, systemInstruction, tools } = req.body;
+        const { history, message, systemInstruction, tools, maxOutputTokens } = req.body;
 
         console.log(`[gemini] Request received. History length: ${history?.length ?? 0}, Has system instruction: ${!!systemInstruction}`);
 
@@ -46,6 +46,8 @@ export default async function handler(req: any, res: any) {
             config: {
                 systemInstruction: systemInstruction,
                 tools: tools,
+                temperature: 0.3,
+                maxOutputTokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : 600,
             },
             history: history || []
         });

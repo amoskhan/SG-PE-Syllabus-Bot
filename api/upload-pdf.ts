@@ -52,7 +52,7 @@ async function extractPdfText(dataBuffer: Buffer): Promise<{ text: string; metho
 export default async function handler(req: any, res: any) {
   // ── CORS ────────────────────────────────────────────────────────────────────
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
 
   if (req.method === 'OPTIONS') {
@@ -62,6 +62,20 @@ export default async function handler(req: any, res: any) {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  // Verify the caller is a signed-in user
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: missing auth token.' });
+  }
+  {
+    const authClient = createClient(supabaseUrl || '', supabaseKey || '');
+    const { data: { user: authUser }, error: authError } = await authClient.auth.getUser(token);
+    if (authError || !authUser) {
+      return res.status(401).json({ error: 'Unauthorized: invalid or expired session.' });
+    }
   }
 
   if (!apiKey || !supabaseUrl || !supabaseKey) {
