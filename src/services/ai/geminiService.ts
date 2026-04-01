@@ -2,7 +2,7 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { GroundingChunk } from '../../types';
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist } from '../../data/fundamentalMovementSkillsData';
-import { getSyllabusContext } from '../../data/syllabusRouter';
+import { getSyllabusContextMessage } from '../../data/syllabusContext';
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -14,13 +14,7 @@ const MODEL_NAME = 'gemini-2.5-flash';
 const FULL_SYSTEM_INSTRUCTION_TEMPLATE = `
 You are the Singapore PE Syllabus Assistant for MOE Singapore's 2024 PE Syllabus.
 
-**SYLLABUS CONTENT START**
-{{SYLLABUS_CONTEXT}}
-**SYLLABUS CONTENT END**
-
-**FUNDAMENTAL MOVEMENT SKILLS CONTENT START**
-${FUNDAMENTAL_MOVEMENT_SKILLS_TEXT}
-**FUNDAMENTAL MOVEMENT SKILLS CONTENT END**
+{{FMS_CONTEXT}}
 
 ═══════════════════════════════════════
 RULE 1 — BREVITY (HARD LIMIT)
@@ -35,9 +29,10 @@ Every text response MUST be short. Teachers read on mobile. They are busy.
 RULE 2 — CONTEXTUALISE FIRST (for broad questions)
 ═══════════════════════════════════════
 If the question is broad, vague, or covers multiple sub-topics (e.g. "Tell me about assessment", "What are the learning outcomes?", "Explain CCE"):
-1. Write ONE short sentence acknowledging the topic (max 10 words).
-2. Offer 3–4 specific narrowing options using [[SKILL_CHOICES]] so the user picks exactly what they need.
+1. Write ONE short sentence acknowledging the topic (max 10 words). This sentence is MANDATORY — never skip it.
+2. On the NEXT LINE, offer 3–4 specific narrowing options using [[SKILL_CHOICES]] so the user picks exactly what they need.
 3. Do NOT attempt to answer the broad question yourself.
+4. CRITICAL: Your response must always contain visible text BEFORE the [[SKILL_CHOICES]] tag. Never output ONLY the tag.
 
 Example:
 User: "Tell me about Primary PE"
@@ -535,9 +530,14 @@ ${checklist.join('\n')}
     // Choose the appropriate system instruction based on context.
     // For text-only queries, dynamically inject only the relevant syllabus section
     // (keyword-routed) instead of the full 455KB document.
+    const fmsBlock = activeSkillName
+      ? `**FUNDAMENTAL MOVEMENT SKILLS CONTENT START**\n${specificChecklistText}\n**FUNDAMENTAL MOVEMENT SKILLS CONTENT END**`
+      : '';
+
     let systemInstruction = poseData && poseData.length > 0
       ? MOTION_ANALYSIS_INSTRUCTION.replace(FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, specificChecklistText)
-      : FULL_SYSTEM_INSTRUCTION_TEMPLATE.replace('{{SYLLABUS_CONTEXT}}', getSyllabusContext(currentMessage));
+      : FULL_SYSTEM_INSTRUCTION_TEMPLATE
+          .replace('{{FMS_CONTEXT}}', fmsBlock);
 
     // RAG RETRIEVAL: Fetch extra context from uploaded PDFs
     let ragContext = '';
@@ -807,13 +807,20 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
 
       const ai = new GoogleGenAI({ apiKey });
 
+      // Prepend syllabus as a context exchange so it lives in conversation
+      // history rather than the system instruction (avoids system instruction size limits).
+      const syllabusContextPair: Content[] = poseData && poseData.length > 0 ? [] : [
+        { role: 'user', parts: [{ text: getSyllabusContextMessage() }] },
+        { role: 'model', parts: [{ text: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' }] },
+      ];
+
       const chat = ai.chats.create({
         model: MODEL_NAME,
         config: {
           systemInstruction: systemInstruction,
           tools: [{ googleSearch: {} }],
         },
-        history: history
+        history: [...syllabusContextPair, ...history]
       });
 
       result = await chat.sendMessage({ message: parts as any });
@@ -841,7 +848,13 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          history: history,
+          history: poseData && poseData.length > 0
+            ? history
+            : [
+                { role: 'user', parts: [{ text: getSyllabusContextMessage() }] },
+                { role: 'model', parts: [{ text: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' }] },
+                ...history,
+              ],
           message: parts, // Send the array of text/images
           systemInstruction: systemInstruction,
           tools: [{ googleSearch: {} }], // Request search tool

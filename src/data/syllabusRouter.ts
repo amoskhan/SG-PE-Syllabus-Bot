@@ -1,11 +1,18 @@
 import { PE_SYLLABUS_TEXT } from './syllabusData';
 
-// Cap injected section size to prevent flooding the context window.
-// Each level section is ~200KB raw; we cap at 60KB which covers Overview + Learning Areas summary.
-const SECTION_CAP = 60_000;
+// Normalize CRLF → LF so boundary indexOf checks work on Windows-saved files.
+const SYLLABUS_TEXT = PE_SYLLABUS_TEXT.replace(/\r\n/g, '\n');
+
+// Default cap for large level sections. Overview sub-sections are much smaller
+// and don't need a large cap.
+const SECTION_CAP = 80_000;
 
 // These markers uniquely identify the start of each section's *content* (not the TOC entry).
-const SECTION_BOUNDARIES: Array<{ key: string; start: string; end: string }> = [
+// Primary and Secondary are split into Overview + LearningOutcomes because the raw LOs
+// start deep into those sections (primary LOs at ~22KB in; secondary LOs at ~79KB in).
+// Pointing 'primary'/'secondary' directly at the LOs means keyword matches immediately
+// return the actual learning content instead of framework prose.
+const SECTION_BOUNDARIES: Array<{ key: string; start: string; end: string; cap?: number }> = [
   {
     key: 'preamble',
     start: 'PREAMBLE\nPhysical Education and Sports Development Framework',
@@ -16,14 +23,30 @@ const SECTION_BOUNDARIES: Array<{ key: string; start: string; end: string }> = [
     start: '1. INTRODUCTION\n1.1 Curriculum Framework',
     end: '2. PRIMARY LEVEL SYLLABUS CONTENT\n2.1 Overview',
   },
+  // Overview prose (framework, content organisation, time allocation) — small, no cap needed
+  {
+    key: 'primaryOverview',
+    start: '2. PRIMARY LEVEL SYLLABUS CONTENT\n2.1 Overview',
+    end: 'LEARNING OUTCOMES\nPRIMARY 1 – DANCE',
+    cap: 25_000,
+  },
+  // Actual P1–P6 learning outcomes for all learning areas
   {
     key: 'primary',
-    start: '2. PRIMARY LEVEL SYLLABUS CONTENT\n2.1 Overview',
+    start: 'LEARNING OUTCOMES\nPRIMARY 1 – DANCE',
     end: '3. SECONDARY LEVEL SYLLABUS CONTENT\n3.1 Overview',
   },
+  // Overview prose for secondary — large (~79KB), cap tightly
+  {
+    key: 'secondaryOverview',
+    start: '3. SECONDARY LEVEL SYLLABUS CONTENT\n3.1 Overview',
+    end: 'LEARNING OUTCOMES\nSECONDARY 1',
+    cap: 25_000,
+  },
+  // Actual Sec 1–4 learning outcomes — fits within 80KB cap
   {
     key: 'secondary',
-    start: '3. SECONDARY LEVEL SYLLABUS CONTENT\n3.1 Overview',
+    start: 'LEARNING OUTCOMES\nSECONDARY 1',
     end: '4. PRE-UNIVERSITY LEVEL SYLLABUS CONTENT\n4.1 Overview',
   },
   {
@@ -44,7 +67,7 @@ const SECTION_BOUNDARIES: Array<{ key: string; start: string; end: string }> = [
   {
     key: 'glossary',
     start: 'GLOSSARY\n\nThe definitions',
-    end: '8. REFERENCES',
+    end: '',
   },
 ];
 
@@ -54,12 +77,26 @@ const KEYWORD_MAP: Record<string, string[]> = {
   introduction: [
     'introduction', 'curriculum framework', 'syllabus design', '21st century',
     'doe', 'desired outcomes', 'curriculum overview', 'what is pe',
+    // "learning outcomes" alone (no level specified) → return intro so AI asks which level
+    'learning outcome', 'learning outcomes',
+  ],
+  primaryOverview: [
+    'primary overview', 'primary curriculum', 'content organisation', 'primary framework',
+    'primary structure',
   ],
   primary: [
     'primary', ' p1', ' p2', ' p3', ' p4', ' p5', ' p6',
     'pri 1', 'pri 2', 'pri 3', 'pri 4', 'pri 5', 'pri 6',
     'primary 1', 'primary 2', 'primary 3', 'primary 4', 'primary 5', 'primary 6',
     'primary school', 'primary level',
+    // Learning areas taught at primary — route directly to primary LOs
+    'athletics', 'dance', 'gymnastics', 'swimming',
+    'games and sports', 'striking', 'net barrier', 'invasion',
+    'fundamental motor', 'locomotor', 'manipulative',
+    'outdoor education', 'outdoor ed',
+  ],
+  secondaryOverview: [
+    'secondary overview', 'secondary curriculum', 'secondary framework', 'secondary structure',
   ],
   secondary: [
     'secondary', ' sec ', ' s1', ' s2', ' s3', ' s4',
@@ -86,12 +123,13 @@ const KEYWORD_MAP: Record<string, string[]> = {
   ],
 };
 
-function extractSection(start: string, end: string): string {
-  const startIdx = PE_SYLLABUS_TEXT.indexOf(start);
+function extractSection(start: string, end: string, cap?: number): string {
+  const startIdx = SYLLABUS_TEXT.indexOf(start);
   if (startIdx === -1) return '';
-  const endIdx = end ? PE_SYLLABUS_TEXT.indexOf(end, startIdx + start.length) : PE_SYLLABUS_TEXT.length;
-  const raw = PE_SYLLABUS_TEXT.slice(startIdx, endIdx !== -1 ? endIdx : undefined);
-  return raw.length > SECTION_CAP ? raw.slice(0, SECTION_CAP) + '\n\n[... section continues — ask a more specific question for further detail ...]' : raw;
+  const endIdx = end ? SYLLABUS_TEXT.indexOf(end, startIdx + start.length) : SYLLABUS_TEXT.length;
+  const raw = SYLLABUS_TEXT.slice(startIdx, endIdx !== -1 ? endIdx : undefined);
+  const limit = cap ?? SECTION_CAP;
+  return raw.length > limit ? raw.slice(0, limit) + '\n\n[... section continues — ask a more specific question for further detail ...]' : raw;
 }
 
 /**
@@ -108,6 +146,14 @@ export function getSyllabusContext(query: string): string {
     }
   }
 
+  // If a specific level is matched, drop the generic 'introduction' match that
+  // "learning outcomes" keywords add — the level section is sufficient.
+  const levelSections = new Set(['primary', 'primaryOverview', 'secondary', 'secondaryOverview', 'preUniversity']);
+  const hasLevelMatch = [...matched].some(s => levelSections.has(s));
+  if (hasLevelMatch) {
+    matched.delete('introduction');
+  }
+
   // Default fallback: orientation sections only
   if (matched.size === 0) {
     matched.add('preamble');
@@ -117,7 +163,7 @@ export function getSyllabusContext(query: string): string {
   const parts: string[] = [];
   for (const boundary of SECTION_BOUNDARIES) {
     if (matched.has(boundary.key)) {
-      const text = extractSection(boundary.start, boundary.end);
+      const text = extractSection(boundary.start, boundary.end, boundary.cap);
       if (text) parts.push(text);
     }
   }
