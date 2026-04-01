@@ -47,7 +47,10 @@ export default async function handler(req: any, res: any) {
                 systemInstruction: systemInstruction,
                 tools: tools,
                 temperature: 0.3,
-                maxOutputTokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : 600,
+                // 1200 default for syllabus text Q&A (clarifications are short; full section
+        // dumps for a single sub-category need ~600-900 tokens, so 1200 gives headroom).
+        // Motion analysis overrides this with 1500 from the client.
+        maxOutputTokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : 1200,
             },
             history: history || []
         });
