@@ -6,7 +6,7 @@ import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 interface ChatInputProps {
   onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string }) => void;
   isLoading: boolean;
-  selectedModel?: 'gemini' | 'bedrock' | 'nemotron';
+  selectedModel?: 'gemini' | 'bedrock' | 'openrouter';
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selectedModel = 'gemini' }) => {
@@ -282,12 +282,14 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
               {/* Model Chip (Minimalist) */}
               <div className="hidden xs:flex items-center gap-1.5 px-2 py-1.5 rounded-full bg-slate-100 dark:bg-zinc-800/50 border border-slate-200/50 dark:border-zinc-700/50 transition-colors">
                 <img
-                  src={`/assets/model-icons/${selectedModel === 'nemotron' ? 'nvidia' : selectedModel}.png`}
+                  src={`/assets/model-icons/${selectedModel === 'openrouter' ? 'qwen' : selectedModel}.png`}
                   alt={selectedModel}
                   className="w-3.5 h-3.5 object-contain opacity-80"
                 />
                 <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {selectedModel === 'gemini' ? 'Gemini' : selectedModel === 'nemotron' ? 'Nvidia' : 'Bedrock'}
+                  {selectedModel === 'gemini' ? 'Gemini' :
+                   selectedModel === 'openrouter' ? 'OpenRouter' :
+                   'Bedrock'}
                 </span>
               </div>
 

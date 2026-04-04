@@ -198,7 +198,33 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
               <div className="flex flex-col gap-2">
                 {message.media.map((attachment) => (
                   <div key={attachment.id} className="rounded-lg overflow-hidden border border-slate-200 bg-white w-full max-w-[85vw] md:max-w-4xl shadow-sm mx-auto">
-                    {!attachment.data ? (
+                    {attachment.type === 'image' && attachment.data ? (
+                      <img
+                        src={attachment.data}
+                        alt={attachment.fileName}
+                        loading="lazy"
+                        className="w-full h-auto object-contain"
+                      />
+                    ) : attachment.type === 'video' && attachment.data ? (
+                      // Render a playable video with live pose/ball overlay
+                      <VideoAnalysisPlayer src={attachment.data} />
+                    ) : attachment.type === 'video' && attachment.thumbnailData ? (
+                      // Fallback: video data was stripped (old session) — show static thumbnail
+                      <div className="relative">
+                        <img
+                          src={attachment.thumbnailData}
+                          alt={attachment.fileName}
+                          loading="lazy"
+                          className="w-full h-auto object-contain opacity-60"
+                        />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 text-white text-xs font-medium gap-1">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 opacity-80">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                          </svg>
+                          <span>Video expired — re-upload to replay</span>
+                        </div>
+                      </div>
+                    ) : (
                       <div className="h-32 bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center p-4 text-slate-400 border-b border-slate-200 dark:border-slate-700">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 mb-2 opacity-50">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3.25a2.25 2.25 0 00-2.25-2.25h-9m12 2.25l-2.625 2.625M12 5.25h.008v.008H12V5.25z" />
@@ -206,18 +232,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                         </svg>
                         <span className="text-xs font-medium">Media expired from local storage</span>
                       </div>
-                    ) : attachment.type === 'image' ? (
-                      <img
-                        src={attachment.data}
-                        alt={attachment.fileName}
-                        loading="lazy"
-                        className="w-full h-auto object-contain"
-                      />
-                    ) : (
-                      <VideoAnalysisPlayer
-                        src={attachment.data}
-                        label={message.predictedSkill}
-                      />
                     )}
                     <div className="px-2 py-1 bg-slate-50 text-xs text-slate-600 truncate">
                       📎 {attachment.fileName}

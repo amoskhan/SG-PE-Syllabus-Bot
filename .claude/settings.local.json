@@ -4,7 +4,8 @@
       "Bash(yarn build:*)",
       "Bash(node -e ':*)",
       "Read(//c/Users/khana/Desktop/SG-PE-Syllabus-Bot/**)",
-      "Bash(python3)"
+      "Bash(python3)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

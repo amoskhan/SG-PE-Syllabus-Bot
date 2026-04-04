@@ -15,6 +15,35 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
     const [status, setStatus] = useState('Initializing...');
+    const [blobSrc, setBlobSrc] = useState<string>('');
+
+    // Convert base64 data URL → blob URL so the browser can stream it properly.
+    // Large base64 data URLs fed directly to <video src> fail silently in Chrome/Firefox.
+    useEffect(() => {
+        if (!src) return;
+        let objectUrl: string | null = null;
+        let cancelled = false;
+
+        if (src.startsWith('data:')) {
+            fetch(src)
+                .then(r => r.blob())
+                .then(blob => {
+                    objectUrl = URL.createObjectURL(blob);
+                    if (cancelled) {
+                        URL.revokeObjectURL(objectUrl);
+                    } else {
+                        setBlobSrc(objectUrl);
+                    }
+                });
+        } else {
+            setBlobSrc(src);
+        }
+
+        return () => {
+            cancelled = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [src]);
 
     // Debug stats
     const [fps, setFps] = useState(0);
@@ -190,7 +219,7 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
         <div className="relative rounded-lg overflow-hidden bg-black w-full group">
             <video
                 ref={videoRef}
-                src={src}
+                src={blobSrc}
                 className="w-full h-auto block"
                 controls
                 playsInline
