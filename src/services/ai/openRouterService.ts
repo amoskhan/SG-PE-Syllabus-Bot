@@ -188,7 +188,7 @@ export const sendMessageToOpenRouter = async (
     mediaAttachments?: MediaData[],
     skillName?: string,
     isVerified?: boolean,
-    modelId: 'nemotron' = 'nemotron',
+    modelId?: 'openrouter' | 'openrouter-video' | 'openrouter-text',
     sessionId?: string,
     teacherProfile?: import('../../types').TeacherProfile | null
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
@@ -271,7 +271,6 @@ export const sendMessageToOpenRouter = async (
                 let minKneeAngleFrame = -1;
                 let maxRightHandHighFrame = -1;
                 let maxLeftHandHighFrame = -1;
-                // let releaseFrame = -1; // Placeholder for future ball integration
 
                 // Iterate analyses to find key angles and their frames
                 analyses.forEach((analysis, index) => {
@@ -333,7 +332,6 @@ export const sendMessageToOpenRouter = async (
                     const ankleWidth = Math.abs(curr[27].x - curr[28].x);
                     if (ankleWidth < shoulderWidth * 0.8) narrowStanceCount++;
 
-                    // const rightFootMoveY = curr[28].y - prev[28].y;
 
                     // Movement Log
                     const stepThreshold = 0.05;
@@ -363,24 +361,39 @@ export const sendMessageToOpenRouter = async (
                 if (dominantHand === 'Right' && steppingFoot === 'Right') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Right Foot while throwing with Right Hand (Should be Left Foot)';
                 if (dominantHand === 'Left' && steppingFoot === 'Left') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Left Foot while throwing with Left Hand (Should be Right Foot)';
 
-                // Wind-up Check (Depth) - ONLY for skills where hand drops/swings back
-                let windUpCheck = 'N/A (Not required for this skill)';
-                const requiresWindUp = ['Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick'].some(s => skillName?.includes(s));
-
-                if (requiresWindUp) {
-                    windUpCheck = '⚠️ No significant wind-up (Hand stayed high)';
-                    if (dominantHand === 'Right' && minRightHandY > rightHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
-                    if (dominantHand === 'Left' && minLeftHandY > leftHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
-                }
-
-                // Excessive High Swing Check (Consistency)
-                let highSwingCheck = '✅ Hand Height Controlled (Below Head Level)';
-                // Y increases downwards. Smaller Y = Higher.
+                // Y increases downwards. Smaller Y = Higher position on screen.
                 const highPoint = dominantHand === 'Right' ? maxRightHandHighY : maxLeftHandHighY;
                 const highPointFrame = dominantHand === 'Right' ? maxRightHandHighFrame : maxLeftHandHighFrame;
+                const lowestDominantY = dominantHand === 'Right' ? minRightHandY : minLeftHandY;
+                const dominantHipY = dominantHand === 'Right' ? rightHipY : leftHipY;
 
+                // Arm Trajectory Classification — primary signal for skill identification
+                // High arm (above nose) = overhand family; Low arm (below hip) = underhand family
+                let armTrajectory: string;
                 if (highPoint < noseY) {
-                    highSwingCheck = `⚠️ Hand raised ABOVE HEAD level (High Backswing/Follow-through). Check if excessive for this skill. (Evidence: Frame ${highPointFrame})`;
+                    armTrajectory = `OVERHEAD — arm peaked above head level at Frame ${highPointFrame}. ✅ Normal for Overhand Throw, Chest Pass, or overhead striking. ❌ Abnormal for Underhand Throw / Underhand Roll (which require arm to stay below waist).`;
+                } else if (lowestDominantY > dominantHipY) {
+                    armTrajectory = `LOW SWING — arm dropped below hip/waist level. ✅ Normal for Underhand Throw, Underhand Roll, Kick. ❌ Abnormal for Overhand Throw (which requires arm to swing overhead).`;
+                } else {
+                    armTrajectory = `MID-LEVEL — arm stayed between waist and head. Consistent with Chest Pass, Bounce Pass, or Dribble.`;
+                }
+
+                // Wind-up Check — run always so AI gets this context even in Phase 1
+                let windUpCheck: string;
+                const handDroppedBelowWaist = (dominantHand === 'Right' && minRightHandY > rightHipY) || (dominantHand === 'Left' && minLeftHandY > leftHipY);
+                if (handDroppedBelowWaist) {
+                    windUpCheck = '✅ Hand dropped below waist — consistent with Underhand Throw / Underhand Roll / Kick wind-up.';
+                } else if (highPoint < noseY) {
+                    windUpCheck = '✅ Arm swung overhead — consistent with Overhand Throw backswing/follow-through.';
+                } else {
+                    windUpCheck = '⚠️ No distinct wind-up detected (arm stayed between waist and head throughout).';
+                }
+
+                // Excessive High Swing check (only relevant when skill is known and it should be low)
+                let highSwingCheck = '✅ Arm height appropriate';
+                const isUnderhanded = skillName && ['Underhand Throw', 'Underhand Roll'].some(s => skillName.includes(s));
+                if (isUnderhanded && highPoint < noseY) {
+                    highSwingCheck = `⚠️ Arm raised ABOVE HEAD for an underhand skill — this violates the controlled low swing requirement. (Evidence: Frame ${highPointFrame})`;
                 }
 
                 // Knee Bend Check
@@ -396,13 +409,14 @@ export const sendMessageToOpenRouter = async (
                 biomechanicsReport = `\n
                 **BIOMECHANICS AUTO-ANALYSIS:**
                 1. **Dominant Hand**: ${dominantHand} ${confidence}
-                2. **Stepping Foot**: ${steppingFoot}
-                3. **Coordination**: ${coordinationCheck}
-                4. **Stance**: ${stanceIssue}
-                5. **Wind-up (Depth)**: ${windUpCheck}
-                6. **Arm Height**: ${highSwingCheck}
-                7. **Knee Bend**: ${kneeBendCheck}
-                8. **Step Verification**: ${stepNote}
+                2. **Arm Trajectory (Skill Classifier)**: ${armTrajectory}
+                3. **Wind-up**: ${windUpCheck}
+                4. **Stepping Foot**: ${steppingFoot}
+                5. **Coordination**: ${coordinationCheck}
+                6. **Stance**: ${stanceIssue}
+                7. **Arm Height (Skill-Specific)**: ${highSwingCheck}
+                8. **Knee Bend**: ${kneeBendCheck}
+                9. **Step Verification**: ${stepNote}
                 `;
 
                 movementPattern = `\n\n**Movement patterns (Kinetic Chain indicators):**\n${changes.slice(0, 30).map((c, i) => `• Frame ${i + 1}→${i + 2}: ${c}`).join('\n')}`;
@@ -412,9 +426,9 @@ export const sendMessageToOpenRouter = async (
             poseDescription = analyses.map((analysis, i) => {
                 const ball = poseData[i].ball;
                 // Only report 'YES' if the ball exists AND is marked as valid by the logic or user
-                const hasBall = (ball && ball.isValid)
-                    ? `YES (x:${ball.center.x.toFixed(0)}, y:${ball.center.y.toFixed(0)})`
-                    : 'NO (Not detected or User Omitted)';
+                // Report ball presence only — raw pixel coords are on a different scale from
+                // normalized landmarks (0-1) and cause the LLM to fabricate "below knee level" claims.
+                const hasBall = (ball && ball.isValid) ? 'YES (detected)' : 'NO';
                 return `
                 **Frame ${i + 1}:**
                 Position: ${analysis.poseSummary}
@@ -443,13 +457,13 @@ export const sendMessageToOpenRouter = async (
                 'Ensure you site specific frames for any deductions.' : 
                 'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}
 
-            **CRITICAL CONSISTENCY RULE (PROFICIENCY VS CHECKLIST):**
+            ${isVerified ? `**CRITICAL CONSISTENCY RULE (PROFICIENCY VS CHECKLIST):**
             - If you grade the Proficiency Level as "Keeping it Real" / "Developing" / "Beginning", you **MUST** have at least one ❌ or ⚠️ in the Checklist Assessment.
             - **You cannot have a "Competent" checklist (all ✅) and a "Developing" grade.** They must tell the same story.
-            - **SPECIFIC OVERRIDE FOR UNDERHAND ROLL**: 
+            - **SPECIFIC OVERRIDE FOR UNDERHAND ROLL**:
               - IF "Hand raised ABOVE HEAD" is detected in the Biomechanics Report, you **MUST MARK CHECKLIST ITEM #5 ("Swing dominant hand back at least to waist level") as ❌ OR ⚠️**.
               - Reason: "Excessive backswing violates the controlled nature of the skill."
-              - **DO NOT** give a "Pass" just because it went *past* the waist. It must be *controlled* at the waist. "Too much" is a failure of the specific criteria.
+              - **DO NOT** give a "Pass" just because it went *past* the waist. It must be *controlled* at the waist. "Too much" is a failure of the specific criteria.` : ''}
 `;
         }
 
@@ -514,11 +528,21 @@ ${checklist.join('\n')}
                 1. You must ONLY classify the movement as one of the exact keys above.
                 2. Do not use synonyms (e.g. NEVER say "Free Throw", say "Underhand Throw" or "Chest Pass" if it matches one of those patterns, otherwise "Unknown").
                 3. If the movement does not match any of the above skills, output "❌ **Unknown Movement**".
-                
+
+                **BIOMECHANICS PRIORITY RULE (READ THIS FIRST):**
+                The "Arm Trajectory (Skill Classifier)" field in the Biomechanics Report is your PRIMARY and MOST RELIABLE signal.
+                - **OVERHEAD** (arm peaked above head/nose level) → Overhand Throw, Chest Pass, or overhead striking
+                - **LOW SWING** (arm dropped below hip level) → Underhand Throw, Underhand Roll, or Kick
+                - **MID-LEVEL** (arm between waist and head) → Chest Pass, Bounce Pass, or Dribble
+                Trust this classification ABOVE any ball position data, which is in raw pixels and may be unreliable.
+                Ball detection only tells you IF a ball was present — NOT where in the movement it was released.
+
                 **INSTRUCTIONS**:
-                1. Look at the visual evidence and pose data.
-                2. Identify the skill from the WHITELIST.
-                3. **STOP**. Do NOT grade it yet.
+                1. Read the "Arm Trajectory (Skill Classifier)" from the Biomechanics Report first.
+                2. Use it to narrow down the skill family.
+                3. Look at the visual evidence to confirm.
+                4. Identify the skill from the WHITELIST.
+                5. **STOP**. Do NOT grade it yet.
                 
                 **REQUIRED OUTPUT FORMAT**:
                 "Phase 1: I have detected a **[Skill Name]**."
@@ -606,7 +630,6 @@ ${checklist.join('\n')}
         // If history is too long, keep only the last few turns.
         const MAX_HISTORY_TURNS = 10;
         if (sanitizedHistory.length > MAX_HISTORY_TURNS) {
-            console.log(`⚠️ Truncating history from ${sanitizedHistory.length} to ${MAX_HISTORY_TURNS} to save context.`);
             sanitizedHistory = sanitizedHistory.slice(-MAX_HISTORY_TURNS);
         }
 
@@ -617,13 +640,6 @@ ${checklist.join('\n')}
 
         // Construct the CURRENT user message
         let finalMessageContent = enhancedMessage;
-
-        // [DEV TOOL] Log the full prompt data so we can copy it for Few-Shot Learning examples
-        if (poseData && poseData.length > 0) {
-            console.log("👇👇 COPY FROM HERE (FEW-SHOT DATA) 👇👇");
-            console.log(enhancedMessage);
-            console.log("👆👆 COPY TO HERE 👆👆");
-        }
 
         // CRITICAL: For Nemotron/Nova (Smaller models), they often forget the System Instruction "Phase 1" rule
         // because the Pose Data context is so large. We must REMIND them at the END of the prompt.
@@ -645,7 +661,6 @@ ${checklist.join('\n')}
             // Auto-detect skill from text if not explicitly provided
             if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
 
-                console.log(`📘 [OpenRouter] Injecting Reference Image for: ${activeSkillName}`);
                 finalReferenceURI = SKILL_REFERENCE_IMAGES[activeSkillName];
 
                 try {
@@ -703,7 +718,6 @@ ${checklist.join('\n')}
                     }
                 });
             });
-            console.log(`[OpenRouterService] Attached ${processedAttachments.length} images for vision processing.`);
         }
 
         openRouterMessages.push({
@@ -713,12 +727,20 @@ ${checklist.join('\n')}
 
         // Map internal model IDs to OpenRouter model strings
         const modelMap: Record<string, string> = {
-            'nemotron': 'nvidia/nemotron-nano-12b-v2-vl:free',
+            'openrouter': '', // Will be determined by input type
+            'openrouter-video': 'google/gemini-2.5-flash',
+            'openrouter-text': 'qwen/qwen3.6-plus:free',
         };
 
-        const targetModel = modelMap[modelId || 'nemotron'] || 'nvidia/nemotron-nano-12b-v2-vl:free';
-
-        console.log(`🤖 Using OpenRouter Model: ${targetModel}`);
+        // Determine target model based on input type
+        let targetModel: string;
+        if (modelId === 'openrouter' || !modelId) {
+            // Route by input type: video → gemini, text/PDF → qwen
+            const hasVideo = mediaAttachments && mediaAttachments.some(m => m.mimeType.startsWith('video/'));
+            targetModel = hasVideo ? 'google/gemini-2.5-flash' : 'qwen/qwen3.6-plus:free';
+        } else {
+            targetModel = modelMap[modelId] || 'qwen/qwen3.6-plus:free';
+        }
 
         const endpoint = useProxy ? '/api/openrouter' : "https://openrouter.ai/api/v1/chat/completions";
 
@@ -755,7 +777,6 @@ ${checklist.join('\n')}
         }
 
         const data = await response.json();
-        console.log("🟢 OpenRouter Raw Response:", JSON.stringify(data, null, 2)); // Debug log
 
         if (data.error) {
             throw new Error(`API Error: ${data.error.message || JSON.stringify(data.error)}`);

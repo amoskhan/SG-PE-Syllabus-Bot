@@ -27,6 +27,10 @@ const App: React.FC = () => {
   const tempToRealIdRef = React.useRef<Record<string, string>>({});
   // Queue of sessions that need to be synced once their real UUID is known
   const pendingSyncRef = React.useRef<ChatSession[]>([]);
+  // Permanent in-memory cache: attachmentId -> base64 video data.
+  // Supabase always strips media data to '' on sync. This ref is the authoritative
+  // source of video data for the entire page session, immune to cloud overwrites.
+  const videoDataCacheRef = React.useRef<Map<string, string>>(new Map());
 
   // DEFAULT WELCOME MESSAGE
   const getWelcomeMessage = (): Message => ({
@@ -52,7 +56,20 @@ const App: React.FC = () => {
             messages: Array.isArray(s.messages)
               ? s.messages.map((m: any) => {
                   const ts = new Date(m.timestamp);
-                  return { ...m, timestamp: isNaN(ts.getTime()) ? new Date() : ts };
+                  return {
+                    ...m,
+                    timestamp: isNaN(ts.getTime()) ? new Date() : ts,
+                    // Restore video data from sessionStorage cache (survives same-tab refresh)
+                    media: Array.isArray(m.media)
+                      ? m.media.map((med: any) => {
+                          if (med.type === 'video' && !med.data) {
+                            const cached = sessionStorage.getItem(`video_cache_${med.id}`);
+                            if (cached) return { ...med, data: cached };
+                          }
+                          return med;
+                        })
+                      : m.media
+                  };
                 })
               : []
           };
@@ -112,13 +129,29 @@ const App: React.FC = () => {
             updatedAt: new Date(s.updated_at)
           }));
 
-          // Merge: keep any local sessions that are NOT yet in the cloud (temp IDs)
-          // These are sessions the user started before the cloud fetch returned.
+          // Merge: keep any local sessions that are NOT yet in the cloud (temp IDs).
+          // Re-hydrate media data from videoDataCacheRef — Supabase always strips data:''
+          // but the cache holds the authoritative base64 for the full page session.
           setSessions(prev => {
             const cloudIds = new Set(cloudSessions.map(s => s.id));
+
+            // Restore media data into cloud sessions using the permanent video cache
+            const hydratedCloud = cloudSessions.map(cs => ({
+              ...cs,
+              messages: cs.messages.map(m => ({
+                ...m,
+                media: m.media?.map((med: any) => {
+                  if (!med.data && videoDataCacheRef.current.has(med.id)) {
+                    return { ...med, data: videoDataCacheRef.current.get(med.id) };
+                  }
+                  return med;
+                })
+              }))
+            }));
+
             // Local sessions without a cloud counterpart (still have temp numeric IDs)
             const unseenLocal = prev.filter(s => !cloudIds.has(s.id) && !s.id.includes('-'));
-            return [...unseenLocal, ...cloudSessions];
+            return [...unseenLocal, ...hydratedCloud];
           });
         } else {
           // No cloud data – migrate from localStorage
@@ -150,7 +183,7 @@ const App: React.FC = () => {
     };
 
     fetchSessions();
-  }, [user]);
+  }, [user?.id]); // Use user.id (stable string) not user object — token refreshes create new object refs and would re-fetch, wiping video data from state
 
   // Derived State: Current Messages
   const currentSession = sessions.find(s => s.id === currentSessionId);
@@ -158,7 +191,7 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'nemotron'>('gemini');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'openrouter'>('gemini');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
@@ -182,16 +215,26 @@ const App: React.FC = () => {
 
   // Persistence to LocalStorage (Instant Feedback)
   useEffect(() => {
-    // Strip heavy data before saving
+    // Strip heavy data before saving to localStorage (quota-sensitive)
+    // But: keep thumbnailData (small, ~20KB) so the fallback thumbnail always shows.
+    // Full video base64 is cached in sessionStorage (survives same-tab refresh, not cross-tab).
     const safeSessions = sessions.map(s => ({
       ...s,
       messages: s.messages.map(m => ({
         ...m,
-        media: m.media?.map(media => ({
-          ...media,
-          data: '', // STRIP DATA
-          thumbnailData: undefined
-        })),
+        media: m.media?.map(media => {
+          // Cache video base64 in sessionStorage so it survives same-tab refresh
+          if (media.type === 'video' && media.data && media.data.startsWith('data:')) {
+            try {
+              sessionStorage.setItem(`video_cache_${media.id}`, media.data);
+            } catch (_) { /* sessionStorage quota exceeded – skip */ }
+          }
+          return {
+            ...media,
+            data: '', // Strip from localStorage (too heavy)
+            thumbnailData: media.thumbnailData // Keep thumbnail (small)
+          };
+        }),
         analysisFrames: [] // STRIP DATA
       }))
     }));
@@ -394,14 +437,19 @@ const App: React.FC = () => {
           fileName: file.name
         });
       } else if (file.type.startsWith('video/')) {
-        const videoUrl = URL.createObjectURL(file);
+        // Store as base64 so the video survives page refreshes and session restores.
+        // Blob URLs are ephemeral and become invalid after the page unloads.
+        const videoBase64 = await fileToBase64(file);
         // Fast thumbnail (first frame only)
         const thumbnails = await extractVideoFrames(file, 1);
+        const videoId = Date.now().toString() + Math.random();
+        // Cache in the permanent in-memory ref so Supabase re-fetch can re-hydrate
+        videoDataCacheRef.current.set(videoId, videoBase64);
         attachments.push({
-          id: Date.now().toString() + Math.random(),
+          id: videoId,
           type: 'video',
           mimeType: file.type,
-          data: videoUrl,
+          data: videoBase64,
           fileName: file.name,
           thumbnailData: thumbnails[0]
         });
@@ -432,6 +480,7 @@ const App: React.FC = () => {
       const processedImages: { img: HTMLImageElement, pose: any, ball: any, timestamp: number }[] = [];
       const debugFrames: string[] = [];
       const analysisFrames: MediaData[] = [];
+      let rawVideoFrames: string[] = []; // fallback if no pose detected
 
       for (const file of files) {
         if (file.type.startsWith('image/')) {
@@ -444,6 +493,7 @@ const App: React.FC = () => {
         } else if (file.type.startsWith('video/')) {
           const frameCount = 12;
           const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
+          rawVideoFrames = frames; // keep for fallback
           for (let i = 0; i < frames.length; i++) {
             const img = await loadImageFromUrl(frames[i]);
             try {
@@ -472,6 +522,16 @@ const App: React.FC = () => {
           analysisFrames.push({ mimeType: 'image/jpeg', data: debugFrame });
         }
       }
+
+      // If MediaPipe couldn't detect any pose, fall back to raw frames so
+      // Gemini still receives visual context instead of returning an empty response.
+      if (analysisFrames.length === 0 && rawVideoFrames.length > 0) {
+        console.warn('⚠️ No poses detected — sending raw frames to Gemini as fallback');
+        for (const frame of rawVideoFrames.slice(0, 6)) {
+          analysisFrames.push({ mimeType: 'image/jpeg', data: frame });
+        }
+      }
+
 
       // Final Update to the Session Message (Visuals)
       updateSessionAndSync(originatingSessionId, session => ({
@@ -874,13 +934,13 @@ const App: React.FC = () => {
                 className="px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
               >
                 <img
-                  src={`/assets/model-icons/${selectedModel === 'nemotron' ? 'nvidia' : selectedModel}.png`}
+                  src={`/assets/model-icons/${selectedModel === 'openrouter' ? 'qwen' : selectedModel}.png`}
                   alt={selectedModel}
                   className="w-4 h-4 object-contain"
                 />
                 <span className="hidden sm:inline">
-                  {selectedModel === 'nemotron' ? 'Nemotron' :
-                    selectedModel === 'gemini' ? 'Gemini 3 Flash' :
+                  {selectedModel === 'gemini' ? 'Gemini 3 Flash' :
+                    selectedModel === 'openrouter' ? 'OpenRouter (Auto)' :
                       'Bedrock'}
                 </span>
                 <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -893,9 +953,9 @@ const App: React.FC = () => {
                   <div className="fixed inset-0 z-10" onClick={() => setIsModelDropdownOpen(false)} />
                   <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-slate-200 dark:border-zinc-800 overflow-hidden z-20 flex flex-col p-1">
                     {[
-                      { id: 'nemotron', name: 'Nemotron', icon: 'nvidia.png' },
                       { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
-                      { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' }
+                      { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' },
+                      { id: 'openrouter', name: 'OpenRouter (Auto)', icon: 'qwen.png' },
                     ].map((model) => (
                       <button
                         key={model.id}

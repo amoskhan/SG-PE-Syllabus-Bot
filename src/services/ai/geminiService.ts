@@ -357,16 +357,22 @@ export const sendMessageToGemini = async (
           if (dominantHand === 'Left' && minLeftHandY > leftHipY) windUpCheck = '✅ Good Wind-up (Hand dropped below waist)';
         }
 
-        // Excessive High Swing Check (Consistency)
-        let highSwingCheck = '✅ Hand Height Controlled (Below Head Level)';
-        let highSwingFailed = false;
-        // Y increases downwards. Smaller Y = Higher.
+        // Arm Height Check — interpretation depends on skill
         const highPoint = dominantHand === 'Right' ? maxRightHandHighY : maxLeftHandHighY;
         const highPointFrame = dominantHand === 'Right' ? maxRightHandHighFrame : maxLeftHandHighFrame;
+        const isUnderhanded = skillName && ['Underhand Throw', 'Underhand Roll'].some(s => skillName.includes(s));
+
+        let highSwingCheck = '✅ Arm height appropriate for this skill.';
+        let highSwingFailed = false;
 
         if (highPoint < noseY) {
-          highSwingCheck = `❌ EXCESSIVE BACKSWING: Hand raised ABOVE HEAD level at Frame ${highPointFrame}. This violates the controlled backswing requirement for Underhand Roll/Throw.`;
-          highSwingFailed = true;
+          if (isUnderhanded) {
+            highSwingCheck = `❌ EXCESSIVE BACKSWING: Hand raised ABOVE HEAD level at Frame ${highPointFrame}. This violates the controlled low-swing requirement for ${skillName}.`;
+            highSwingFailed = true;
+          } else {
+            // Overhand Throw, Chest Pass, etc. — overhead arm is expected/correct
+            highSwingCheck = `✅ Arm peaked above head level at Frame ${highPointFrame}. Normal for Overhand Throw, Chest Pass, or overhead striking.`;
+          }
         }
 
         // Knee Bend Check - SETUP PHASE (First 2 frames) vs MOVEMENT PHASE
@@ -421,40 +427,28 @@ export const sendMessageToGemini = async (
           ? `✅ Knees Bent During Movement (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}).`
           : `⚠️ Knees appear straight during movement (Min angle: ${minKneeAngle}° at Frame ${minKneeAngleFrame}).`;
 
-        // Ball Release Analysis - Critical for distinguishing throw vs roll
+        // Ball Detection Summary
+        // NOTE: ball.center is in canvas pixels; landmarks are MediaPipe-normalized (0–1).
+        // Cross-scale comparison (pixels vs normalized) is unreliable, so we only report
+        // presence/absence. Release-point classification is left to the LLM's visual analysis.
         let releaseAnalysis = 'N/A (No ball data available)';
         let releasePoint = 'unknown';
         let releaseFrameIndex = -1;
 
         if (poseData && poseData.length > 0) {
-          // Find the frame where ball disappears or has maximum downward velocity
-          let ballReleaseFrames: number[] = [];
+          let ballFrameCount = 0;
+          let lastBallFrame = -1;
           for (let i = 0; i < poseData.length; i++) {
             const ball = poseData[i].ball;
             if (ball && ball.isValid) {
-              // Track ball Y position - release typically at lowest point before upward trajectory
-              if (ball.center.y > 0.5) { // Ball is in lower portion of frame
-                ballReleaseFrames.push(i);
-                releaseFrameIndex = i;
-              }
+              ballFrameCount++;
+              lastBallFrame = i;
+              releaseFrameIndex = i;
             }
           }
-
-          if (releaseFrameIndex >= 0 && poseData[releaseFrameIndex].ball) {
-            const releaseY = poseData[releaseFrameIndex].ball!.center.y;
-            const kneeY = poseData[releaseFrameIndex].landmarks[26]?.y || 0.5; // Right knee
-            const waistY = poseData[releaseFrameIndex].landmarks[24]?.y || 0.3; // Right hip
-
-            if (releaseY > kneeY) {
-              releasePoint = 'below-knee';
-              releaseAnalysis = `✅ Ball released BELOW KNEE level (Frame ${releaseFrameIndex + 1}). Consistent with Underhand Roll.`;
-            } else if (releaseY > waistY) {
-              releasePoint = 'between-knee-waist';
-              releaseAnalysis = `✅ Ball released BETWEEN KNEE and WAIST (Frame ${releaseFrameIndex + 1}). Consistent with Underhand Throw.`;
-            } else {
-              releasePoint = 'above-waist';
-              releaseAnalysis = `⚠️ Ball released ABOVE WAIST (Frame ${releaseFrameIndex + 1}, Y=${releaseY.toFixed(2)}). This is atypical for Underhand Roll/Throw.`;
-            }
+          if (ballFrameCount > 0) {
+            releaseAnalysis = `Ball detected in ${ballFrameCount} of ${poseData.length} frames (last seen: Frame ${lastBallFrame + 1}). Use visual evidence to determine release point.`;
+            releasePoint = 'visual-only';
           }
         }
 
@@ -536,7 +530,6 @@ ${userTargetSkill}
       const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
       for (const skill of knownSkills) {
         if (lowerMsg.includes(skill.toLowerCase())) {
-          console.log(`🧠 Text Context detected skill: ${skill}`);
           activeSkillName = skill;
           break;
         }
@@ -607,7 +600,6 @@ ${checklist.join('\n')}
         if (ragResponse.ok) {
           const ragData = await ragResponse.json();
           ragContext = ragData.context || '';
-          if (ragContext) console.log("✅ RAG Context Retrieved!");
         }
       }
     } catch (e) {
@@ -675,7 +667,7 @@ ${biomechanicsReport || ''}
 ${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
 
 **Immediate Task:**
-${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. CRITICAL: Use the Biomechanics Report's specific findings for Setup Knee Bend, Backswing Height, and Ball Release Point as definitive evidence. If the report shows failures (marked with ❌ or **FAILURE**), you MUST reflect these as ❌ in your Checklist Assessment.` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE". Identify top 4 likely skills.`}
+${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. Use the Biomechanics Report's findings as supporting evidence. Only treat a biomechanics field as definitive failure if it is explicitly marked ❌ with **FAILURE** AND that failure is relevant to the confirmed skill (e.g. "EXCESSIVE BACKSWING" is only a failure for underhand skills, NOT for Overhand Throw where overhead arm is required).` : `Proceed with "STEP 1 - OBSERVE AND HYPOTHESIZE". Identify top 4 likely skills.`}
 
 **IMPORTANT**:
 - **Visual Evidence**: You MUST add a section called "**Visual Evidence**" where you quote specific differences between the provided Reference Image ("Gold Standard") and the User's Video ("Actual Performance").
@@ -729,8 +721,6 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
     // (activeSkillName was already detected earlier)
 
     if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
-      console.log(`📘 Injecting Reference Image for: ${activeSkillName}`);
-
       // We need to fetch the image from the public folder and convert to base64
       // Since this runs in browser, we can use fetch
       try {
@@ -816,8 +806,6 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
     };
 
     if (mediaAttachments && mediaAttachments.length > 0) {
-      console.log(`📎 Attaching ${mediaAttachments.length} images/frames to prompt`);
-
       // Process serially to be safe
       for (const media of mediaAttachments) {
         // Strip data URL prefix if present for logic, but compression needs it
@@ -852,8 +840,6 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
     // If LOCAL (DEV) -> Use Direct Client Key (Fast, no server setup needed)
     // If PROD -> Use Serverless Proxy (Secure, hides key)
     if (import.meta.env.DEV) {
-      console.log("🔧 DEV MODE: Using direct Client-Side API Key");
-
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error("VITE_GEMINI_API_KEY is missing in .env.local");
 
@@ -890,8 +876,6 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
       tokenUsage = response.usageMetadata?.totalTokenCount || 0;
 
     } else {
-      console.log("🚀 PROD MODE: Using Secure Serverless Function");
-
       const geminiController = new AbortController();
       const geminiTimeout = setTimeout(() => geminiController.abort(), 60_000);
       const response = await fetch('/api/gemini', {
@@ -954,7 +938,6 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
       const suggestedSkill = referenceTagMatch[1].trim();
       if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
         finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
-        console.log(`🖼️ AI triggered reference image for: ${suggestedSkill}`);
       }
     }
 

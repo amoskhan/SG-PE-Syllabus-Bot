@@ -32,20 +32,20 @@ const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseDat
     return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile);
 };
 
-// Wrapper for OpenRouter (Nemotron)
-const nemotronWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile) => {
-    return sendMessageToOpenRouter(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, 'nemotron', sessionId, teacherProfile);
+// Wrapper for OpenRouter with dynamic model routing (video → gemini-2.5-flash, text/PDF → qwen)
+const openrouterWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile) => {
+    return sendMessageToOpenRouter(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, 'openrouter', sessionId, teacherProfile);
 };
 
 // Start with a registry that returns the FUNCTION
-export const getAIService = (modelId: 'gemini' | 'bedrock' | 'nemotron'): AIServiceFunction => {
+export const getAIService = (modelId: 'gemini' | 'bedrock' | 'openrouter'): AIServiceFunction => {
     switch (modelId) {
         case 'gemini':
             return geminiWrapper;
         case 'bedrock':
             return bedrockWrapper;
-        case 'nemotron':
-            return nemotronWrapper;
+        case 'openrouter':
+            return openrouterWrapper;
         default:
             return geminiWrapper;
     }
