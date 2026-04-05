@@ -2,46 +2,133 @@
 <img width="1200" height="475" alt="GHBanner" src="https://i.postimg.cc/YCjv3Lpn/Screenshot-2025-12-11-183551.png" />
 </div>
 
-# 🏃‍♂️ SG PE Syllabus Bot
+# SG PE Syllabus Bot
 
-**The Intelligent Co-Pilot for Physical Education Teachers in Singapore** 🇸🇬
+**AI co-pilot for Physical Education teachers in Singapore**
 
-The **SG PE Syllabus Bot** is a cutting-edge AI assistant designed to bridge the gap between policy and practice. It combines **Computer Vision** with **Large Language Models** to help educators navigate the 2024 PE Syllabus and analyze student performance in real-time.
+Combines RAG-based syllabus Q&A with real-time computer vision motion analysis — hosted entirely on Vercel as a React frontend + serverless API proxies.
 
 ---
 
-## ✨ Key Capabilities
+## Features
 
-### 1. 🤖 AI Motion Analysis (Computer Vision)
-Upload a video or use your camera to receive instant, frame-by-frame feedback on Fundamental Movement Skills (FMS).
-- **Real-time Skeleton Tracking**: Powered by MediaPipe.
-- **Frame-by-Frame Breakdown**: The AI inspects key frames to detect errors (e.g., "Knees not bent", "Wrong release point").
-- **Multi-Model Support**: Switch between **Amazon Nova**, **Gemini 2.5 Flash**, **Nvidia Nemotron**, and **Claude 3.5 Sonnet** for analysis.
-
-### 2. 📚 Syllabus Expert (RAG)
-Stop searching through PDFs. Just ask:
+### Syllabus Q&A
+Ask natural-language questions about the 2024 MOE PE Syllabus:
 - *"What are the learning outcomes for Primary 4 Gymnastics?"*
 - *"Give me a lesson plan for teaching the overhand throw."*
 - *"What are the safety guidelines for outdoor education?"*
 
-### 3. 🎨 Modern & Responsive UI
-- **Dark/Light Mode**: Fully themed interface.
-- **Mobile Optimized**: Works perfectly on tablets and phones for field usage.
-- **Fast & Interactive**: Built with React + Vite for lightning-fast performance.
+Three-tier intent classification routes vague queries to specific outcomes without hallucination. Semantic search over the full syllabus is powered by Gemini embeddings + Supabase pgvector.
+
+### FMS Motion Analysis
+Upload a video or record from your camera to get graded feedback on Fundamental Movement Skills.
+
+1. **Pose extraction** — MediaPipe tracks 33 landmarks per frame and computes a biomechanics report (dominant hand, arm trajectory, wind-up, step coordination, knee bend, stance width).
+2. **Skill identification** — LLM identifies the most likely skill from the biomechanics report (or skip this step by typing the skill name directly).
+3. **Grading** — Each checklist criterion is graded ✅ / ❌ / ⚠️ with frame-level evidence. Proficiency is reported as Beginning / Developing / Competent / Excellent.
+
+10 skills supported: Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble with Hands, Dribble with Feet, Chest Pass, Catch Above Waist, Bounce Pass, Bounce.
+
+Custom rubrics per skill can be saved to a teacher profile and replace the standard checklist entirely.
+
+### Multi-Model Support
+Switch between providers per session:
+
+| Provider | Model | Use |
+|---|---|---|
+| Gemini | 2.5 Flash | Primary Q&A + motion analysis |
+| OpenRouter | Qwen3.6-plus / Gemini 2.5 Flash | Text + vision alternative |
+| AWS Bedrock | Claude 3.5 Sonnet | Alternative LLM |
+
+### Teacher Profiles & Cloud Sync
+- Google OAuth via Supabase Auth
+- Sessions and chat history sync to Supabase (source of truth for authenticated users)
+- Custom rubrics saved per skill per teacher
+- PDF upload pipeline for ingesting custom documents
 
 ---
 
-## 🛠️ Tech Stack
-- **Frontend**: React, TypeScript, Vite
-- **Styling**: Tailwind CSS (with Dark Mode)
-- **AI/LLM**: Google Gemini, Amazon Nova, Nvidia Nemotron (via OpenRouter), AWS Bedrock
-- **Computer Vision**: Google MediaPipe Pose Detection
-- **Deployment**: Vercel
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| Styling | Tailwind CSS |
+| Computer Vision | Google MediaPipe Pose Landmarker |
+| LLMs | Gemini 2.5 Flash, Claude 3.5 Sonnet, Qwen3 (OpenRouter) |
+| Vector Search | Supabase pgvector + Gemini embeddings |
+| Auth & DB | Supabase (PostgreSQL + Auth) |
+| Deployment | Vercel (frontend + serverless API routes) |
 
 ---
 
-### 🔗 Resources
+## Local Development
+
+```bash
+yarn install   # Install dependencies
+yarn dev       # Dev server at http://localhost:5173
+yarn build     # Production build → dist/
+yarn preview   # Preview production build
+```
+
+Copy `.env.example` to `.env` and fill in:
+
+```
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+VITE_GEMINI_API_KEY=
+VITE_OPENROUTER_API_KEY=
+VITE_AWS_ACCESS_KEY_ID=
+VITE_AWS_SECRET_ACCESS_KEY=
+VITE_AWS_REGION=
+VITE_AWS_BEDROCK_MODEL=
+```
+
+For production, set the non-`VITE_` equivalents in the Vercel dashboard (serverless functions read those). Also set `ALLOWED_ORIGIN` to your deployed URL for CORS.
+
+---
+
+## Project Structure
+
+```
+src/
+├── App.tsx                          # Core app — session management, message routing
+├── types.ts                         # All TypeScript interfaces
+├── services/
+│   ├── ai/
+│   │   ├── aiServiceRegistry.ts     # LLM service factory
+│   │   ├── geminiService.ts         # Gemini integration
+│   │   ├── openRouterService.ts     # OpenRouter + biomechanics report
+│   │   └── bedrockService.ts        # AWS Bedrock integration
+│   └── vision/
+│       └── poseDetectionService.ts  # MediaPipe wrapper
+├── data/
+│   ├── syllabusData.ts              # Full 2024 MOE PE Syllabus text
+│   ├── syllabusRouter.ts            # Three-tier intent classification
+│   ├── fundamentalMovementSkillsData.ts  # FMS checklists + rubrics
+│   └── skillExamples.ts             # Few-shot grading examples
+└── components/
+    ├── chat/
+    │   ├── ChatInput.tsx            # Message composer
+    │   └── ChatMessage.tsx          # Message renderer (parses skill chips)
+    └── video/
+        ├── VideoAnalysisPlayer.tsx  # Video player + skeleton overlay
+        ├── VideoFrameSelector.tsx   # Trim UI
+        └── CameraRecorder.tsx       # Webcam recording modal
+api/
+├── gemini.ts                        # Gemini proxy
+├── bedrock.ts                       # Bedrock proxy
+├── openrouter.ts                    # OpenRouter proxy
+├── rag-search.ts                    # Semantic search endpoint
+└── upload-pdf.ts                    # PDF ingestion pipeline
+```
+
+---
+
+## Resources
+
 - [MOE PE Syllabus (2024)](https://www.moe.gov.sg/primary/curriculum/syllabus)
+- [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker)
 
 <div align="center">
   <sub>Created by Amos Khan</sub>
