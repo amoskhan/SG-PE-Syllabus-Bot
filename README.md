@@ -70,22 +70,6 @@ yarn dev       # Dev server at http://localhost:5173
 yarn build     # Production build → dist/
 yarn preview   # Preview production build
 ```
-
-Copy `.env.example` to `.env` and fill in:
-
-```
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-VITE_GEMINI_API_KEY=
-VITE_OPENROUTER_API_KEY=
-VITE_AWS_ACCESS_KEY_ID=
-VITE_AWS_SECRET_ACCESS_KEY=
-VITE_AWS_REGION=
-VITE_AWS_BEDROCK_MODEL=
-```
-
-For production, set the non-`VITE_` equivalents in the Vercel dashboard (serverless functions read those). Also set `ALLOWED_ORIGIN` to your deployed URL for CORS.
-
 ---
 
 ## Project Structure
