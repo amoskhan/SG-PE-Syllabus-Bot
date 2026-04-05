@@ -101,6 +101,8 @@ Two-phase analysis flow:
 
 #### Biomechanics Report Fields
 
+> For a plain-language explanation of how each field maps to physical movement and known limitations per skill, see [BIOMECHANICS.md](BIOMECHANICS.md).
+
 Computed in `src/services/ai/openRouterService.ts` → `sendMessageToOpenRouter`, injected into the LLM prompt before Phase 1:
 
 | Field | How it's computed | What it signals |
