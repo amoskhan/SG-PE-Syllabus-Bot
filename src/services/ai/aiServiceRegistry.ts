@@ -1,5 +1,5 @@
 import { sendMessageToGemini } from './geminiService';
-import { sendMessageToBedrock } from './bedrockService';
+import { sendMessageToClaudeAPI } from './claudeService';
 import { sendMessageToOpenRouter } from './openRouterService';
 import { Content } from '@google/genai';
 import { MediaData, ChatResponse } from './geminiService';
@@ -13,13 +13,9 @@ export type AIServiceFunction = (
     skillName?: string,
     isVerified?: boolean,
     sessionId?: string,
-    teacherProfile?: import('../../types').TeacherProfile | null
+    teacherProfile?: import('../../types').TeacherProfile | null,
+    studentMemory?: string
 ) => Promise<ChatResponse & { tokenUsage?: number }>;
-
-// Wrapper for Bedrock to match the interface (ignoring extra args)
-const bedrockWrapper: AIServiceFunction = async (history, currentMessage) => {
-    return sendMessageToBedrock(history, currentMessage);
-};
 
 // Wrapper for Gemini to convert standard history to Google Content format
 const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile) => {
@@ -32,18 +28,24 @@ const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseDat
     return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile);
 };
 
+// Wrapper for Claude Sonnet (Anthropic direct API)
+const claudeWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory) => {
+    const standardHistory = history.map(msg => ({ role: msg.role, content: msg.content as string }));
+    return sendMessageToClaudeAPI(standardHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory);
+};
+
 // Wrapper for OpenRouter with dynamic model routing (video → gemini-2.5-flash, text/PDF → qwen)
 const openrouterWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile) => {
     return sendMessageToOpenRouter(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, 'openrouter', sessionId, teacherProfile);
 };
 
 // Start with a registry that returns the FUNCTION
-export const getAIService = (modelId: 'gemini' | 'bedrock' | 'openrouter'): AIServiceFunction => {
+export const getAIService = (modelId: 'gemini' | 'claude' | 'openrouter'): AIServiceFunction => {
     switch (modelId) {
         case 'gemini':
             return geminiWrapper;
-        case 'bedrock':
-            return bedrockWrapper;
+        case 'claude':
+            return claudeWrapper;
         case 'openrouter':
             return openrouterWrapper;
         default:

@@ -1,5 +1,11 @@
 {
   "buildCommand": "vite build",
   "devCommand": "vite --port $PORT",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/summarise-progress",
+      "schedule": "55 15 * * *"
+    }
+  ]
 }

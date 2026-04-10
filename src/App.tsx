@@ -4,9 +4,11 @@ import { Analytics } from "@vercel/analytics/react";
 import SessionSidebar from './components/layout/SessionSidebar';
 import ChatInput from './components/chat/ChatInput';
 import ChatMessage from './components/chat/ChatMessage';
-import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession } from './types';
+import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
+import { getOrCreateStudent, saveAnalysis, lookupByVideoHash, uploadVideoToStorage } from './services/studentService';
+import { computeVideoHash } from './services/videoAnalysisCache';
 
 import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
 import { parseDocument } from './services/documentService';
@@ -15,6 +17,7 @@ import RubricBuilderModal from './components/admin/RubricBuilderModal';
 import { ALL_FMS_SKILLS } from './data/fundamentalMovementSkillsData';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './services/db/supabaseClient';
+import Dashboard from './pages/Dashboard';
 
 const App: React.FC = () => {
   const { user, teacherProfile, signInWithGoogle, signOut, updateTeacherProfile } = useAuth();
@@ -31,6 +34,9 @@ const App: React.FC = () => {
   // Supabase always strips media data to '' on sync. This ref is the authoritative
   // source of video data for the entire page session, immune to cloud overwrites.
   const videoDataCacheRef = React.useRef<Map<string, string>>(new Map());
+  // Persists the student + videoHash + videoFile resolved during Phase 1 so Phase 2 (chip click)
+  // can still access them — chip clicks don't carry metadata.
+  const activeStudentContextRef = React.useRef<{ studentId: string; student: Student; videoHash?: string; videoFile?: File } | null>(null);
 
   // DEFAULT WELCOME MESSAGE
   const getWelcomeMessage = (): Message => ({
@@ -191,12 +197,13 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'bedrock' | 'openrouter'>('gemini');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter'>('gemini');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isSkillSelectorOpen, setIsSkillSelectorOpen] = useState(false);
   const [isRubricBuilderOpen, setIsRubricBuilderOpen] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
 
   // Ref to always have the latest currentSessionId in async callbacks
   const currentSessionIdRef = React.useRef(currentSessionId);
@@ -215,10 +222,13 @@ const App: React.FC = () => {
 
   // Persistence to LocalStorage (Instant Feedback)
   useEffect(() => {
-    // Strip heavy data before saving to localStorage (quota-sensitive)
-    // But: keep thumbnailData (small, ~20KB) so the fallback thumbnail always shows.
-    // Full video base64 is cached in sessionStorage (survives same-tab refresh, not cross-tab).
-    const safeSessions = sessions.map(s => ({
+    // Keep only the 10 most recent sessions to avoid quota exhaustion.
+    // Strip all media binary data — videos live in sessionStorage / Supabase Storage.
+    const recentSessions = [...sessions]
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 10);
+
+    const safeSessions = recentSessions.map(s => ({
       ...s,
       messages: s.messages.map(m => ({
         ...m,
@@ -231,8 +241,8 @@ const App: React.FC = () => {
           }
           return {
             ...media,
-            data: '', // Strip from localStorage (too heavy)
-            thumbnailData: media.thumbnailData // Keep thumbnail (small)
+            data: '',           // Strip video/image base64
+            thumbnailData: undefined, // Strip thumbnails — accumulated across sessions they exceed quota
           };
         }),
         analysisFrames: [] // STRIP DATA
@@ -619,13 +629,60 @@ const App: React.FC = () => {
   const handleSendMessage = async (
     text: string,
     files?: File[],
-    metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean }
+    metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean; studentIndexNumber?: string; studentName?: string }
   ) => {
     // LOCK TARGET SESSION ID context to heavily prevent "chat-swapping" side effects
     const originatingSessionId = currentSessionIdRef.current;
     
     let isVerifying = metadata?.isVerified;
     let skillContext = metadata?.skillName;
+
+    // --- Student context ---
+    let studentId: string | undefined;
+    let student: Student | null = null;
+    let videoHash: string | undefined;
+
+    let videoFile: File | undefined;
+
+    if (isVerifying) {
+      // Phase 2 triggered by chip click — recover context stored during Phase 1
+      if (activeStudentContextRef.current) {
+        student = activeStudentContextRef.current.student;
+        studentId = activeStudentContextRef.current.studentId;
+        videoHash = activeStudentContextRef.current.videoHash;
+        videoFile = activeStudentContextRef.current.videoFile;
+      }
+    } else {
+      // Phase 1 — resolve student from picker selection
+      if (metadata?.studentIndexNumber && metadata?.studentName && user) {
+        try {
+          student = await getOrCreateStudent(user.id, {
+            indexNumber: metadata.studentIndexNumber,
+            name: metadata.studentName,
+          });
+          studentId = student?.id;
+        } catch (e) {
+          console.warn('Student resolution failed (non-fatal):', e);
+        }
+      }
+
+      // Compute hash for video deduplication
+      videoFile = files?.find(f => f.type.startsWith('video/'));
+      if (videoFile) {
+        try {
+          videoHash = await computeVideoHash(videoFile);
+        } catch (e) {
+          console.warn('Video hash failed (non-fatal):', e);
+        }
+      }
+
+      // Store context for the upcoming Phase 2
+      if (student && studentId) {
+        activeStudentContextRef.current = { studentId, student, videoHash, videoFile: videoFile ?? undefined };
+      } else {
+        activeStudentContextRef.current = null;
+      }
+    }
 
     // Get fresh messages from state (not from closure)
     const currentSessionNow = sessionsRef.current.find(s => s.id === originatingSessionId);
@@ -761,17 +818,71 @@ const App: React.FC = () => {
         }
       }
 
-      const aiService = getAIService(selectedModel);
-      response = await aiService(
-        standardHistory,
-        promptText,
-        contextPoseData,
-        contextAnalysisFrames,
-        skillContext,
-        isVerifying,
-        currentSessionIdRef.current,
-        teacherProfile
-      );
+      // --- Phase 2 cache hit: skip LLM if same video+skill already analysed for this student ---
+      let isCachedResponse = false;
+      if (isVerifying && studentId && videoHash && skillContext) {
+        try {
+          const cached = await lookupByVideoHash(videoHash, studentId, skillContext);
+          if (cached) {
+            response = { text: cached.analysisText, groundingChunks: undefined, referenceImageURI: undefined, tokenUsage: 0 };
+            isCachedResponse = true;
+          }
+        } catch (e) {
+          console.warn('Cache lookup failed (non-fatal):', e);
+        }
+      }
+
+      // --- Student memory: inject prior progress summary into Phase 2 ---
+      let studentMemory: string | undefined;
+      if (isVerifying && student && skillContext && student.progressSummary?.[skillContext]) {
+        studentMemory = student.progressSummary[skillContext];
+      }
+
+      if (!isCachedResponse) {
+        const aiService = getAIService(selectedModel);
+        response = await aiService(
+          standardHistory,
+          promptText,
+          contextPoseData,
+          contextAnalysisFrames,
+          skillContext,
+          isVerifying,
+          currentSessionIdRef.current,
+          teacherProfile,
+          studentMemory
+        );
+      }
+
+      // --- Auto-save Phase 2 analysis to Supabase (fire-and-forget) ---
+      if (isVerifying && studentId && skillContext && response && !isCachedResponse) {
+        const proficiencyMatch = response.text.match(/\b(Beginning|Developing|Competent|Excellent)\b/i);
+        const proficiencyLevel = proficiencyMatch ? proficiencyMatch[1] : undefined;
+        // Upload video to storage then save analysis record
+        (async () => {
+          let videoStoragePath: string | undefined;
+          if (videoFile) {
+            try {
+              videoStoragePath = await uploadVideoToStorage(videoFile, user!.id, studentId!, skillContext!) ?? undefined;
+            } catch (e) {
+              console.warn('Video upload failed (non-fatal):', e);
+            }
+          }
+          saveAnalysis({
+            studentId: studentId!,
+            teacherId: user!.id,
+            skillName: skillContext!,
+            videoHash,
+            videoUrl: videoStoragePath,
+            proficiencyLevel,
+            analysisText: response!.text,
+            sessionId: currentSessionIdRef.current,
+            modelId: selectedModel,
+            tokenUsage: response!.tokenUsage,
+          }).catch(e => console.warn('saveAnalysis failed (non-fatal):', e));
+        })();
+        // Clear context — Phase 2 is done for this analysis
+        activeStudentContextRef.current = null;
+      }
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -780,8 +891,10 @@ const App: React.FC = () => {
         timestamp: new Date(),
         groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined,
         referenceImageURI: response.referenceImageURI,
-        tokenUsage: response.tokenUsage,
+        tokenUsage: isCachedResponse ? 0 : response.tokenUsage,
         modelId: selectedModel,
+        isCached: isCachedResponse,
+        studentId,
         // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
         hasMedia: newMessage.hasMedia || !!(contextPoseData && contextPoseData.length > 0)
       };
@@ -867,6 +980,10 @@ const App: React.FC = () => {
     }
   };
 
+  if (showDashboard) {
+    return <Dashboard onOpenChat={() => setShowDashboard(false)} />;
+  }
+
   return (
     <div className="flex h-screen bg-white dark:bg-slate-950 transition-colors overflow-x-hidden">
 
@@ -910,6 +1027,18 @@ const App: React.FC = () => {
 
           {/* Right: Actions Cluster */}
           <div className="flex items-center gap-2 pointer-events-auto">
+            {user && (
+              <button
+                onClick={() => setShowDashboard(true)}
+                className="px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur text-slate-600 dark:text-slate-300 text-sm font-medium flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors shadow-sm"
+                title="Student Dashboard"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="hidden sm:inline">Dashboard</span>
+              </button>
+            )}
             <button
               onClick={() => setIsPdfModalOpen(true)}
               className="px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur text-slate-600 dark:text-slate-300 text-sm font-medium flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors shadow-sm"
@@ -941,7 +1070,7 @@ const App: React.FC = () => {
                 <span className="hidden sm:inline">
                   {selectedModel === 'gemini' ? 'Gemini 3 Flash' :
                     selectedModel === 'openrouter' ? 'OpenRouter (Auto)' :
-                      'Bedrock'}
+                      'Claude Sonnet'}
                 </span>
                 <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -954,7 +1083,7 @@ const App: React.FC = () => {
                   <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-slate-200 dark:border-zinc-800 overflow-hidden z-20 flex flex-col p-1">
                     {[
                       { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
-                      { id: 'bedrock', name: 'Bedrock', icon: 'bedrock.png' },
+                      { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png' },
                       { id: 'openrouter', name: 'OpenRouter (Auto)', icon: 'qwen.png' },
                     ].map((model) => (
                       <button
