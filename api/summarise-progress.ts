@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-export const config = { runtime: 'nodejs20.x' };
+export const config = { runtime: 'nodejs' };
 
 export default async function handler(req: Request) {
     // Verify Vercel cron secret
