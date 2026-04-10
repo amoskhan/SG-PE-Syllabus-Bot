@@ -36,7 +36,34 @@ export interface Message {
   isAmbiguous?: boolean; // Flag if AI is unsure and needs teacher review
   tokenUsage?: number; // Estimated tokens used for this response
   modelId?: string; // ID of the AI model that generated this message
-  hasMedia?: boolean; // NEW: Flag if the message/conversation context includes media
+  hasMedia?: boolean; // Flag if the message/conversation context includes media
+  isCached?: boolean; // True if response came from video analysis cache
+  studentId?: string; // Student this analysis belongs to
+}
+
+export interface Student {
+  id: string;
+  teacherId: string;
+  indexNumber: string;
+  name: string;
+  class?: string;
+  progressSummary: Record<string, string>; // { skillName: summaryText }
+  createdAt: Date;
+}
+
+export interface SkillAnalysis {
+  id: string;
+  studentId: string;
+  skillName: string;
+  videoHash?: string;
+  videoUrl?: string;   // Supabase Storage path (not a URL — generate signed URL on demand)
+  proficiencyLevel?: string;
+  analysisText: string;
+  sessionId?: string;
+  modelId?: string;
+  tokenUsage?: number;
+  summarised: boolean;
+  createdAt: Date;
 }
 
 export interface ChatState {

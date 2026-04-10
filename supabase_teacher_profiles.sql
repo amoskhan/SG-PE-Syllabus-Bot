@@ -50,3 +50,52 @@ for each row execute function public.handle_updated_at();
 create trigger set_updated_at_sessions
 before update on public.chat_sessions
 for each row execute function public.handle_updated_at();
+
+-- 3. Table to store students (per teacher, identified by index number)
+create table if not exists public.students (
+  id               uuid primary key default gen_random_uuid(),
+  teacher_id       uuid references auth.users on delete cascade not null,
+  index_number     text not null,
+  name             text not null,
+  class            text,
+  progress_summary jsonb default '{}'::jsonb, -- { "Underhand Throw": "summary text..." }
+  created_at       timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(teacher_id, index_number)
+);
+
+alter table public.students enable row level security;
+
+create policy "Teachers manage own students" on public.students
+  for all using (auth.uid() = teacher_id);
+
+-- 4. Table to store raw skill analysis records
+create table if not exists public.skill_analyses (
+  id                uuid primary key default gen_random_uuid(),
+  student_id        uuid references public.students on delete cascade not null,
+  teacher_id        uuid references auth.users on delete cascade not null,
+  skill_name        text not null,
+  video_hash        text,
+  proficiency_level text,
+  analysis_text     text not null,
+  pose_data         jsonb,
+  session_id        text,
+  model_id          text,
+  token_usage       integer,
+  summarised        boolean default false,
+  created_at        timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.skill_analyses enable row level security;
+
+create policy "Teachers manage own analyses" on public.skill_analyses
+  for all using (auth.uid() = teacher_id);
+
+create index if not exists skill_analyses_student_skill_idx
+  on public.skill_analyses (student_id, skill_name, created_at desc);
+
+create index if not exists skill_analyses_video_hash_idx
+  on public.skill_analyses (teacher_id, video_hash, skill_name);
+
+create index if not exists skill_analyses_unsummarised_idx
+  on public.skill_analyses (summarised, created_at)
+  where summarised = false;

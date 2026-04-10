@@ -9,27 +9,51 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       host: '0.0.0.0',
-      proxy: {
-        '/bedrock-api': {
-          target: 'https://bedrock-runtime.ap-southeast-1.amazonaws.com',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/bedrock-api/, ''),
-          secure: false,
-          configure: (proxy, _options) => {
-            proxy.on('error', (err, _req, _res) => {
-              console.log('proxy error', err);
+      proxy: {},
+    },
+    plugins: [
+      react(),
+      {
+        name: 'claude-dev-proxy',
+        configureServer(server) {
+          server.middlewares.use('/api/claude', (req, res) => {
+            const apiKey = env.VITE_ANTHROPIC_API_KEY;
+            if (!apiKey) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: 'VITE_ANTHROPIC_API_KEY not set in .env.local' }));
+              return;
+            }
+            let body = '';
+            req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+            req.on('end', async () => {
+              try {
+                const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+                  method: 'POST',
+                  headers: {
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                  },
+                  body,
+                });
+                const data = await upstream.json() as any;
+                res.setHeader('Content-Type', 'application/json');
+                res.statusCode = upstream.ok ? 200 : upstream.status;
+                res.end(JSON.stringify(upstream.ok ? {
+                  text: data.content?.[0]?.text || '',
+                  tokenUsage: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0),
+                } : {
+                  error: data.error?.message || 'Anthropic API error',
+                }));
+              } catch (e: any) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ error: e.message }));
+              }
             });
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              console.log('Sending Request to the Target:', req.method, req.url);
-            });
-            proxy.on('proxyRes', (proxyRes, req, _res) => {
-              console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
-            });
-          },
+          });
         },
       },
-    },
-    plugins: [react()],
+    ],
     define: {
       'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY)
