@@ -653,35 +653,39 @@ const App: React.FC = () => {
         videoFile = activeStudentContextRef.current.videoFile;
       }
     } else {
-      // Phase 1 — resolve student from picker selection
-      if (metadata?.studentIndexNumber && metadata?.studentName && user) {
-        try {
-          student = await getOrCreateStudent(user.id, {
-            indexNumber: metadata.studentIndexNumber,
-            name: metadata.studentName,
-          });
-          studentId = student?.id;
-        } catch (e) {
-          console.warn('Student resolution failed (non-fatal):', e);
+      // Only update the student context ref when a new video is being uploaded.
+      // Text-only messages (typed "yes", skill chip clicks) must NOT clear the ref —
+      // they may auto-verify and become Phase 2, which needs the ref intact.
+      const incomingVideoFile = files?.find(f => f.type.startsWith('video/'));
+      if (incomingVideoFile) {
+        // Phase 1 with a new video — resolve student and store context
+        if (metadata?.studentIndexNumber && metadata?.studentName && user) {
+          try {
+            student = await getOrCreateStudent(user.id, {
+              indexNumber: metadata.studentIndexNumber,
+              name: metadata.studentName,
+            });
+            studentId = student?.id;
+          } catch (e) {
+            console.warn('Student resolution failed (non-fatal):', e);
+          }
         }
-      }
 
-      // Compute hash for video deduplication
-      videoFile = files?.find(f => f.type.startsWith('video/'));
-      if (videoFile) {
+        videoFile = incomingVideoFile;
         try {
           videoHash = await computeVideoHash(videoFile);
         } catch (e) {
           console.warn('Video hash failed (non-fatal):', e);
         }
-      }
 
-      // Store context for the upcoming Phase 2
-      if (student && studentId) {
-        activeStudentContextRef.current = { studentId, student, videoHash, videoFile: videoFile ?? undefined };
-      } else {
-        activeStudentContextRef.current = null;
+        // Update ref — set if student selected, clear if not
+        if (student && studentId) {
+          activeStudentContextRef.current = { studentId, student, videoHash, videoFile };
+        } else {
+          activeStudentContextRef.current = null;
+        }
       }
+      // No video = text-only message — leave activeStudentContextRef untouched
     }
 
     // Get fresh messages from state (not from closure)
