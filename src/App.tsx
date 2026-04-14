@@ -637,55 +637,44 @@ const App: React.FC = () => {
     let isVerifying = metadata?.isVerified;
     let skillContext = metadata?.skillName;
 
-    // --- Student context ---
+    // --- Student context (Phase 1 only — new video upload) ---
     let studentId: string | undefined;
     let student: Student | null = null;
     let videoHash: string | undefined;
-
     let videoFile: File | undefined;
 
-    if (isVerifying) {
-      // Phase 2 triggered by chip click — recover context stored during Phase 1
-      if (activeStudentContextRef.current) {
-        student = activeStudentContextRef.current.student;
-        studentId = activeStudentContextRef.current.studentId;
-        videoHash = activeStudentContextRef.current.videoHash;
-        videoFile = activeStudentContextRef.current.videoFile;
-      }
-    } else {
-      // Only update the student context ref when a new video is being uploaded.
-      // Text-only messages (typed "yes", skill chip clicks) must NOT clear the ref —
-      // they may auto-verify and become Phase 2, which needs the ref intact.
-      const incomingVideoFile = files?.find(f => f.type.startsWith('video/'));
-      if (incomingVideoFile) {
-        // Phase 1 with a new video — resolve student and store context
-        if (metadata?.studentIndexNumber && metadata?.studentName && user) {
-          try {
-            student = await getOrCreateStudent(user.id, {
-              indexNumber: metadata.studentIndexNumber,
-              name: metadata.studentName,
-            });
-            studentId = student?.id;
-          } catch (e) {
-            console.warn('Student resolution failed (non-fatal):', e);
-          }
-        }
-
-        videoFile = incomingVideoFile;
+    const incomingVideoFile = files?.find(f => f.type.startsWith('video/'));
+    if (incomingVideoFile && !isVerifying) {
+      // New video being uploaded — resolve student and store context for Phase 2
+      console.log('[Student] Phase 1 — metadata:', metadata?.studentIndexNumber, metadata?.studentName, 'user:', !!user);
+      if (metadata?.studentIndexNumber && metadata?.studentName && user) {
         try {
-          videoHash = await computeVideoHash(videoFile);
+          student = await getOrCreateStudent(user.id, {
+            indexNumber: metadata.studentIndexNumber,
+            name: metadata.studentName,
+          });
+          studentId = student?.id;
+          console.log('[Student] Resolved student:', student?.name, studentId);
         } catch (e) {
-          console.warn('Video hash failed (non-fatal):', e);
-        }
-
-        // Update ref — set if student selected, clear if not
-        if (student && studentId) {
-          activeStudentContextRef.current = { studentId, student, videoHash, videoFile };
-        } else {
-          activeStudentContextRef.current = null;
+          console.warn('[Student] Resolution failed:', e);
         }
       }
-      // No video = text-only message — leave activeStudentContextRef untouched
+
+      videoFile = incomingVideoFile;
+      try {
+        videoHash = await computeVideoHash(videoFile);
+      } catch (e) {
+        console.warn('Video hash failed (non-fatal):', e);
+      }
+
+      // Store for Phase 2 (chip click / "yes" / auto-verify all arrive without metadata)
+      if (student && studentId) {
+        activeStudentContextRef.current = { studentId, student, videoHash, videoFile };
+        console.log('[Student] Ref stored:', studentId);
+      } else {
+        activeStudentContextRef.current = null;
+        console.log('[Student] Ref cleared — no student selected or resolution failed');
+      }
     }
 
     // Get fresh messages from state (not from closure)
@@ -712,6 +701,17 @@ const App: React.FC = () => {
           isVerifying = true;
           skillContext = matchedSkill;
         }
+      }
+    }
+
+    // --- Recover student context for Phase 2 (runs after auto-verify may have flipped isVerifying) ---
+    if (isVerifying) {
+      console.log('[Student] Phase 2 — ref:', activeStudentContextRef.current?.studentId, 'skillContext:', skillContext);
+      if (activeStudentContextRef.current) {
+        student = activeStudentContextRef.current.student;
+        studentId = activeStudentContextRef.current.studentId;
+        videoHash = activeStudentContextRef.current.videoHash;
+        videoFile = activeStudentContextRef.current.videoFile;
       }
     }
 
@@ -853,15 +853,19 @@ const App: React.FC = () => {
           isVerifying,
           currentSessionIdRef.current,
           teacherProfile,
-          studentMemory
+          studentMemory,
+          user?.id  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
         );
       }
 
       // --- Auto-save Phase 2 analysis to Supabase (fire-and-forget) ---
-      if (isVerifying && studentId && skillContext && response && !isCachedResponse) {
-        const proficiencyMatch = response.text.match(/\b(Beginning|Developing|Competent|Excellent)\b/i);
-        const proficiencyLevel = proficiencyMatch ? proficiencyMatch[1] : undefined;
-        // Upload video to storage then save analysis record
+      // Use proficiency level detection — not isVerifying — as the Phase 2 signal.
+      // isVerifying is false when Target Skill is pre-filled (AI runs Phase 2 directly
+      // without a chip click), so relying on it causes saves to be silently skipped.
+      const proficiencyMatch = response.text.match(/\b(Beginning|Developing|Competent|Excellent)\b/i);
+      const proficiencyLevel = proficiencyMatch ? proficiencyMatch[1] : undefined;
+      if (studentId && skillContext && proficiencyLevel && !isCachedResponse) {
+        console.log('[Save] Saving analysis for', studentId, skillContext, proficiencyLevel);
         (async () => {
           let videoStoragePath: string | undefined;
           if (videoFile) {
@@ -882,10 +886,12 @@ const App: React.FC = () => {
             sessionId: currentSessionIdRef.current,
             modelId: selectedModel,
             tokenUsage: response!.tokenUsage,
-          }).catch(e => console.warn('saveAnalysis failed (non-fatal):', e));
+          }).catch(e => console.error('[Save] saveAnalysis failed:', e));
         })();
-        // Clear context — Phase 2 is done for this analysis
+        // Clear context — analysis saved
         activeStudentContextRef.current = null;
+      } else if (studentId && skillContext && !proficiencyLevel) {
+        console.log('[Save] Skipped — no proficiency level in response (Phase 1 response, not grading)');
       }
 
       const botMessage: Message = {

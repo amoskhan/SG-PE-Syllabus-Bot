@@ -6,6 +6,10 @@
     {
       "path": "/api/summarise-progress",
       "schedule": "55 15 * * *"
+    },
+    {
+      "path": "/api/daily-chat-archive",
+      "schedule": "55 15 * * *"
     }
   ]
 }

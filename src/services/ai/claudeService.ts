@@ -7,6 +7,12 @@ import { getSyllabusContextMessage } from '../../data/syllabusContext';
 
 const MODEL_NAME = 'claude-sonnet-4-6';
 
+// ─── Tier 1: Short-Term Context Window ───────────────────────────────────────
+// Caps the number of history messages sent to Claude per request.
+// Keeps token usage predictable — the existing system prompt is already very
+// long (FMS checklists, rubrics, biomechanics data, RAG context).
+const SHORT_TERM_CONTEXT_WINDOW = 10;
+
 // ─── System Instructions (copied from geminiService.ts) ──────────────────────
 
 const FULL_SYSTEM_INSTRUCTION_TEMPLATE = `
@@ -199,7 +205,8 @@ export const sendMessageToClaudeAPI = async (
     isVerified?: boolean,
     sessionId?: string,
     teacherProfile?: import('../../types').TeacherProfile | null,
-    studentMemory?: string
+    studentMemory?: string,
+    userId?: string
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         let enhancedMessage = currentMessage;
@@ -643,6 +650,29 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
             systemInstruction = `**STUDENT MEMORY:**\n${studentMemory}\n\nUse this to contextualise your grading. Begin your response with one sentence on the student's trajectory before the grading table.\n\n` + systemInstruction;
         }
 
+        // ── Tier 3: Long-Term Teacher Memory Injection ───────────────────────
+        // Fetch the last 3 days of archived summaries for this teacher and
+        // prepend them to the system instruction so Claude has ongoing context.
+        // GUARD: skip during pose-detection/verification phase to avoid polluting
+        // biomechanics analysis with irrelevant teacher notes.
+        if (userId && !(poseData && poseData.length > 0)) {
+            try {
+                const memResponse = await fetch(`/api/get-memory?userId=${encodeURIComponent(userId)}`);
+                if (memResponse.ok) {
+                    const memData = await memResponse.json() as { summaries: { summary_date: string; summary_text: string }[] };
+                    if (memData.summaries && memData.summaries.length > 0) {
+                        const longTermMemory = memData.summaries
+                            .map(s => `[${s.summary_date}]\n${s.summary_text}`)
+                            .join('\n\n');
+                        systemInstruction = `**TEACHER MEMORY (Past 3 Days):**\n${longTermMemory}\n--- END OF MEMORY ---\n\n` + systemInstruction;
+                    }
+                }
+            } catch (e) {
+                // Silent fail — never crash the chat experience due to memory fetch
+                console.warn('Long-term memory fetch failed (silently skipped):', e);
+            }
+        }
+
         if (ragContext) {
             systemInstruction += `\n\n**ADDITIONAL RELEVANT KNOWLEDGE (From Uploaded Syllabus/PDF Documents):**\n${ragContext}\n\n*INSTRUCTION*: If this additional knowledge answers the user's question, prioritize it heavily and cite it.`;
         }
@@ -723,9 +753,12 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
             { role: 'assistant', content: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' },
         ];
 
+        // Tier 1: cap history to the last SHORT_TERM_CONTEXT_WINDOW messages
+        const trimmedHistory = history.slice(-SHORT_TERM_CONTEXT_WINDOW);
+
         const anthropicMessages = [
             ...syllabusPrefix.map(m => ({ role: m.role, content: m.content })),
-            ...history.map(m => ({ role: m.role, content: m.content })),
+            ...trimmedHistory.map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: contentBlocks },
         ];
 
