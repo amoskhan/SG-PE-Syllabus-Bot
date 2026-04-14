@@ -75,6 +75,7 @@ create table if not exists public.skill_analyses (
   teacher_id        uuid references auth.users on delete cascade not null,
   skill_name        text not null,
   video_hash        text,
+  video_url         text,
   proficiency_level text,
   analysis_text     text not null,
   pose_data         jsonb,
@@ -84,6 +85,23 @@ create table if not exists public.skill_analyses (
   summarised        boolean default false,
   created_at        timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Storage bucket for student video uploads (viewed from dashboard)
+insert into storage.buckets (id, name, public)
+  values ('student-videos', 'student-videos', false)
+  on conflict (id) do nothing;
+
+create policy "Teachers upload own student videos" on storage.objects
+  for insert with check (
+    bucket_id = 'student-videos'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy "Teachers read own student videos" on storage.objects
+  for select using (
+    bucket_id = 'student-videos'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
 
 alter table public.skill_analyses enable row level security;
 
