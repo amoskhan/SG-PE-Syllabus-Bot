@@ -36,11 +36,11 @@ interface ChatSession {
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
-export default async function handler(req: Request) {
+export default async function handler(req: any, res: any) {
     // 1. Verify Vercel cron secret — reject all unauthorised requests
-    const authHeader = req.headers.get('authorization');
+    const authHeader = req.headers.authorization || req.headers['authorization'];
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return new Response('Unauthorized', { status: 401 });
+        return res.status(401).send('Unauthorized');
     }
 
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -48,7 +48,7 @@ export default async function handler(req: Request) {
     const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
 
     if (!supabaseUrl || !supabaseKey || !anthropicKey) {
-        return new Response(JSON.stringify({ error: 'Missing environment variables' }), { status: 500 });
+        return res.status(500).json({ error: 'Missing environment variables' });
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -94,14 +94,11 @@ export default async function handler(req: Request) {
         .order('updated_at', { ascending: true });
 
     if (fetchError) {
-        return new Response(JSON.stringify({ error: `Supabase fetch error: ${fetchError.message}` }), { status: 500 });
+        return res.status(500).json({ error: `Supabase fetch error: ${fetchError.message}` });
     }
 
     if (!sessions || sessions.length === 0) {
-        return new Response(JSON.stringify({ processed: 0, errors: [], message: 'No sessions to archive.' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return res.status(200).json({ processed: 0, errors: [], message: 'No sessions to archive.' });
     }
 
     // 4. Group sessions by user_id — NEVER mix different teachers' data
@@ -203,8 +200,5 @@ export default async function handler(req: Request) {
     }
 
     // 6. Return structured result
-    return new Response(
-        JSON.stringify({ processed, errors }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+    return res.status(200).json({ processed, errors });
 }

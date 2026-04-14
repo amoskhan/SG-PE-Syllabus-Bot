@@ -2,11 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 
 export const config = { runtime: 'nodejs' };
 
-export default async function handler(req: Request) {
+export default async function handler(req: any, res: any) {
     // Verify Vercel cron secret
-    const authHeader = req.headers.get('authorization');
+    const authHeader = req.headers.authorization || req.headers['authorization'];
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return new Response('Unauthorized', { status: 401 });
+        return res.status(401).send('Unauthorized');
     }
 
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -14,7 +14,7 @@ export default async function handler(req: Request) {
     const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
 
     if (!supabaseUrl || !supabaseKey || !anthropicKey) {
-        return new Response(JSON.stringify({ error: 'Missing environment variables' }), { status: 500 });
+        return res.status(500).json({ error: 'Missing environment variables' });
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -27,7 +27,7 @@ export default async function handler(req: Request) {
         .order('created_at', { ascending: true });
 
     if (fetchError || !unsummarised || unsummarised.length === 0) {
-        return new Response(JSON.stringify({ message: 'Nothing to summarise', error: fetchError?.message }), { status: 200 });
+        return res.status(200).json({ message: 'Nothing to summarise', error: fetchError?.message });
     }
 
     // 2. Group by (student_id, skill_name)
@@ -108,9 +108,9 @@ Be concise. This is injected into an AI grader's context, not shown to the teach
         }
     }
 
-    return new Response(JSON.stringify({
+    return res.status(200).json({
         processed: processedIds.length,
         groups: groups.size,
         errors,
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
 }
