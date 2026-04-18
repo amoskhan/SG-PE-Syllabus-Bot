@@ -1,8 +1,16 @@
 
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist } from '../../data/fundamentalMovementSkillsData';
+import {
+    GYMNASTICS_SKILLS_TEXT,
+    GYMNASTICS_RUBRIC,
+    ALL_GYMNASTICS_SKILLS,
+    getGymnasticsChecklist,
+    GYMNASTICS_REFERENCE_IMAGES,
+} from '../../data/gymnasticsSkillsData';
 import { getFewShotExamples } from '../../data/skillExamples';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 import { MediaData } from './geminiService';
+import type { SkillMode } from '../../types';
 
 // Note: In development, we can use VITE_OPENROUTER_API_KEY. 
 // In production (Vercel), we should use the server-side proxy /api/openrouter to hide the key.
@@ -190,7 +198,8 @@ export const sendMessageToOpenRouter = async (
     isVerified?: boolean,
     modelId?: 'openrouter' | 'openrouter-video' | 'openrouter-text',
     sessionId?: string,
-    teacherProfile?: import('../../types').TeacherProfile | null
+    teacherProfile?: import('../../types').TeacherProfile | null,
+    skillMode: SkillMode = 'fms'
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         const useProxy = !VITE_API_KEY;
@@ -198,6 +207,8 @@ export const sendMessageToOpenRouter = async (
         if (useProxy && window.location.hostname === 'localhost') {
             console.warn("⚠️ No VITE_OPENROUTER_API_KEY found. Attempting to use /api/openrouter proxy. Ensure you are running with 'vercel dev'.");
         }
+
+        const isGymnastics = skillMode === 'gymnastics';
 
         let enhancedMessage = currentMessage;
         let poseDescription = '';
@@ -215,7 +226,8 @@ export const sendMessageToOpenRouter = async (
         if (!activeSkillName && (poseData || isVerified)) {
             const lowerMsg = currentMessage.toLowerCase();
             // Sort keys by length desc to prevent partial matches
-            const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
+            const referenceImages = isGymnastics ? GYMNASTICS_REFERENCE_IMAGES : SKILL_REFERENCE_IMAGES;
+            const knownSkills = Object.keys(referenceImages).sort((a, b) => b.length - a.length);
             for (const skill of knownSkills) {
                 if (lowerMsg.includes(skill.toLowerCase())) {
                     activeSkillName = skill;
@@ -389,11 +401,13 @@ export const sendMessageToOpenRouter = async (
                     windUpCheck = '⚠️ No distinct wind-up detected (arm stayed between waist and head throughout).';
                 }
 
-                // Excessive High Swing check (only relevant when skill is known and it should be low)
+                // Excessive High Swing check (only relevant for FMS underhanded skills)
                 let highSwingCheck = '✅ Arm height appropriate';
-                const isUnderhanded = skillName && ['Underhand Throw', 'Underhand Roll'].some(s => skillName.includes(s));
-                if (isUnderhanded && highPoint < noseY) {
-                    highSwingCheck = `⚠️ Arm raised ABOVE HEAD for an underhand skill — this violates the controlled low swing requirement. (Evidence: Frame ${highPointFrame})`;
+                if (!isGymnastics) {
+                    const isUnderhanded = skillName && ['Underhand Throw', 'Underhand Roll'].some(s => skillName.includes(s));
+                    if (isUnderhanded && highPoint < noseY) {
+                        highSwingCheck = `⚠️ Arm raised ABOVE HEAD for an underhand skill — this violates the controlled low swing requirement. (Evidence: Frame ${highPointFrame})`;
+                    }
                 }
 
                 // Knee Bend Check
@@ -406,6 +420,10 @@ export const sendMessageToOpenRouter = async (
                     ? `✅ DISTINCT STEP DETECTED (Stride widened by ${(strideExpansion * 100 - 100).toFixed(0)}%). Stepping foot: ${steppingFoot}.`
                     : `⚠️ No significant step detected (Stride expansion only ${(strideExpansion * 100 - 100).toFixed(0)}%).`;
 
+                const gymnasticsNote = isGymnastics
+                    ? `\n                **NOTE (Gymnastics Locomotor Skills)**: Arm trajectory direction does NOT classify the skill type for gymnastics. Instead focus on: (1) flight phase — are both feet off the ground where required? (2) landing mechanics — knee bend to absorb force; (3) body rhythm and coordination.`
+                    : '';
+
                 biomechanicsReport = `\n
                 **BIOMECHANICS AUTO-ANALYSIS:**
                 1. **Dominant Hand**: ${dominantHand} ${confidence}
@@ -416,7 +434,7 @@ export const sendMessageToOpenRouter = async (
                 6. **Stance**: ${stanceIssue}
                 7. **Arm Height (Skill-Specific)**: ${highSwingCheck}
                 8. **Knee Bend**: ${kneeBendCheck}
-                9. **Step Verification**: ${stepNote}
+                9. **Step Verification**: ${stepNote}${gymnasticsNote}
                 `;
 
                 movementPattern = `\n\n**Movement patterns (Kinetic Chain indicators):**\n${changes.slice(0, 30).map((c, i) => `• Frame ${i + 1}→${i + 2}: ${c}`).join('\n')}`;
@@ -437,6 +455,13 @@ export const sendMessageToOpenRouter = async (
             `;
             }).join('\n');
 
+            const containsMultipleSkills = /\b(into|then|and|sequence)\b/i.test(currentMessage);
+            const knownSkillsList = isGymnastics 
+              ? ALL_GYMNASTICS_SKILLS 
+              : ['Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick', 'Dribble (Hand)', 'Dribble (Foot)', 'Chest Pass', 'Catch above waist', 'Bounce pass', 'Bounce'];
+            const singleSkillMatch = skillName && knownSkillsList.includes(skillName);
+            const isSequencing = !singleSkillMatch || containsMultipleSkills;
+
             const userTargetSkill = (skillName && isVerified) ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.` : (skillName ? `\nNote: The user mentioned "${skillName}", but we are still in the verification phase. Provide the Top 4 choices anyway to confirm.` : '');
 
             enhancedMessage = `I've captured pose data from ${poseData.length} keyframes extracted evenly across the video duration.
@@ -450,20 +475,31 @@ export const sendMessageToOpenRouter = async (
             **Your task:**
             1. **Analyze the Kinetic Chain**: Look at the "Movement patterns" above. Is the movement fluid and sequential (e.g., legs -> torso -> arms) or "segmented" (robotic/broken)?
             2. **Biomechanics Check**: Read the "BIOMECHANICS ANALYSIS" above.
-            3. ${isVerified ? 
-                `**IMMEDIATE ACTION**: Provide a full performance analysis for "${skillName || 'this movement'}" using the FMS Rubric.` : 
-                `**VERIFICATION PHASE**: You must identify the TOP 4 most likely skills from the Fundamental Movement Skills list. DO NOT grade the performance yet.`}
-            4. ${isVerified ? 
-                'Ensure you site specific frames for any deductions.' : 
-                'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}
+            3. ${isVerified ?
+                `**IMMEDIATE ACTION**: Provide a full performance analysis for "${skillName || 'this movement'}" using the ${isGymnastics ? 'Gymnastics Skills Rubric' : 'FMS Rubric'}.` :
+                isGymnastics
+                  ? `**IDENTIFICATION PHASE (GYMNASTICS)**: Identify ALL gymnastics skills visible in this video — the student may perform more than one. Look for locomotor skills (hopping, galloping, sliding, running, skipping, jumping, leaping), balance skills (1-Point Balance, 2-Point Balance, 3-Point Balance, Patch Balance), and rolling skills (Forward Roll, Backward Roll, Log Roll). For each skill you identify, briefly describe the visual evidence. DO NOT grade yet.`
+                  : `**VERIFICATION PHASE**: You must identify the TOP 4 most likely skills from the Fundamental Movement Skills list. DO NOT grade the performance yet.`}
+            4. ${isVerified ?
+                'Ensure you cite specific frames for any deductions.' :
+                isGymnastics
+                  ? 'You MUST include the [[MULTI_SKILL_CHOICES: Skill 1, Skill 2, ...]] tag listing ALL identified skills at the end of your response. Use exact skill names from the whitelist.'
+                  : 'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}
+            ${isVerified ? (
+              (isSequencing || containsMultipleSkills)
+                ? `5. **Sequencing & Transitions**: Evaluate the transition between the multiple skills shown. Grade it based on smooth transitions, lack of abrupt stops, and overall rhythmic flow. Add this as a separate section in your grading output.`
+                : isGymnastics
+                  ? `5. **Sequence Readiness**: As a final note in your feedback, briefly comment on how the quality of this skill — especially the landing position, body control, and rhythm — prepares the student for a smooth transition into the next movement in a gymnastics sequence.`
+                  : ''
+            ) : ''}
 
             ${isVerified ? `**CRITICAL CONSISTENCY RULE (PROFICIENCY VS CHECKLIST):**
             - If you grade the Proficiency Level as "Keeping it Real" / "Developing" / "Beginning", you **MUST** have at least one ❌ or ⚠️ in the Checklist Assessment.
             - **You cannot have a "Competent" checklist (all ✅) and a "Developing" grade.** They must tell the same story.
-            - **SPECIFIC OVERRIDE FOR UNDERHAND ROLL**:
+            ${!isGymnastics ? `- **SPECIFIC OVERRIDE FOR UNDERHAND ROLL**:
               - IF "Hand raised ABOVE HEAD" is detected in the Biomechanics Report, you **MUST MARK CHECKLIST ITEM #5 ("Swing dominant hand back at least to waist level") as ❌ OR ⚠️**.
               - Reason: "Excessive backswing violates the controlled nature of the skill."
-              - **DO NOT** give a "Pass" just because it went *past* the waist. It must be *controlled* at the waist. "Too much" is a failure of the specific criteria.` : ''}
+              - **DO NOT** give a "Pass" just because it went *past* the waist. It must be *controlled* at the waist. "Too much" is a failure of the specific criteria.` : ''}` : ''}
 `;
         }
 
@@ -472,10 +508,18 @@ export const sendMessageToOpenRouter = async (
 
 
 
-        let specificChecklistText = FUNDAMENTAL_MOVEMENT_SKILLS_TEXT;
+        const activeSkillsText = isGymnastics ? GYMNASTICS_SKILLS_TEXT : FUNDAMENTAL_MOVEMENT_SKILLS_TEXT;
+        const activeRubric = isGymnastics ? GYMNASTICS_RUBRIC : PROFICIENCY_RUBRIC;
+        const activeChecklist = isGymnastics ? getGymnasticsChecklist : getSkillChecklist;
+        const activeReferenceImages = isGymnastics ? GYMNASTICS_REFERENCE_IMAGES : SKILL_REFERENCE_IMAGES;
+        const activeSkillList = isGymnastics
+            ? ALL_GYMNASTICS_SKILLS.join(', ')
+            : 'Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble (Hand), Dribble (Foot), Chest Pass, Catch above waist, Bounce pass, Bounce';
+
+        let specificChecklistText = activeSkillsText;
         if (activeSkillName) {
-            const checklist = getSkillChecklist(activeSkillName);
-            const customRubric = teacherProfile?.customRubrics?.[activeSkillName];
+            const checklist = activeChecklist(activeSkillName);
+            const customRubric = !isGymnastics ? teacherProfile?.customRubrics?.[activeSkillName] : undefined;
 
             if (customRubric) {
                 specificChecklistText = `*** TEACHER'S CUSTOM RUBRIC FOR ${activeSkillName} ***
@@ -510,49 +554,100 @@ ${checklist.join('\n')}
 
         const baseInstruction = poseData && poseData.length > 0
             ? MOTION_ANALYSIS_INSTRUCTION.replace(FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, specificChecklistText)
+                .replace(PROFICIENCY_RUBRIC, activeRubric)
             : FULL_SYSTEM_INSTRUCTION;
 
         if (poseData && poseData.length > 0 && (isFirstMessage || isVerified)) {
             if (!isVerified) {
                 // PRE-ANALYSIS VERIFICATION MODE (Phase 1: Identification ONLY)
-                systemInstruction = `
-                You are the Singapore PE Syllabus Assistant.
-                
-                **IMMEDIATE TASK (PHASE 1)**:
-                Identify the specific Fundamental Movement Skill (FMS) in the video/images.
-                            
-                **VALID FMS SKILLS (STRICT WHITELIST)**: 
-                Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble (Hand), Dribble (Foot), Chest Pass, Catch above waist, Bounce pass, Bounce.
-
-                **CRITICAL RULES:**
-                1. You must ONLY classify the movement as one of the exact keys above.
-                2. Do not use synonyms (e.g. NEVER say "Free Throw", say "Underhand Throw" or "Chest Pass" if it matches one of those patterns, otherwise "Unknown").
-                3. If the movement does not match any of the above skills, output "❌ **Unknown Movement**".
-
-                **BIOMECHANICS PRIORITY RULE (READ THIS FIRST):**
+                const phase1BiomechanicsRule = isGymnastics
+                    ? `**GYMNASTICS IDENTIFICATION RULE:**
+                The "Arm Trajectory" field in the Biomechanics Report does NOT classify gymnastics locomotor skills. Instead, identify the skill by observing:
+                - Foot pattern (same foot takeoff/landing → Hopping; alternating feet → Leaping; step-close → Galloping/Sliding; step-hop → Skipping)
+                - Flight phase (both feet off ground briefly → Running/Galloping/Sliding/Skipping/Leaping; single foot → Hopping)
+                - Direction of travel (sideways → Sliding; forward → all others)
+                - Jump type (upward → Jumping vertical; forward → Jumping horizontal)`
+                    : `**BIOMECHANICS PRIORITY RULE (READ THIS FIRST):**
                 The "Arm Trajectory (Skill Classifier)" field in the Biomechanics Report is your PRIMARY and MOST RELIABLE signal.
                 - **OVERHEAD** (arm peaked above head/nose level) → Overhand Throw, Chest Pass, or overhead striking
                 - **LOW SWING** (arm dropped below hip level) → Underhand Throw, Underhand Roll, or Kick
                 - **MID-LEVEL** (arm between waist and head) → Chest Pass, Bounce Pass, or Dribble
                 Trust this classification ABOVE any ball position data, which is in raw pixels and may be unreliable.
-                Ball detection only tells you IF a ball was present — NOT where in the movement it was released.
+                Ball detection only tells you IF a ball was present — NOT where in the movement it was released.`;
+
+                systemInstruction = isGymnastics ? `
+                You are the Singapore PE Syllabus Assistant.
+
+                **IMMEDIATE TASK (IDENTIFICATION)**:
+                Identify ALL gymnastics skills performed in this video. The student may perform more than one skill.
+
+                **VALID SKILLS (STRICT WHITELIST)**:
+                ${activeSkillList}
+
+                **CRITICAL RULES:**
+                1. Only use exact skill names from the whitelist above.
+                2. The student may perform one skill or several in sequence — identify every one you observe.
+                3. For each identified skill, briefly describe the visual evidence (1 sentence).
+
+                ${phase1BiomechanicsRule}
+
+                **SKILL REFERENCE:**
+                ${activeSkillsText}
 
                 **INSTRUCTIONS**:
-                1. Read the "Arm Trajectory (Skill Classifier)" from the Biomechanics Report first.
-                2. Use it to narrow down the skill family.
-                3. Look at the visual evidence to confirm.
-                4. Identify the skill from the WHITELIST.
-                5. **STOP**. Do NOT grade it yet.
-                
+                1. Scan the full video for all gymnastics skills performed.
+                2. For each skill, explain what you see (foot pattern, body shape, flight phase, balance position, roll shape).
+                3. List ALL identified skills.
+                4. **STOP**. Do NOT grade yet.
+
+                **REQUIRED OUTPUT FORMAT**:
+                Describe the skills you observed with brief evidence for each, then end with:
+                [[MULTI_SKILL_CHOICES: Skill Name 1, Skill Name 2, ...]]
+
+                Example: [[MULTI_SKILL_CHOICES: Running, Leaping, 1-Point Balance]]
+
+                ${activeSkillName ? `
+                **USER OVERRIDE**:
+                The user has explicitly stated this includes **${activeSkillName}**.
+                Include it in your output unless the video clearly contradicts it.
+                ` : ''}
+
+                If no recognisable gymnastics skills are present:
+                "❌ **Unknown Movement**. Please demonstrate a standard PE gymnastics skill."
+                ` : `
+                You are the Singapore PE Syllabus Assistant.
+
+                **IMMEDIATE TASK (PHASE 1)**:
+                Identify the specific Fundamental Movement Skill (FMS) in the video/images.
+
+                **VALID SKILLS (STRICT WHITELIST)**:
+                ${activeSkillList}
+
+                **CRITICAL RULES:**
+                1. You must ONLY classify the movement as one of the exact keys above.
+                2. Do not use synonyms or invent new skill names.
+                3. If the movement does not match any of the above skills, output "❌ **Unknown Movement**".
+
+                ${phase1BiomechanicsRule}
+
+                **SKILL REFERENCE:**
+                ${activeSkillsText}
+
+                **INSTRUCTIONS**:
+                1. Apply the identification rule above to narrow down the skill family.
+                2. Look at the visual evidence to confirm.
+                3. Identify the skill from the WHITELIST.
+                4. **STOP**. Do NOT grade it yet.
+
                 **REQUIRED OUTPUT FORMAT**:
                 "Phase 1: I have detected a **[Skill Name]**."
 
                 Example: "Phase 1: I have detected a **Kick**."
-                
+
                 ${activeSkillName ? `
                 **USER OVERRIDE**:
                 The user has explicitly stated this is a **${activeSkillName}**.
-                Unless the video clearly contradicts it (e.g. user says "Kick" but video shows "Throw"), you should CONFIRM this skill.
+                Unless the video clearly contradicts it, you should CONFIRM this skill.
                 Output: "Phase 1: I have detected a **${activeSkillName}**."
                 ` : ''}
 
@@ -563,11 +658,11 @@ ${checklist.join('\n')}
                 // ANALYSIS MODE (Phase 2: Grading)
                 systemInstruction = `
                 You are the PE Syllabus Assistant.
-                
-                **TASK**: Compare the User's Video (Visual Evidence) against the Gold Standard (Reference Image) using the FMS Checklist.
 
-                **VALID SKILLS ONLY**: Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble (Hand), Dribble (Foot), Chest Pass, Catch above waist, Bounce pass, Bounce.
-                (If the movement is "Free Throw", "Shooting", etc., classify it as the CLOSEST VALID SKILL or "Unknown").
+                **TASK**: Compare the User's Video (Visual Evidence) against the Gold Standard (Reference Image) using the ${isGymnastics ? 'Gymnastics Locomotor Skills Checklist' : 'FMS Checklist'}.
+
+                **VALID SKILLS ONLY**: ${activeSkillList}.
+                (If the movement name doesn't match exactly, classify it as the CLOSEST VALID SKILL or "Unknown").
 
                 **INPUTS:**
                 1. **IMAGE 1 (Reference)**: The "Gold Standard" textbook form.
@@ -600,9 +695,12 @@ ${checklist.join('\n')}
                 1. [Specific correction for the missed feature]
                 2. [Cue to remember]
 
-                **CONTEXT DATA (FMS CHECKLISTS):**
+                **CONTEXT DATA (SKILL CHECKLIST):**
                 ${specificChecklistText}
-                ${activeSkillName ? getFewShotExamples(activeSkillName) : ''}
+
+                **PROFICIENCY RUBRIC:**
+                ${activeRubric}
+                ${!isGymnastics && activeSkillName ? getFewShotExamples(activeSkillName) : ''}
                 
                 **POSE DATA:**
                 ${poseDescription}${movementPattern}
@@ -659,12 +757,12 @@ ${checklist.join('\n')}
 
         if (isVerified) {
             // Auto-detect skill from text if not explicitly provided
-            if (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName]) {
+            if (activeSkillName && activeReferenceImages[activeSkillName]) {
 
-                finalReferenceURI = SKILL_REFERENCE_IMAGES[activeSkillName];
+                finalReferenceURI = activeReferenceImages[activeSkillName];
 
                 try {
-                    const response = await fetch(SKILL_REFERENCE_IMAGES[activeSkillName]);
+                    const response = await fetch(activeReferenceImages[activeSkillName]);
                     if (!response.ok) throw new Error("Failed to fetch reference image");
 
                     const blob = await response.blob();

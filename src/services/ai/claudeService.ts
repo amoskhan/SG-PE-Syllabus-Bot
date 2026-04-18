@@ -2,7 +2,8 @@
 // Mirrors geminiService.ts: same pose analysis, same system prompts, same logic.
 // Key differences: Anthropic content-block format for images, no Google SDK, no grounding.
 
-import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist } from '../../data/fundamentalMovementSkillsData';
+import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
+import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
 
 const MODEL_NAME = 'claude-sonnet-4-6';
@@ -206,7 +207,8 @@ export const sendMessageToClaudeAPI = async (
     sessionId?: string,
     teacherProfile?: import('../../types').TeacherProfile | null,
     studentMemory?: string,
-    userId?: string
+    userId?: string,
+    skillMode: import('../../types').SkillMode = 'fms'
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         let enhancedMessage = currentMessage;
@@ -364,10 +366,10 @@ export const sendMessageToClaudeAPI = async (
                     const firstFrame = poseData[0].landmarks;
                     const secondFrame = poseData[1].landmarks;
 
-                    const getKneeAngle = (landmarks: any[]) => {
-                        const hip = landmarks[24];
-                        const knee = landmarks[26];
-                        const ankle = landmarks[28];
+                    const getKneeAngle = (landmarks: any[], side: 'left' | 'right' = 'right') => {
+                        const hip = side === 'right' ? landmarks[24] : landmarks[23];
+                        const knee = side === 'right' ? landmarks[26] : landmarks[25];
+                        const ankle = side === 'right' ? landmarks[28] : landmarks[27];
                         const vec1 = { x: hip.x - knee.x, y: hip.y - knee.y };
                         const vec2 = { x: ankle.x - knee.x, y: ankle.y - knee.y };
                         const dot = vec1.x * vec2.x + vec1.y * vec2.y;
@@ -378,8 +380,8 @@ export const sendMessageToClaudeAPI = async (
                         return Math.acos(cosAngle) * (180 / Math.PI);
                     };
 
-                    const firstFrameMinKnee = Math.min(getKneeAngle(firstFrame), getKneeAngle(firstFrame));
-                    const secondFrameMinKnee = Math.min(getKneeAngle(secondFrame), getKneeAngle(secondFrame));
+                    const firstFrameMinKnee = Math.min(getKneeAngle(firstFrame, 'right'), getKneeAngle(firstFrame, 'left'));
+                    const secondFrameMinKnee = Math.min(getKneeAngle(secondFrame, 'right'), getKneeAngle(secondFrame, 'left'));
                     setupKneeAngle = Math.min(firstFrameMinKnee, secondFrameMinKnee);
 
                     if (setupKneeAngle < 170.0) {
@@ -462,6 +464,13 @@ Ball Detected: ${hasBall}
       `;
             }).join('\n');
 
+            const containsMultipleSkills = /\b(into|then|and|sequence)\b/i.test(currentMessage);
+            const knownSkillsList = skillMode === 'gymnastics'
+              ? ALL_GYMNASTICS_SKILLS
+              : ['Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick', 'Dribble (Hand)', 'Dribble (Foot)', 'Chest Pass', 'Catch above waist', 'Bounce pass', 'Bounce'];
+            const singleSkillMatch = skillName && knownSkillsList.includes(skillName);
+            const isSequencing = !singleSkillMatch || containsMultipleSkills;
+
             const userTargetSkill = (skillName && isVerified)
                 ? `\n**USER DECLARED SKILL**: "${skillName}".\nNOTE: The user has explicitly identified this movement.\nDO NOT ASK "Is this correct?".\nDO NOT GUESS.\nPROCEED DIRECTLY TO GRADING.`
                 : (skillName ? `\nNote: The user mentioned "${skillName}", but we are still in the verification phase. Provide the Top 4 choices anyway to confirm.` : '');
@@ -477,18 +486,24 @@ ${userTargetSkill}
 1. **Analyze the Kinetic Chain**: Look at the "Movement patterns" above. Is the movement fluid and sequential (e.g., legs -> torso -> arms) or "segmented" (robotic/broken)?
 2. **Biomechanics Check**: Read the "BIOMECHANICS ANALYSIS" above.
 3. ${isVerified
-                    ? `**IMMEDIATE ACTION**: Provide a full performance analysis for "${skillName || 'this movement'}" using the FMS Rubric.`
-                    : `**VERIFICATION PHASE**: You must identify the TOP 4 most likely skills from the Fundamental Movement Skills list. DO NOT grade the performance yet.`}
+                    ? `**IMMEDIATE ACTION**: Provide a full performance analysis for "${skillName || 'this movement'}" using the ${skillMode === 'gymnastics' ? 'Gymnastics Skills Rubric' : 'FMS Rubric'}.`
+                    : skillMode === 'gymnastics'
+                      ? `**IDENTIFICATION PHASE (GYMNASTICS)**: Identify ALL gymnastics skills visible in this video — the student may perform more than one. Look for locomotor skills (hopping, galloping, sliding, running, skipping, jumping, leaping), balance skills (1-Point Balance, 2-Point Balance, 3-Point Balance, Patch Balance), and rolling skills (Forward Roll, Backward Roll, Log Roll). For each skill you identify, briefly describe the visual evidence. DO NOT grade yet.`
+                      : `**VERIFICATION PHASE**: You must identify the TOP 4 most likely skills from the Fundamental Movement Skills list. DO NOT grade the performance yet.`}
 4. ${isVerified
-                    ? 'Ensure you site specific frames for any deductions.'
-                    : 'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}`;
+                    ? 'Ensure you cite specific frames for any deductions.'
+                    : skillMode === 'gymnastics'
+                      ? 'You MUST include the [[MULTI_SKILL_CHOICES: Skill 1, Skill 2, ...]] tag listing ALL identified skills at the end of your response. Use exact skill names from the whitelist.'
+                      : 'You MUST include the [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]] tag at the end of your response.'}
+${(isSequencing || containsMultipleSkills) && isVerified ? `5. **Sequencing & Transitions**: Evaluate the transition between the multiple skills shown. Grade it based on smooth transitions, lack of abrupt stops, and overall rhythmic flow. Add this as a separate section in your grading output.` : ''}`;
         }
 
         // ── Skill / checklist detection ──────────────────────────────────────
         let activeSkillName = skillName;
         if (!activeSkillName) {
             const lowerMsg = currentMessage.toLowerCase();
-            const knownSkills = Object.keys(SKILL_REFERENCE_IMAGES).sort((a, b) => b.length - a.length);
+            const referenceImages = skillMode === 'gymnastics' ? GYMNASTICS_REFERENCE_IMAGES : SKILL_REFERENCE_IMAGES;
+            const knownSkills = Object.keys(referenceImages).sort((a, b) => b.length - a.length);
             for (const skill of knownSkills) {
                 if (lowerMsg.includes(skill.toLowerCase())) {
                     activeSkillName = skill;
@@ -497,9 +512,15 @@ ${userTargetSkill}
             }
         }
 
-        let specificChecklistText = FUNDAMENTAL_MOVEMENT_SKILLS_TEXT;
+        const activeSkillsText = skillMode === 'gymnastics' ? GYMNASTICS_SKILLS_TEXT : FUNDAMENTAL_MOVEMENT_SKILLS_TEXT;
+        const activeRubric = skillMode === 'gymnastics' ? GYMNASTICS_RUBRIC : PROFICIENCY_RUBRIC;
+        const activeReferenceImages = skillMode === 'gymnastics' ? GYMNASTICS_REFERENCE_IMAGES : SKILL_REFERENCE_IMAGES;
+
+        let specificChecklistText = activeSkillsText;
         if (activeSkillName) {
-            const checklist = getSkillChecklist(activeSkillName);
+            const checklist = skillMode === 'gymnastics'
+                ? getGymnasticsChecklist(activeSkillName)
+                : getSkillChecklist(activeSkillName);
             const customRubric = teacherProfile?.customRubrics?.[activeSkillName];
 
             if (customRubric) {
@@ -535,13 +556,34 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
         }
 
         // ── System instruction selection ─────────────────────────────────────
+        const skillsBlockLabel = skillMode === 'gymnastics'
+            ? 'GYMNASTICS LOCOMOTOR SKILLS'
+            : 'FUNDAMENTAL MOVEMENT SKILLS';
+
         const fmsBlock = activeSkillName
-            ? `**FUNDAMENTAL MOVEMENT SKILLS CONTENT START**\n${specificChecklistText}\n**FUNDAMENTAL MOVEMENT SKILLS CONTENT END**`
+            ? `**${skillsBlockLabel} CONTENT START**\n${specificChecklistText}\n**${skillsBlockLabel} CONTENT END**`
             : '';
 
         let systemInstruction = poseData && poseData.length > 0
-            ? MOTION_ANALYSIS_INSTRUCTION.replace(FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, specificChecklistText)
-            : FULL_SYSTEM_INSTRUCTION_TEMPLATE.replace('{{FMS_CONTEXT}}', fmsBlock);
+            ? MOTION_ANALYSIS_INSTRUCTION
+                .replace(FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, specificChecklistText)
+                .replace(PROFICIENCY_RUBRIC, activeRubric)
+                .replace('Valid names: ' + Object.keys(SKILL_REFERENCE_IMAGES).join(', '), 'Valid names: ' + Object.keys(activeReferenceImages).join(', '))
+            : FULL_SYSTEM_INSTRUCTION_TEMPLATE.replace('{{FMS_CONTEXT}}', fmsBlock)
+                .replace('Valid names: ' + Object.keys(SKILL_REFERENCE_IMAGES).join(', '), 'Valid names: ' + Object.keys(activeReferenceImages).join(', '));
+
+        if (skillMode === 'gymnastics') {
+            systemInstruction = systemInstruction
+                .replace(/Fundamental Movement Skills \(FMS\)/g, 'Gymnastics Locomotor Skills')
+                .replace(/Fundamental Movement Skills list/g, 'Gymnastics Locomotor Skills list')
+                .replace(/Fundamental Movement Skills/g, 'Gymnastics Locomotor Skills')
+                .replace(/FMS Checklist/g, 'Gymnastics Checklist')
+                .replace(/FMS Rubric/g, 'Gymnastics Rubric')
+                .replace(/FUNDAMENTAL MOVEMENT SKILLS CHECKLIST/g, 'GYMNASTICS LOCOMOTOR SKILLS CHECKLIST')
+                .replace('[[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]]', '[[SKILL_CHOICES: ' + ALL_GYMNASTICS_SKILLS.slice(0, 4).join(', ') + ']]',);
+        } else {
+            systemInstruction = systemInstruction.replace('[[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]]', '[[SKILL_CHOICES: ' + ALL_FMS_SKILLS.slice(0, 4).join(', ') + ']]',);
+        }
 
         // ── RAG retrieval ────────────────────────────────────────────────────
         let ragContext = '';

@@ -4,7 +4,7 @@ import { Analytics } from "@vercel/analytics/react";
 import SessionSidebar from './components/layout/SessionSidebar';
 import ChatInput from './components/chat/ChatInput';
 import ChatMessage from './components/chat/ChatMessage';
-import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student } from './types';
+import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, SkillMode } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
 import { getOrCreateStudent, saveAnalysis, lookupByVideoHash, uploadVideoToStorage } from './services/studentService';
@@ -37,6 +37,10 @@ const App: React.FC = () => {
   // Persists the student + videoHash + videoFile resolved during Phase 1 so Phase 2 (chip click)
   // can still access them — chip clicks don't carry metadata.
   const activeStudentContextRef = React.useRef<{ studentId: string; student: Student; videoHash?: string; videoFile?: File } | null>(null);
+  const pendingGymnasticsRef = React.useRef<{
+    files: File[];
+    metadata: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string };
+  } | null>(null);
 
   // DEFAULT WELCOME MESSAGE
   const getWelcomeMessage = (): Message => ({
@@ -204,6 +208,25 @@ const App: React.FC = () => {
   const [isSkillSelectorOpen, setIsSkillSelectorOpen] = useState(false);
   const [isRubricBuilderOpen, setIsRubricBuilderOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [skillMode, setSkillMode] = useState<SkillMode>('fms');
+
+  // Persist skillMode into the current session whenever it changes
+  useEffect(() => {
+    if (!currentSessionId) return;
+    updateSessionAndSync(currentSessionId, session => ({
+      ...session,
+      skillMode,
+      updatedAt: new Date(),
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skillMode, currentSessionId]);
+
+  // Restore skillMode when switching sessions
+  useEffect(() => {
+    const session = sessions.find(s => s.id === currentSessionId);
+    setSkillMode(session?.skillMode ?? 'fms');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSessionId]);
 
   // Ref to always have the latest currentSessionId in async callbacks
   const currentSessionIdRef = React.useRef(currentSessionId);
@@ -629,7 +652,7 @@ const App: React.FC = () => {
   const handleSendMessage = async (
     text: string,
     files?: File[],
-    metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean; studentIndexNumber?: string; studentName?: string }
+    metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean; studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean }
   ) => {
     // LOCK TARGET SESSION ID context to heavily prevent "chat-swapping" side effects
     const originatingSessionId = currentSessionIdRef.current;
@@ -686,13 +709,18 @@ const App: React.FC = () => {
       const lowerText = text.toLowerCase().trim();
       const confirmationWords = ['yes', 'correct', 'yup', 'yeah', 'sure', 'confirm'];
       const isConfirmation = confirmationWords.some(w => lowerText === w || lowerText.startsWith(w + ' '));
-      const knownSkills = [
+      const fmsKnownSkills = [
         'underhand throw', 'underhand roll', 'overhand throw', 'kick',
         'dribble with feet', 'dribble with hands', 'chest pass', 'bounce pass', 'bounce', 'above the waist catch',
       ];
+      const gymnasticKnownSkills = [
+        'hopping', 'galloping', 'sliding', 'running', 'skipping',
+        'jumping (vertical)', 'jumping (horizontal)', 'leaping',
+      ];
+      const knownSkills = skillMode === 'gymnastics' ? gymnasticKnownSkills : fmsKnownSkills;
       const matchedSkill = knownSkills.sort((a, b) => b.length - a.length).find(skill => lowerText.includes(skill));
       const lastMsg = currentMessages[currentMessages.length - 1];
-      if (lastMsg && lastMsg.sender === Sender.BOT && lastMsg.text.includes("Phase 1")) {
+      if (lastMsg && lastMsg.sender === Sender.BOT && (lastMsg.text.includes("[[SKILL_CHOICES:") || lastMsg.text.includes("[[MULTI_SKILL_CHOICES:"))) {
         if (isConfirmation) {
           isVerifying = true;
           const skillMatch = lastMsg.text.match(/\*\*(.*?)\*\*/);
@@ -700,6 +728,13 @@ const App: React.FC = () => {
         } else if (matchedSkill) {
           isVerifying = true;
           skillContext = matchedSkill;
+        } else if (lastMsg.text.includes("[[MULTI_SKILL_CHOICES:")) {
+          // User typed free text after multi-skill chips — treat the identified skills as confirmed
+          const multiMatch = lastMsg.text.match(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/);
+          if (multiMatch) {
+            isVerifying = true;
+            skillContext = multiMatch[1].trim();
+          }
         }
       }
     }
@@ -755,6 +790,24 @@ const App: React.FC = () => {
       title: newTitle || session.title,
       updatedAt: new Date()
     }));
+
+    // GYMNASTICS: Ask teacher to confirm individual skill vs sequence before running AI
+    if (incomingVideoFile && !isVerifying && skillMode === 'gymnastics' && !metadata?.gymnasticsModeConfirmed) {
+      const confirmMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        text: `Before I analyze, is this an **individual locomotor skill** (e.g. hopping, galloping) or a **gymnastics sequence** (multiple skills linked together)?\n[[SKILL_CHOICES: Individual Skill, Sequence]]`,
+        sender: Sender.BOT,
+        timestamp: new Date(),
+        hasMedia: true,
+      };
+      pendingGymnasticsRef.current = { files: files!, metadata: metadata ?? {} };
+      updateSessionAndSync(originatingSessionId, session => ({
+        ...session,
+        messages: [...session.messages, confirmMsg],
+        updatedAt: new Date(),
+      }));
+      return;
+    }
 
     setIsLoading(true);
 
@@ -854,7 +907,8 @@ const App: React.FC = () => {
           currentSessionIdRef.current,
           teacherProfile,
           studentMemory,
-          user?.id  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
+          user?.id,  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
+          skillMode
         );
       }
 
@@ -892,6 +946,7 @@ const App: React.FC = () => {
         activeStudentContextRef.current = null;
       } else if (studentId && skillContext && !proficiencyLevel) {
         console.log('[Save] Skipped — no proficiency level in response (Phase 1 response, not grading)');
+        activeStudentContextRef.current = null;
       }
 
       const botMessage: Message = {
@@ -973,12 +1028,28 @@ const App: React.FC = () => {
     handleSendMessage(`Tell me about ${topic}`);
   };
 
+  const handleSelectMultipleSkills = (skills: string[]) => {
+    const skillText = skills.join(', ');
+    handleSendMessage(`Analyze ${skillText}`, undefined, { skillName: skillText, isVerified: true });
+  };
+
   const handleAnalyzeConfirm = (message: Message) => {
     const skillName = message.predictedSkill || "Movement";
     handleSendMessage("Analyze Now", undefined, { skillName: skillName, isVerified: true });
   };
 
   const handleSelectSkill = (skillName: string) => {
+    // Handle gymnastics pre-Phase-1 confirmation chips
+    if ((skillName === 'Individual Skill' || skillName === 'Sequence') && pendingGymnasticsRef.current) {
+      const { files, metadata } = pendingGymnasticsRef.current;
+      pendingGymnasticsRef.current = null;
+      const text = skillName === 'Sequence'
+        ? 'Analyze this gymnastics sequence'
+        : 'Analyze this gymnastics locomotor skill';
+      handleSendMessage(text, files, { ...metadata, gymnasticsModeConfirmed: true });
+      return;
+    }
+
     // Check if the current session has any media uploaded
     const currentSession = sessions.find(s => s.id === currentSessionId);
     const hasMedia = currentSession?.messages.some(m => m.media && m.media.length > 0);
@@ -1154,8 +1225,10 @@ const App: React.FC = () => {
                 }}
                 onAnalyze={handleAnalyzeConfirm}
                 onSelectSkill={handleSelectSkill}
+                onSelectMultipleSkills={handleSelectMultipleSkills}
                 onShowAllSkills={() => setIsSkillSelectorOpen(true)}
                 disabled={isLoading || isProcessing}
+                skillMode={skillMode}
               />
             ))}
 
@@ -1191,10 +1264,12 @@ const App: React.FC = () => {
             {/* Model Selector Row */}
 
 
-            <ChatInput 
-              onSendMessage={handleSendMessage} 
-              isLoading={isLoading || isProcessing} 
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading || isProcessing}
               selectedModel={selectedModel}
+              skillMode={skillMode}
+              onSkillModeChange={setSkillMode}
             />
           </div>
         </div>

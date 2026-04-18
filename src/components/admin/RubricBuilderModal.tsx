@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TeacherProfile, CustomSkillRubric, CustomRubricLevel } from '../../types';
 import { ALL_FMS_SKILLS, getSkillChecklist } from '../../data/fundamentalMovementSkillsData';
+import { ALL_GYMNASTICS_SKILLS, getGymnasticsChecklist } from '@/data/gymnasticsSkillsData';
 
 interface RubricBuilderModalProps {
   isOpen: boolean;
@@ -32,7 +33,6 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
   useEffect(() => {
     if (!profile) return;
     
-    const standardCriteria = getSkillChecklist(selectedSkill);
     const existingRubric = profile.customRubrics?.[selectedSkill];
 
     if (existingRubric) {
@@ -183,6 +183,11 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
     setActiveTouchItem(null);
   };
 
+  const isGymnasticsSkill = ALL_GYMNASTICS_SKILLS.includes(selectedSkill);
+  const standardCriteria = isGymnasticsSkill
+    ? getGymnasticsChecklist(selectedSkill)
+    : getSkillChecklist(selectedSkill);
+
   const addGroup = (level: 'beginning' | 'developing' | 'competent' | 'accomplished') => {
     const labelName = prompt('Enter a label for this criteria group (e.g., "Pray", "Setup", "Follow Through"):');
     if (!labelName || !labelName.trim()) return;
@@ -208,8 +213,6 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
   };
 
   const handleSave = () => {
-    // Basic validation: warn if any unassigned
-    const standardCriteria = getSkillChecklist(selectedSkill);
     const assignedIndices = new Set<number>();
     ['beginning', 'developing', 'competent', 'accomplished'].forEach(levelId => {
       const lvGroups = levels[levelId as keyof typeof levels] as CustomRubricLevel[];
@@ -236,8 +239,6 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
     onSave(updatedProfile);
     onClose();
   };
-
-  const standardCriteria = getSkillChecklist(selectedSkill);
 
   const renderLevelColumn = (levelId: 'beginning' | 'developing' | 'competent' | 'accomplished', title: string) => (
     <div className="flex-1 min-w-[280px] lg:min-w-0 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 md:p-4 border border-slate-200 dark:border-slate-700 flex flex-col h-full overflow-hidden shrink-0 lg:shrink">
@@ -309,9 +310,16 @@ const RubricBuilderModal: React.FC<RubricBuilderModalProps> = ({ isOpen, onClose
               onChange={(e) => setSelectedSkill(e.target.value)}
               className="flex-1 md:flex-none px-3 md:py-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-xs md:text-sm font-medium text-slate-700 dark:text-slate-200"
             >
-              {ALL_FMS_SKILLS.map(skill => (
-                <option key={skill} value={skill}>{skill}</option>
-              ))}
+              <optgroup label="FMS Skills">
+                {ALL_FMS_SKILLS.map(skill => (
+                  <option key={skill} value={skill}>{skill}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Gymnastics Skills">
+                {ALL_GYMNASTICS_SKILLS.map(skill => (
+                  <option key={skill} value={skill}>{skill}</option>
+                ))}
+              </optgroup>
             </select>
             <button
               onClick={onClose}

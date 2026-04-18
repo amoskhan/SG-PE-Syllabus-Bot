@@ -1,4 +1,6 @@
 
+export type SkillMode = 'fms' | 'gymnastics';
+
 export enum Sender {
   USER = 'user',
   BOT = 'bot'
@@ -77,6 +79,7 @@ export interface ChatSession {
   messages: Message[];
   createdAt: Date;
   updatedAt: Date;
+  skillMode?: SkillMode;
 }
 
 export const PE_TOPICS = [

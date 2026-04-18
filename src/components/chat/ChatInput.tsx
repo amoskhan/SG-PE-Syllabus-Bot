@@ -4,15 +4,17 @@ import VideoFrameSelector from '../video/VideoFrameSelector';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { useAuth } from '../../hooks/useAuth';
 import { getStudents } from '../../services/studentService';
-import { Student } from '../../types';
+import { Student, SkillMode } from '../../types';
 
 interface ChatInputProps {
   onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string }) => void;
   isLoading: boolean;
   selectedModel?: 'gemini' | 'claude' | 'openrouter';
+  skillMode?: SkillMode;
+  onSkillModeChange?: (mode: SkillMode) => void;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selectedModel = 'gemini' }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selectedModel = 'gemini', skillMode = 'fms', onSkillModeChange }) => {
   const [input, setInput] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showCamera, setShowCamera] = useState(false);
@@ -315,6 +317,24 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
             )}
           </div>
         )}
+
+        {/* Mode Switcher Toggle */}
+        <div className="flex items-center gap-1 mb-2">
+          {([['fms', 'FMS Skills'], ['gymnastics', 'Gymnastics']] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => onSkillModeChange?.(mode)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${
+                skillMode === mode
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-300 dark:border-zinc-600 hover:border-indigo-400 dark:hover:border-indigo-500'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {/* Input Area - RESPONSIVE LAYOUT */}
         <div className="flex flex-col gap-1 w-full relative">
