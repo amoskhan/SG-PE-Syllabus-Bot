@@ -1,22 +1,60 @@
-import React, { useState } from 'react';
-import { Message, Sender } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { Message, Sender, SkillMode } from '../../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 import { generatePDF } from '../../services/pdfService';
+import { ALL_FMS_SKILLS } from '@/data/fundamentalMovementSkillsData';
+import {
+  ALL_GYMNASTICS_SKILLS,
+  GYMNASTICS_LOCOMOTOR_SKILLS,
+  GYMNASTICS_JUMP_SHAPE_SKILLS,
+  GYMNASTICS_UPRIGHT_BALANCE_SKILLS,
+  GYMNASTICS_INVERTED_BALANCE_SKILLS,
+  GYMNASTICS_PARTNER_BALANCE_SKILLS,
+  GYMNASTICS_ROLLING_SKILLS,
+  GYMNASTICS_SPINNING_TURNING_SKILLS,
+  GYMNASTICS_VAULTING_SKILLS,
+} from '@/data/gymnasticsSkillsData';
+
+const GYMNASTICS_CATEGORIES = [
+  { label: 'Locomotor',          skills: GYMNASTICS_LOCOMOTOR_SKILLS },
+  { label: 'Jump Shapes',        skills: GYMNASTICS_JUMP_SHAPE_SKILLS },
+  { label: 'Upright Balance',    skills: GYMNASTICS_UPRIGHT_BALANCE_SKILLS },
+  { label: 'Inverted Balance',   skills: GYMNASTICS_INVERTED_BALANCE_SKILLS },
+  { label: 'Partner Balance',    skills: GYMNASTICS_PARTNER_BALANCE_SKILLS },
+  { label: 'Rolling',            skills: GYMNASTICS_ROLLING_SKILLS },
+  { label: 'Spinning & Turning', skills: GYMNASTICS_SPINNING_TURNING_SKILLS },
+  { label: 'Vaulting',           skills: GYMNASTICS_VAULTING_SKILLS },
+];
 
 interface ChatMessageProps {
   message: Message;
   onUpdateMessage?: (message: Message) => void;
   onAnalyze?: (message: Message) => void;
   onSelectSkill?: (skillName: string) => void;
+  onSelectMultipleSkills?: (skillNames: string[]) => void;
   onShowAllSkills?: () => void;
   disabled?: boolean;
+  skillMode?: SkillMode;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onShowAllSkills, disabled = false }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, disabled = false, skillMode = 'fms' }) => {
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showAllSkillsGrid, setShowAllSkillsGrid] = useState(false);
+  const [showAllMultiSkills, setShowAllMultiSkills] = useState(false);
+  const [selectedMultiSkills, setSelectedMultiSkills] = useState<string[]>([]);
+
+  // Reset the expanded skill grids whenever the mode changes so stale state doesn't persist
+  useEffect(() => { setShowAllSkillsGrid(false); setShowAllMultiSkills(false); }, [skillMode]);
+
+  const allSkills = skillMode === 'gymnastics' ? ALL_GYMNASTICS_SKILLS : ALL_FMS_SKILLS;
+  const fallbackLabel = skillMode === 'gymnastics'
+    ? `None of these? Select from all ${ALL_GYMNASTICS_SKILLS.length} Gymnastics skills...`
+    : `None of these? Select from all ${ALL_FMS_SKILLS.length} FMS skills...`;
+  const gridTitle = skillMode === 'gymnastics'
+    ? `All ${ALL_GYMNASTICS_SKILLS.length} Gymnastics Locomotor Skills:`
+    : `All ${ALL_FMS_SKILLS.length} Fundamental Movement Skills:`;
 
   const handleExportPdf = async () => {
     setIsGeneratingPdf(true);
@@ -93,7 +131,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
               } ${isBot ? '' : 'rounded-tr-sm'}`}>
 
               {isBot ? (
-                <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '')} />
+                <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/g, '')} />
               ) : (
                 <p className="whitespace-pre-wrap text-sm md:text-base">{message.text}</p>
               )}
@@ -134,18 +172,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                       </svg>
-                      <span>None of these? Select from all 10 FMS skills...</span>
+                      <span>{fallbackLabel}</span>
                     </button>
                   ) : (
                     showAllSkillsGrid && (
                       <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-top-1 duration-200">
-                        <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">All 10 Fundamental Movement Skills:</div>
+                        <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">{gridTitle}</div>
                         <div className="grid grid-cols-2 gap-1.5">
-                          {[
-                            'Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick',
-                            'Dribble with Feet', 'Dribble with Hands', 'Chest Pass', 'Bounce Pass',
-                            'Bounce', 'Above the Waist Catch'
-                          ].map((skill, idx) => (
+                          {allSkills.map((skill, idx) => (
                             <button
                               key={idx}
                               onClick={() => onSelectSkill?.(skill)}
@@ -159,10 +193,116 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                           onClick={() => setShowAllSkillsGrid(false)}
                           className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 uppercase font-bold"
                         >
-                          ← Back to guesses
+                          Back to guesses
                         </button>
                       </div>
                     )
+                  )}
+                </div>
+              )}
+
+              {/* Multi-Select Chips (Gymnastics skill identification — teacher picks all skills performed) */}
+              {isBot && message.text.includes('[[MULTI_SKILL_CHOICES:') && (
+                <div className="mt-4 flex flex-col gap-2">
+                  <div className="text-[10px] uppercase tracking-wider font-bold text-indigo-500/80 mb-1">
+                    Select all skills performed in this video:
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {message.text.match(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/)?.[1].split(',').map((choice, idx) => {
+                      const trimmedChoice = choice.trim();
+                      const isSelected = selectedMultiSkills.includes(trimmedChoice);
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            if (disabled) return;
+                            setSelectedMultiSkills(prev =>
+                              isSelected ? prev.filter(s => s !== trimmedChoice) : [...prev, trimmedChoice]
+                            );
+                          }}
+                          disabled={disabled}
+                          className={`px-4 py-2.5 border rounded-xl text-sm font-medium transition-all text-left flex items-center justify-between
+                            ${isSelected
+                              ? 'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-600 dark:border-indigo-500'
+                              : 'bg-indigo-50 dark:bg-indigo-900/40 border-indigo-100 dark:border-indigo-800/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-800/60'
+                            } disabled:opacity-40 disabled:cursor-not-allowed`}
+                        >
+                          <span>{trimmedChoice}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`} viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedMultiSkills.length > 0 && (
+                    <button
+                      onClick={() => {
+                        if (disabled) return;
+                        onSelectMultipleSkills?.(selectedMultiSkills);
+                        setSelectedMultiSkills([]);
+                      }}
+                      disabled={disabled}
+                      className="mt-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Analyze {selectedMultiSkills.length} selected skill{selectedMultiSkills.length > 1 ? 's' : ''} →
+                    </button>
+                  )}
+
+                  {/* "Show all 35 gymnastics skills" expansion */}
+                  {!showAllMultiSkills ? (
+                    <button
+                      onClick={() => setShowAllMultiSkills(true)}
+                      className="mt-1 text-xs text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 px-2 py-1 transition-colors group"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                      </svg>
+                      <span>None of these? Select from all {ALL_GYMNASTICS_SKILLS.length} Gymnastics skills...</span>
+                    </button>
+                  ) : (
+                    <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-top-1 duration-200">
+                      {GYMNASTICS_CATEGORIES.map(({ label, skills }) => (
+                        <div key={label} className="mb-3">
+                          <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">{label}</div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {skills.map((skill) => {
+                              const isSelected = selectedMultiSkills.includes(skill);
+                              return (
+                                <button
+                                  key={skill}
+                                  onClick={() => {
+                                    if (disabled) return;
+                                    setSelectedMultiSkills(prev =>
+                                      isSelected ? prev.filter(s => s !== skill) : [...prev, skill]
+                                    );
+                                  }}
+                                  disabled={disabled}
+                                  className={`px-3 py-1.5 border rounded-lg text-xs font-medium transition-all text-left flex items-center justify-between
+                                    ${isSelected
+                                      ? 'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-600 dark:border-indigo-500'
+                                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                                >
+                                  <span>{skill}</span>
+                                  {isSelected && (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => setShowAllMultiSkills(false)}
+                        className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 uppercase font-bold"
+                      >
+                        Back to guesses
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
