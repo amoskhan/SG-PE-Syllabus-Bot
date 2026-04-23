@@ -194,7 +194,7 @@ export interface MediaData {
 }
 
 type AnthropicContentBlock =
-    | { type: 'text'; text: string }
+    | { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }
     | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 
 // ─── Main function ────────────────────────────────────────────────────────────
@@ -791,18 +791,30 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         }
 
         // ── Build messages array ─────────────────────────────────────────────
-        // Inject syllabus context for text-only queries (mirrors Gemini syllabusContextPair)
-        const syllabusPrefix: { role: string; content: string }[] = (poseData && poseData.length > 0) ? [] : [
-            { role: 'user', content: getSyllabusContextMessage() },
+        // Inject syllabus context for text-only queries (mirrors Gemini syllabusContextPair).
+        // The large syllabus message (~80K tokens) is marked for prompt caching so repeated
+        // requests read from cache rather than re-tokenising, staying within rate limits.
+        type MessageWithContent = { role: string; content: string | AnthropicContentBlock[] };
+        const syllabusPrefix: MessageWithContent[] = (poseData && poseData.length > 0) ? [] : [
+            {
+                role: 'user',
+                content: [
+                    {
+                        type: 'text' as const,
+                        text: getSyllabusContextMessage(),
+                        cache_control: { type: 'ephemeral' as const },
+                    },
+                ],
+            },
             { role: 'assistant', content: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' },
         ];
 
         // Tier 1: cap history to the last SHORT_TERM_CONTEXT_WINDOW messages
         const trimmedHistory = history.slice(-SHORT_TERM_CONTEXT_WINDOW);
 
-        const anthropicMessages = [
-            ...syllabusPrefix.map(m => ({ role: m.role, content: m.content })),
-            ...trimmedHistory.map(m => ({ role: m.role, content: m.content })),
+        const anthropicMessages: MessageWithContent[] = [
+            ...syllabusPrefix,
+            ...trimmedHistory.map(m => ({ role: m.role, content: m.content as string })),
             { role: 'user', content: contentBlocks },
         ];
 
@@ -810,10 +822,17 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         let text = '';
         let tokenUsage = 0;
 
+        // Cache the system instruction too — it's large and stable within a session.
         const requestBody = {
             model: MODEL_NAME,
             max_tokens: 1500,
-            system: systemInstruction,
+            system: [
+                {
+                    type: 'text' as const,
+                    text: systemInstruction,
+                    cache_control: { type: 'ephemeral' as const },
+                },
+            ],
             messages: anthropicMessages,
         };
 
