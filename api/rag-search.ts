@@ -1,19 +1,29 @@
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
+import { validateNodeAuth } from './_lib/auth';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
-const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
+const apiKey = process.env.GEMINI_API_KEY || '';
 
 export default async function handler(req: any, res: any) {
-  // CORS handles
+  const allowedOrigins = process.env.ALLOWED_ORIGIN
+    ? process.env.ALLOWED_ORIGIN.split(',').map((o: string) => o.trim())
+    : ['http://localhost:5173', 'http://localhost:4173'];
+  const origin = (req.headers.origin as string) || '';
+  const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  
+
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).end();
-  
+
+  const { error: authError } = await validateNodeAuth(req);
+  if (authError) return res.status(401).json({ context: '', error: 'Unauthorized' });
+
   if (!apiKey || !supabaseUrl || !supabaseKey) {
      return res.status(503).json({ context: '', error: 'RAG service not configured' });
   }
@@ -30,7 +40,7 @@ export default async function handler(req: any, res: any) {
         model: 'gemini-embedding-001',
         contents: query
     });
-    
+
     const embedding =
       (embeddingResponse as any)?.embedding?.values ??
       (embeddingResponse as any)?.embeddings?.[0]?.values ??
