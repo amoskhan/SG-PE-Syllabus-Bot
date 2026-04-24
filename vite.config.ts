@@ -17,10 +17,10 @@ export default defineConfig(({ mode }) => {
         name: 'claude-dev-proxy',
         configureServer(server) {
           server.middlewares.use('/api/claude', (req, res) => {
-            const apiKey = env.VITE_ANTHROPIC_API_KEY;
+            const apiKey = env.ANTHROPIC_API_KEY;
             if (!apiKey) {
               res.statusCode = 500;
-              res.end(JSON.stringify({ error: 'VITE_ANTHROPIC_API_KEY not set in .env.local' }));
+              res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set in .env.local' }));
               return;
             }
             let body = '';
