@@ -11,7 +11,6 @@ import {
 } from '../../data/gymnasticsSkillsData';
 import type { SkillMode } from '../../types';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
-import { getAuthToken } from '../../lib/authToken';
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -638,15 +637,11 @@ ${checklist.join('\n')}
     try {
       if (currentMessage && currentMessage.trim().length > 3) {
         console.log("🔍 Querying Vector DB for context...");
-        const ragToken = getAuthToken();
         const ragController = new AbortController();
         const ragTimeout = setTimeout(() => ragController.abort(), 30_000);
         const ragResponse = await fetch('/api/rag-search', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(ragToken ? { Authorization: `Bearer ${ragToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: currentMessage }),
           signal: ragController.signal,
         }).finally(() => clearTimeout(ragTimeout));
