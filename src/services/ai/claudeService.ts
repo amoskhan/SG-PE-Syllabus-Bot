@@ -2,6 +2,8 @@
 // Mirrors geminiService.ts: same pose analysis, same system prompts, same logic.
 // Key differences: Anthropic content-block format for images, no Google SDK, no grounding.
 
+import { getAuthToken } from '../../lib/authToken';
+
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
@@ -839,9 +841,13 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
         // DEV: Vite proxies /api/claude → api.anthropic.com (key injected in vite.config.ts)
         // PROD: Vercel serverless /api/claude.ts handles the request
+        const token = getAuthToken();
         const response = await fetch('/api/claude', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify(requestBody),
             signal: controller.signal,
         }).finally(() => clearTimeout(timeout));
