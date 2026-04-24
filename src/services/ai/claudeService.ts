@@ -6,7 +6,8 @@ import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_I
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
 
-const MODEL_NAME = 'claude-sonnet-4-6';
+const MODEL_HAIKU  = 'claude-haiku-4-5-20251001';
+const MODEL_SONNET = 'claude-sonnet-4-6';
 
 // ─── Tier 1: Short-Term Context Window ───────────────────────────────────────
 // Caps the number of history messages sent to Claude per request.
@@ -821,8 +822,9 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         let tokenUsage = 0;
 
         // Cache the system instruction too — it's large and stable within a session.
+        const hasVideo = mediaAttachments?.some(m => m.mimeType.startsWith('video/'));
         const requestBody = {
-            model: MODEL_NAME,
+            model: hasVideo ? MODEL_SONNET : MODEL_HAIKU,
             max_tokens: 1500,
             system: [
                 {
