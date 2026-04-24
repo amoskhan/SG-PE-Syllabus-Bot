@@ -11,6 +11,7 @@ import { getFewShotExamples } from '../../data/skillExamples';
 import { PE_SYLLABUS_TEXT } from '../../data/syllabusData';
 import { MediaData } from './geminiService';
 import type { SkillMode } from '../../types';
+import { getAuthToken } from '../../lib/authToken';
 
 // Note: In development, we can use VITE_OPENROUTER_API_KEY. 
 // In production (Vercel), we should use the server-side proxy /api/openrouter to hide the key.
@@ -850,6 +851,9 @@ ${checklist.join('\n')}
 
         if (!useProxy) {
             headers["Authorization"] = `Bearer ${VITE_API_KEY}`;
+        } else {
+            const token = getAuthToken();
+            if (token) headers["Authorization"] = `Bearer ${token}`;
         }
 
         // This is a TRUE MULTIMODAL model (Vision + Text)
