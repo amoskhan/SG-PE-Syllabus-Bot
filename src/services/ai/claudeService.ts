@@ -588,6 +588,7 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
         }
 
         // ── RAG retrieval ────────────────────────────────────────────────────
+        const token = getAuthToken();
         let ragContext = '';
         try {
             if (currentMessage && currentMessage.trim().length > 3) {
@@ -595,7 +596,10 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
                 const ragTimeout = setTimeout(() => ragController.abort(), 30_000);
                 const ragResponse = await fetch('/api/rag-search', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
                     body: JSON.stringify({ query: currentMessage }),
                     signal: ragController.signal,
                 }).finally(() => clearTimeout(ragTimeout));
@@ -701,7 +705,9 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         // biomechanics analysis with irrelevant teacher notes.
         if (userId && !(poseData && poseData.length > 0)) {
             try {
-                const memResponse = await fetch(`/api/get-memory?userId=${encodeURIComponent(userId)}`);
+                const memResponse = await fetch(`/api/get-memory?userId=${encodeURIComponent(userId)}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
                 if (memResponse.ok) {
                     const memData = await memResponse.json() as { summaries: { summary_date: string; summary_text: string }[] };
                     if (memData.summaries && memData.summaries.length > 0) {
@@ -841,7 +847,6 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
         // DEV: Vite proxies /api/claude → api.anthropic.com (key injected in vite.config.ts)
         // PROD: Vercel serverless /api/claude.ts handles the request
-        const token = getAuthToken();
         const response = await fetch('/api/claude', {
             method: 'POST',
             headers: {
