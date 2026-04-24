@@ -17,11 +17,10 @@ import RubricBuilderModal from './components/admin/RubricBuilderModal';
 import { ALL_FMS_SKILLS } from './data/fundamentalMovementSkillsData';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './services/db/supabaseClient';
-import { setAuthToken } from './lib/authToken';
 import Dashboard from './pages/Dashboard';
 
 const App: React.FC = () => {
-  const { user, session, teacherProfile, signInWithGoogle, signOut, updateTeacherProfile } = useAuth();
+  const { user, teacherProfile, signInWithGoogle, signOut, updateTeacherProfile } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -203,18 +202,6 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter'>('gemini');
-
-  // Keep module-level auth token in sync with the current Supabase session
-  useEffect(() => {
-    setAuthToken(session?.access_token ?? null);
-  }, [session?.access_token]);
-
-  // If teacher signs out while on a paid model, silently fall back to Gemini
-  useEffect(() => {
-    if (!user && selectedModel !== 'gemini') {
-      setSelectedModel('gemini');
-    }
-  }, [user]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
@@ -1176,31 +1163,23 @@ const App: React.FC = () => {
                   <div className="fixed inset-0 z-10" onClick={() => setIsModelDropdownOpen(false)} />
                   <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-slate-200 dark:border-zinc-800 overflow-hidden z-20 flex flex-col p-1">
                     {[
-                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png', requiresAuth: false },
-                      { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png', requiresAuth: true },
-                      { id: 'openrouter', name: 'OpenRouter (Auto)', icon: 'qwen.png', requiresAuth: true },
+                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
+                      { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png' },
+                      { id: 'openrouter', name: 'OpenRouter (Auto)', icon: 'qwen.png' },
                     ].map((model) => (
                       <button
                         key={model.id}
-                        disabled={model.requiresAuth && !user}
                         onClick={() => {
-                          if (!(model.requiresAuth && !user)) {
-                            setSelectedModel(model.id as any);
-                            setIsModelDropdownOpen(false);
-                          }
+                          setSelectedModel(model.id as any);
+                          setIsModelDropdownOpen(false);
                         }}
-                        title={model.requiresAuth && !user ? 'Sign in to use this model' : undefined}
-                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${
-                          model.requiresAuth && !user
-                            ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600'
-                            : selectedModel === model.id
-                              ? 'bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-slate-100'
-                              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
-                        }`}
+                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${selectedModel === model.id
+                          ? 'bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-slate-100'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                          }`}
                       >
                         <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-4 h-4 object-contain" />
-                        <span className="flex-1 text-left">{model.name}</span>
-                        {model.requiresAuth && !user && <span className="text-xs">Sign in</span>}
+                        {model.name}
                       </button>
                     ))}
                   </div>

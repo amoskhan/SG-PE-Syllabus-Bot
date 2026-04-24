@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/db/supabaseClient';
-import { User, Session } from '@supabase/supabase-js';
+import { User } from '@supabase/supabase-js';
 import { TeacherProfile } from '../types';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [teacherProfile, setTeacherProfile] = useState<TeacherProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Check active sessions and sets the user
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
         loadTeacherProfile(session.user);
@@ -23,7 +21,6 @@ export const useAuth = () => {
 
     // Listen for changes on auth state (logged in, signed out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
         loadTeacherProfile(session.user);
@@ -164,7 +161,6 @@ export const useAuth = () => {
 
   return {
     user,
-    session,
     teacherProfile,
     loading,
     signInWithGoogle,

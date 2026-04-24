@@ -7,15 +7,9 @@ import { GoogleGenAI } from '@google/genai';
 const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
 export default async function handler(req: any, res: any) {
-    const allowedOrigins = process.env.ALLOWED_ORIGIN
-        ? process.env.ALLOWED_ORIGIN.split(',').map((o: string) => o.trim())
-        : ['http://localhost:5173', 'http://localhost:4173'];
-    const origin = (req.headers.origin as string) || '';
-    const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-
+    // Handle CORS
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
-    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader(
         'Access-Control-Allow-Headers',
@@ -32,7 +26,7 @@ export default async function handler(req: any, res: any) {
     }
 
     if (!apiKey) {
-        console.error('SERVER ERROR: No API key found. Set GEMINI_API_KEY in Vercel Dashboard.');
+        console.error('SERVER ERROR: No API key found. Set GEMINI_API_KEY in Vercel Dashboard, or VITE_GEMINI_API_KEY in .env.local for local dev.');
         return res.status(500).json({
             error: 'Server Configuration Error: API Key missing. Please set GEMINI_API_KEY in Vercel Settings.'
         });

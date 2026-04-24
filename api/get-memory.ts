@@ -17,7 +17,6 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { validateEdgeAuth } from './_lib/auth';
 
 export const config = { runtime: 'edge' };
 
@@ -27,28 +26,20 @@ export default async function handler(req: Request) {
         return new Response('Method Not Allowed', { status: 405 });
     }
 
-    const { user, error: authError } = await validateEdgeAuth(req);
-    if (authError || !user) {
-        return new Response(JSON.stringify({ summaries: [] }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' },
-        });
-    }
-
     // ── Multi-Tenant Isolation: validate userId before ANY query ─────────────
     const url = new URL(req.url);
     const userId = url.searchParams.get('userId');
 
-    // CRITICAL: if userId is missing/empty or doesn't match the auth token's user — reject
-    if (!userId || userId.trim() === '' || userId !== user.id) {
+    // CRITICAL: if userId is missing or empty, return empty — never fall back to a full scan
+    if (!userId || userId.trim() === '') {
         return new Response(JSON.stringify({ summaries: [] }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
         });
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || '';
-    const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
     if (!supabaseUrl || !supabaseKey) {
         return new Response(JSON.stringify({ summaries: [] }), {

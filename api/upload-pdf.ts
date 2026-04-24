@@ -2,7 +2,6 @@ import formidable from 'formidable';
 import * as fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
-import { validateNodeAuth } from './_lib/auth';
 
 // Disable default body parser so formidable can process multipart/form-data
 export const config = {
@@ -11,9 +10,9 @@ export const config = {
   },
 };
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
-const apiKey = process.env.GEMINI_API_KEY || '';
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
 
 // ── Helper: Try every known way to extract text from a PDF buffer ────────────
 async function extractPdfText(dataBuffer: Buffer): Promise<{ text: string; method: string }> {
@@ -52,15 +51,8 @@ async function extractPdfText(dataBuffer: Buffer): Promise<{ text: string; metho
 
 export default async function handler(req: any, res: any) {
   // ── CORS ────────────────────────────────────────────────────────────────────
-  const allowedOrigins = process.env.ALLOWED_ORIGIN
-    ? process.env.ALLOWED_ORIGIN.split(',').map((o: string) => o.trim())
-    : ['http://localhost:5173', 'http://localhost:4173'];
-  const origin = (req.headers.origin as string) || '';
-  const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
-  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
 
   if (req.method === 'OPTIONS') {
@@ -72,9 +64,18 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { error: authError } = await validateNodeAuth(req);
-  if (authError) {
-    return res.status(401).json({ error: 'Unauthorized: sign in to upload PDFs.' });
+  // Verify the caller is a signed-in user
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: missing auth token.' });
+  }
+  {
+    const authClient = createClient(supabaseUrl || '', supabaseKey || '');
+    const { data: { user: authUser }, error: authError } = await authClient.auth.getUser(token);
+    if (authError || !authUser) {
+      return res.status(401).json({ error: 'Unauthorized: invalid or expired session.' });
+    }
   }
 
   if (!apiKey || !supabaseUrl || !supabaseKey) {
@@ -94,13 +95,6 @@ export default async function handler(req: any, res: any) {
       const fileArray = Array.isArray(files.file) ? files.file : [files.file];
       const file = fileArray[0];
       if (!file) return res.status(400).json({ error: 'No file uploaded. Make sure the form field is named "file".' });
-
-      if (file.mimetype !== 'application/pdf') {
-        return res.status(415).json({ error: 'Only PDF files are accepted.' });
-      }
-      if (file.size > 20 * 1024 * 1024) {
-        return res.status(413).json({ error: 'File too large. Maximum size is 20MB.' });
-      }
 
       try {
         // ── STEP 1: Parse PDF ─────────────────────────────────────────────────
