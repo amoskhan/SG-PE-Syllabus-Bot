@@ -41,14 +41,20 @@ export default async function handler(req: Request) {
             body: JSON.stringify(body),
         });
 
-        const data = await response.json() as any;
-
         if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            let errorMsg = `Anthropic API error (${response.status})`;
+            try {
+                const parsed = JSON.parse(errorText);
+                errorMsg = parsed.error?.message || parsed.message || errorMsg;
+            } catch {}
             return new Response(
-                JSON.stringify({ error: data.error?.message || `Anthropic API error (${response.status})` }),
+                JSON.stringify({ error: errorMsg }),
                 { status: response.status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*' } }
             );
         }
+
+        const data = await response.json() as any;
 
         return new Response(
             JSON.stringify({
