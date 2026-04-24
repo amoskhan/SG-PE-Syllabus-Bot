@@ -2,13 +2,17 @@ import { createClient } from '@supabase/supabase-js';
 
 async function validateToken(token: string) {
   if (!token) return { user: null, error: 'Missing token' };
-  const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!
-  );
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return { user: null, error: 'Invalid token' };
-  return { user, error: null };
+  try {
+    const supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY!
+    );
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) return { user: null, error: 'Invalid token' };
+    return { user, error: null };
+  } catch {
+    return { user: null, error: 'Auth service unavailable' };
+  }
 }
 
 /** For Edge runtime endpoints (api/claude.ts, api/openrouter.ts, api/get-memory.ts) */
