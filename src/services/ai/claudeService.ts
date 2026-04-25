@@ -901,7 +901,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
                     cleanText,
                     activeSkillName || undefined,
                     {
-                        model: MODEL_NAME,
+                        model: hasVideo ? MODEL_SONNET : MODEL_HAIKU,
                         tokenUsage,
                         hasMedia: mediaAttachments && mediaAttachments.length > 0,
                     }
