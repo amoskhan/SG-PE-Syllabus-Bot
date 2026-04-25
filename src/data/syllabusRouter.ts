@@ -102,6 +102,8 @@ const KEYWORD_MAP: Record<string, string[]> = {
     'secondary', ' sec ', ' s1', ' s2', ' s3', ' s4',
     'lower secondary', 'upper secondary', 'secondary school', 'secondary level',
     'express', 'normal academic', 'normal technical',
+    // Gymnastics is taught at both primary and secondary — match here too
+    'gymnastics',
   ],
   preUniversity: [
     'pre-university', 'pre university', ' jc', 'junior college',

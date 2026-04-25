@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { GroundingChunk } from '../../types';
-import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist } from '../../data/fundamentalMovementSkillsData';
+import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import {
   GYMNASTICS_SKILLS_TEXT,
   GYMNASTICS_RUBRIC,
@@ -66,7 +66,7 @@ Sub-categories to offer (by learning area):
 - Games & Sports: [[SKILL_CHOICES: Sending & Receiving, Sending, Propelling, Concepts & Safety Practices]]
 - Athletics: [[SKILL_CHOICES: Running, Jumping, Throwing, Combined Events]]
 - Dance: [[SKILL_CHOICES: Locomotor Skills, Non-Locomotor Skills, Manipulative Skills, Dance Phrases]]
-- Gymnastics: [[SKILL_CHOICES: Travelling, Balancing, Rolling, Weight Transfer & Flight]]
+- Gymnastics: [[SKILL_CHOICES: Travelling, Jumping & Climbing, Balancing, Rotating, Mounting, Dismounting & Vaulting]]
 - Swimming: [[SKILL_CHOICES: Water Safety, Floating & Gliding, Strokes, Turns & Starts]]
 - Outdoor Education: [[SKILL_CHOICES: Orienteering, Camping & Survival, Environmental Awareness]]
 
@@ -112,6 +112,21 @@ Before responding to any syllabus question, ask yourself:
 - Is this query vague with no level or area? → TIER A
 
 ═══════════════════════════════════════
+RULE 3 — SKILL CRITERIA QUERY
+═══════════════════════════════════════
+If the user asks for "critical elements", "performance criteria", "checklist", "how to perform",
+or "teach me [a skill]":
+- These are questions about PERFORMANCE CRITERIA from the skill data — NOT PE Syllabus learning outcomes.
+- DO NOT route to Tier A/B/C. DO NOT ask about level.
+- If a specific skill name is mentioned (e.g. "critical elements of leaping"):
+  1. List the performance criteria for that skill from the skill data.
+  2. On its own line at the end, add: [[DISPLAY_REFERENCE: <Exact Skill Name>]]
+- If no specific skill is mentioned (e.g. "critical elements of gymnastics"):
+  Respond with ONE short sentence then offer skill choices:
+  [[SKILL_CHOICES: skill1, skill2, skill3, skill4]]
+  Use the exact skill names from the Valid names list in OTHER RULES.
+
+═══════════════════════════════════════
 RULE 4 — MOVEMENT MEDIA UPLOADED
 ═══════════════════════════════════════
 When the user uploads a video or image:
@@ -122,7 +137,9 @@ When the user uploads a video or image:
 OTHER RULES
 ═══════════════════════════════════════
 - Tone: Direct, professional, Singapore PE context. No filler phrases.
-- Reference images: Use \`[[DISPLAY_REFERENCE: <Exact Skill Name>]]\` if the user asks to see a skill.
+- Reference images: Use \`[[DISPLAY_REFERENCE: <Exact Skill Name>]]\` when:
+  (a) the user asks to see a skill, OR
+  (b) you just listed performance criteria for a specific skill (auto-trigger per RULE 3).
   Valid names: ${Object.keys(SKILL_REFERENCE_IMAGES).join(', ')}
 - Student mode: If a student asks "show me", use [[DISPLAY_REFERENCE]] + 1 encouraging sentence. No checklist.
 - Out of syllabus: Say so clearly, use search for a 1-sentence supplement.
@@ -513,7 +530,7 @@ Ball Detected: ${hasBall}
       const containsMultipleSkills = /\b(into|then|and|sequence)\b/i.test(currentMessage);
       const knownSkillsList = isGymnastics
         ? ALL_GYMNASTICS_SKILLS
-        : ['Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick', 'Dribble (Hand)', 'Dribble (Foot)', 'Chest Pass', 'Catch above waist', 'Bounce pass', 'Bounce'];
+        : ALL_FMS_SKILLS;
       const singleSkillMatch = skillName && knownSkillsList.includes(skillName);
       const isSequencing = !singleSkillMatch || containsMultipleSkills;
 

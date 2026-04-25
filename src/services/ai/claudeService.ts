@@ -64,7 +64,7 @@ Sub-categories to offer (by learning area):
 - Games & Sports: [[SKILL_CHOICES: Sending & Receiving, Sending, Propelling, Concepts & Safety Practices]]
 - Athletics: [[SKILL_CHOICES: Running, Jumping, Throwing, Combined Events]]
 - Dance: [[SKILL_CHOICES: Locomotor Skills, Non-Locomotor Skills, Manipulative Skills, Dance Phrases]]
-- Gymnastics: [[SKILL_CHOICES: Travelling, Balancing, Rolling, Weight Transfer & Flight]]
+- Gymnastics: [[SKILL_CHOICES: Travelling, Jumping & Climbing, Balancing, Rotating, Mounting, Dismounting & Vaulting]]
 - Swimming: [[SKILL_CHOICES: Water Safety, Floating & Gliding, Strokes, Turns & Starts]]
 - Outdoor Education: [[SKILL_CHOICES: Orienteering, Camping & Survival, Environmental Awareness]]
 
@@ -110,6 +110,21 @@ Before responding to any syllabus question, ask yourself:
 - Is this query vague with no level or area? → TIER A
 
 ═══════════════════════════════════════
+RULE 3 — SKILL CRITERIA QUERY
+═══════════════════════════════════════
+If the user asks for "critical elements", "performance criteria", "checklist", "how to perform",
+or "teach me [a skill]":
+- These are questions about PERFORMANCE CRITERIA from the skill data — NOT PE Syllabus learning outcomes.
+- DO NOT route to Tier A/B/C. DO NOT ask about level.
+- If a specific skill name is mentioned (e.g. "critical elements of leaping"):
+  1. List the performance criteria for that skill from the skill data.
+  2. On its own line at the end, add: [[DISPLAY_REFERENCE: <Exact Skill Name>]]
+- If no specific skill is mentioned (e.g. "critical elements of gymnastics"):
+  Respond with ONE short sentence then offer skill choices:
+  [[SKILL_CHOICES: skill1, skill2, skill3, skill4]]
+  Use the exact skill names from the Valid names list in OTHER RULES.
+
+═══════════════════════════════════════
 RULE 4 — MOVEMENT MEDIA UPLOADED
 ═══════════════════════════════════════
 When the user uploads a video or image:
@@ -120,7 +135,9 @@ When the user uploads a video or image:
 OTHER RULES
 ═══════════════════════════════════════
 - Tone: Direct, professional, Singapore PE context. No filler phrases.
-- Reference images: Use \`[[DISPLAY_REFERENCE: <Exact Skill Name>]]\` if the user asks to see a skill.
+- Reference images: Use \`[[DISPLAY_REFERENCE: <Exact Skill Name>]]\` when:
+  (a) the user asks to see a skill, OR
+  (b) you just listed performance criteria for a specific skill (auto-trigger per RULE 3).
   Valid names: ${Object.keys(SKILL_REFERENCE_IMAGES).join(', ')}
 - Student mode: If a student asks "show me", use [[DISPLAY_REFERENCE]] + 1 encouraging sentence. No checklist.
 - Out of syllabus: Say so clearly, use search for a 1-sentence supplement.
@@ -468,7 +485,7 @@ Ball Detected: ${hasBall}
             const containsMultipleSkills = /\b(into|then|and|sequence)\b/i.test(currentMessage);
             const knownSkillsList = skillMode === 'gymnastics'
               ? ALL_GYMNASTICS_SKILLS
-              : ['Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick', 'Dribble (Hand)', 'Dribble (Foot)', 'Chest Pass', 'Catch above waist', 'Bounce pass', 'Bounce'];
+              : ALL_FMS_SKILLS;
             const singleSkillMatch = skillName && knownSkillsList.includes(skillName);
             const isSequencing = !singleSkillMatch || containsMultipleSkills;
 
@@ -588,8 +605,11 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
 
         // ── RAG retrieval ────────────────────────────────────────────────────
         let ragContext = '';
+        // Skip RAG for short chip-selection messages that follow a [[SKILL_CHOICES]] routing prompt
+        const lastBotText = [...history].reverse().find(m => m.role === 'assistant')?.content || '';
+        const isRoutingResponse = currentMessage.trim().length < 50 && lastBotText.includes('[[SKILL_CHOICES');
         try {
-            if (currentMessage && currentMessage.trim().length > 3) {
+            if (!isRoutingResponse && currentMessage && currentMessage.trim().length > 3) {
                 const ragController = new AbortController();
                 const ragTimeout = setTimeout(() => ragController.abort(), 30_000);
                 const ragResponse = await fetch('/api/rag-search', {
@@ -611,13 +631,9 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
 
         if (poseData && poseData.length > 0) {
             if (!isVerified) {
+                // Static-only system instruction — dynamic pose data is already in enhancedMessage
                 systemInstruction = `
 You are the Singapore PE Syllabus Assistant.
-I have captured pose data from ${poseData.length} keyframes extracted evenly across the video.
-
-**Pose measurements:**
-${poseDescription}${movementPattern}
-${biomechanicsReport || ''}
 
 **YOUR GOAL (VERIFICATION PHASE):**
 You must complete TWO phases before analysis can begin.
@@ -627,7 +643,7 @@ You must complete TWO phases before analysis can begin.
 **VALID SKILLS LIST**: ${validSkillsList}
 
 **INSTRUCTIONS:**
-1. **Observe**: Look at the pose data and the visual input. Pay special attention to:
+1. **Observe**: Look at the pose data and the visual input in the user message. Pay special attention to:
    - **Release Point**: Where is the ball released? (Below knee = Roll, Knee-Waist = Throw, Above waist = Overhand/Catch)
    - **Arm Trajectory**: Does the arm swing downward (Underhand) or upward/overhead (Overhand)?
    - **Body Orientation**: Is the user facing the target or sideways (Overhand Throw/Kick often use side stance)?
@@ -654,14 +670,8 @@ You must complete TWO phases before analysis can begin.
 - JUST Identify the top 4 choices.
 `;
             } else {
+                // Static-only append — dynamic pose data is already in enhancedMessage
                 systemInstruction += `
-
-**CURRENT POSE DATA CONTEXT:**
-I have captured pose data from ${poseData.length} keyframes extracted evenly across the video.
-
-**Pose measurements:**
-${poseDescription}${movementPattern}
-${biomechanicsReport || ''}
 ${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
 
 **Immediate Task:**
@@ -698,7 +708,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         // prepend them to the system instruction so Claude has ongoing context.
         // GUARD: skip during pose-detection/verification phase to avoid polluting
         // biomechanics analysis with irrelevant teacher notes.
-        if (userId && !(poseData && poseData.length > 0)) {
+        if (userId && !(poseData && poseData.length > 0) && !isRoutingResponse) {
             try {
                 const memResponse = await fetch(`/api/get-memory?userId=${encodeURIComponent(userId)}`);
                 if (memResponse.ok) {
@@ -850,9 +860,11 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: response.statusText })) as any;
+            if (errorData.details) console.error('Claude API error details:', errorData.details);
             if (response.status === 429) throw new Error('Claude API rate limit exceeded (429). Please try again later.');
             if (response.status === 401) throw new Error('Claude API key invalid (401). Check your ANTHROPIC_API_KEY.');
-            throw new Error(errorData.error?.message || errorData.error || `Claude API error (${response.status})`);
+            const baseMsg = errorData.error?.message || errorData.error || `Claude API error (${response.status})`;
+            throw new Error(errorData.details ? `${baseMsg} — ${errorData.details}` : baseMsg);
         }
 
         const data = await response.json() as any;
@@ -864,14 +876,16 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         }
 
         // ── DISPLAY_REFERENCE tag handling ───────────────────────────────────
-        let finalReferenceURI = (activeSkillName && SKILL_REFERENCE_IMAGES[activeSkillName])
-            ? SKILL_REFERENCE_IMAGES[activeSkillName]
+        let finalReferenceURI = (activeSkillName && activeReferenceImages[activeSkillName])
+            ? activeReferenceImages[activeSkillName]
             : undefined;
 
         const referenceTagMatch = text.match(/\[\[DISPLAY_REFERENCE:\s*([^\]]+)\]\]/);
         if (referenceTagMatch) {
             const suggestedSkill = referenceTagMatch[1].trim();
-            if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
+            if (activeReferenceImages[suggestedSkill]) {
+                finalReferenceURI = activeReferenceImages[suggestedSkill];
+            } else if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
                 finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
             }
         }

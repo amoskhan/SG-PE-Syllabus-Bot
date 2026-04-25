@@ -1050,11 +1050,12 @@ const App: React.FC = () => {
       return;
     }
 
-    // Check if the current session has any media uploaded
-    const currentSession = sessions.find(s => s.id === currentSessionId);
-    const hasMedia = currentSession?.messages.some(m => m.media && m.media.length > 0);
+    // Use ref for freshness; only enter Phase 2 if the last bot message was a Phase 1 skill-ID response
+    const currentSession = sessionsRef.current.find(s => s.id === currentSessionId);
+    const lastBotMsg = currentSession?.messages.filter(m => m.sender === Sender.BOT).at(-1);
+    const isInAnalysisFlow = !!(lastBotMsg?.hasMedia && lastBotMsg?.text.includes('[[SKILL_CHOICES:'));
 
-    if (hasMedia) {
+    if (isInAnalysisFlow) {
       handleSendMessage(`Analyze ${skillName}`, undefined, { skillName: skillName, isVerified: true });
     } else {
       handleSendMessage(skillName);
