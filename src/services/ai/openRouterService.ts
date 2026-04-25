@@ -77,7 +77,7 @@ Sub-categories to offer (by learning area):
 - Games & Sports: [[SKILL_CHOICES: Sending & Receiving, Sending, Propelling, Concepts & Safety Practices]]
 - Athletics: [[SKILL_CHOICES: Running, Jumping, Throwing, Combined Events]]
 - Dance: [[SKILL_CHOICES: Locomotor Skills, Non-Locomotor Skills, Manipulative Skills, Dance Phrases]]
-- Gymnastics: [[SKILL_CHOICES: Travelling, Balancing, Rolling, Weight Transfer & Flight]]
+- Gymnastics: [[SKILL_CHOICES: Travelling, Jumping & Climbing, Balancing, Rotating, Mounting, Dismounting & Vaulting]]
 - Swimming: [[SKILL_CHOICES: Water Safety, Floating & Gliding, Strokes, Turns & Starts]]
 - Outdoor Education: [[SKILL_CHOICES: Orienteering, Camping & Survival, Environmental Awareness]]
 
@@ -110,7 +110,22 @@ Before responding to any syllabus question, ask yourself:
 - Is this query vague with no level or area? → TIER A
 
 ══════════════════════════════════════
-RULE 3 — SKILL ANALYSIS (media uploaded)
+RULE 3 — SKILL CRITERIA QUERY
+══════════════════════════════════════
+If the user asks for "critical elements", "performance criteria", "checklist", "how to perform",
+or "teach me [a skill]":
+- These are questions about PERFORMANCE CRITERIA from the FMS/Gymnastics skill data — NOT PE Syllabus learning outcomes.
+- DO NOT route to Tier A/B/C. DO NOT ask about level.
+- If a specific skill name is mentioned (e.g. "critical elements of leaping"):
+  1. List the performance criteria for that skill from the FMS/Gymnastics content above.
+  2. On its own line at the end, add: [[DISPLAY_REFERENCE: <Exact Skill Name>]]
+- If no specific skill is mentioned (e.g. "critical elements of gymnastics"):
+  Respond with ONE short sentence then offer skill choices:
+  [[SKILL_CHOICES: skill1, skill2, skill3, skill4]]
+  Use exact skill names from the Fundamental Movement Skills content above.
+
+══════════════════════════════════════
+RULE 4 — SKILL ANALYSIS (media uploaded)
 ══════════════════════════════════════
 If a video/image is uploaded, provide the top 4 FMS skill guesses:
 Tag: [[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]]
@@ -884,8 +899,20 @@ ${checklist.join('\n')}
             throw new Error(`API Error: ${data.error.message || JSON.stringify(data.error)}`);
         }
 
-        const responseText = data.choices?.[0]?.message?.content || "I couldn't generate a response (No content received).";
+        const rawResponseText = data.choices?.[0]?.message?.content || "I couldn't generate a response (No content received).";
         const tokenUsage = data.usage?.total_tokens;
+
+        // Parse [[DISPLAY_REFERENCE: Skill Name]] tag from response text (supports RULE 3)
+        const referenceTagMatch = rawResponseText.match(/\[\[DISPLAY_REFERENCE:\s*([^\]]+)\]\]/);
+        if (referenceTagMatch) {
+            const suggestedSkill = referenceTagMatch[1].trim();
+            if (activeReferenceImages[suggestedSkill]) {
+                finalReferenceURI = activeReferenceImages[suggestedSkill];
+            } else if (SKILL_REFERENCE_IMAGES[suggestedSkill]) {
+                finalReferenceURI = SKILL_REFERENCE_IMAGES[suggestedSkill];
+            }
+        }
+        const responseText = rawResponseText.replace(/\[\[DISPLAY_REFERENCE:\s*[^\]]+\]\]/g, '').trim();
 
         // LOGGING TO SUPABASE (Fire and Forget)
         if (sessionId) {
@@ -893,7 +920,7 @@ ${checklist.join('\n')}
                 logChatToDB(
                     sessionId,
                     finalMessageContent,
-                    responseText, // The final text
+                    responseText,
                     activeSkillName || undefined,
                     {
                         model: targetModel,
