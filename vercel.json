@@ -2,6 +2,9 @@
   "buildCommand": "vite build",
   "devCommand": "vite --port $PORT",
   "outputDirectory": "dist",
+  "functions": {
+    "api/claude.ts": { "maxDuration": 120 }
+  },
   "crons": [
     {
       "path": "/api/summarise-progress",
