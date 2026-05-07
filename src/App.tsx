@@ -809,7 +809,6 @@ const App: React.FC = () => {
         messages: [...session.messages, confirmMsg],
         updatedAt: new Date(),
       }));
-      isSendingRef.current = false; // release lock — finally block won't run for this early return
       return;
     }
 
