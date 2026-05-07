@@ -4,7 +4,7 @@ import { getStudents, getOrCreateStudent } from '../services/studentService';
 import { useAuth } from '../hooks/useAuth';
 
 interface Props {
-  onOpenChat: (student?: Student) => void;
+  onOpenChat: () => void;
 }
 
 const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
@@ -205,7 +205,7 @@ import { getAnalysisHistory, getSignedVideoUrl } from '../services/studentServic
 interface ProfileProps {
   student: Student;
   onBack: () => void;
-  onOpenChat: (student?: Student) => void;
+  onOpenChat: () => void;
 }
 
 const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat }) => {
@@ -433,7 +433,7 @@ const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat })
 
         <div className="mt-6 text-center">
           <button
-            onClick={() => onOpenChat(student)}
+            onClick={onOpenChat}
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
           >
             Grade Another Video for {student.name}

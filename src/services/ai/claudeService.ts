@@ -832,7 +832,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         let tokenUsage = 0;
 
         // Cache the system instruction too — it's large and stable within a session.
-        const hasVideo = (poseData && poseData.length > 0) || mediaAttachments?.some(m => m.mimeType.startsWith('video/'));
+        const hasVideo = mediaAttachments?.some(m => m.mimeType.startsWith('video/'));
         const requestBody = {
             model: hasVideo ? MODEL_SONNET : MODEL_HAIKU,
             max_tokens: 1500,

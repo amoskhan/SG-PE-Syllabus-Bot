@@ -34,7 +34,6 @@ const App: React.FC = () => {
   // Supabase always strips media data to '' on sync. This ref is the authoritative
   // source of video data for the entire page session, immune to cloud overwrites.
   const videoDataCacheRef = React.useRef<Map<string, string>>(new Map());
-  const isSendingRef = React.useRef(false);
   // Persists the student + videoHash + videoFile resolved during Phase 1 so Phase 2 (chip click)
   // can still access them — chip clicks don't carry metadata.
   const activeStudentContextRef = React.useRef<{ studentId: string; student: Student; videoHash?: string; videoFile?: File } | null>(null);
@@ -171,6 +170,7 @@ const App: React.FC = () => {
             try {
               const parsed: any[] = JSON.parse(localSaved);
               if (parsed.length > 0) {
+                console.log("Migrating local history to Supabase...");
                 for (const sess of parsed) {
                   await supabase.from('chat_sessions').insert({
                     user_id: user.id,
@@ -202,16 +202,12 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter'>('gemini');
-  useEffect(() => {
-    if (!user && selectedModel !== 'gemini') setSelectedModel('gemini');
-  }, [user]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isSkillSelectorOpen, setIsSkillSelectorOpen] = useState(false);
   const [isRubricBuilderOpen, setIsRubricBuilderOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [skillMode, setSkillMode] = useState<SkillMode>('fms');
 
   // Persist skillMode into the current session whenever it changes
@@ -358,6 +354,7 @@ const App: React.FC = () => {
 
     if (!resolvedId.includes('-')) {
       // Real UUID not yet available – queue this sync to flush after Supabase responds
+      console.log(`⏳ Queuing sync for temp session ${session.id} until real UUID is assigned`);
       // Replace any existing queued entry for this session with the latest state
       pendingSyncRef.current = [
         ...pendingSyncRef.current.filter(s => s.id !== session.id),
@@ -657,9 +654,6 @@ const App: React.FC = () => {
     files?: File[],
     metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean; studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean }
   ) => {
-    if (isSendingRef.current) return;
-    isSendingRef.current = true;
-
     // LOCK TARGET SESSION ID context to heavily prevent "chat-swapping" side effects
     const originatingSessionId = currentSessionIdRef.current;
     
@@ -675,6 +669,7 @@ const App: React.FC = () => {
     const incomingVideoFile = files?.find(f => f.type.startsWith('video/'));
     if (incomingVideoFile && !isVerifying) {
       // New video being uploaded — resolve student and store context for Phase 2
+      console.log('[Student] Phase 1 — metadata:', metadata?.studentIndexNumber, metadata?.studentName, 'user:', !!user);
       if (metadata?.studentIndexNumber && metadata?.studentName && user) {
         try {
           student = await getOrCreateStudent(user.id, {
@@ -682,6 +677,7 @@ const App: React.FC = () => {
             name: metadata.studentName,
           });
           studentId = student?.id;
+          console.log('[Student] Resolved student:', student?.name, studentId);
         } catch (e) {
           console.warn('[Student] Resolution failed:', e);
         }
@@ -697,8 +693,10 @@ const App: React.FC = () => {
       // Store for Phase 2 (chip click / "yes" / auto-verify all arrive without metadata)
       if (student && studentId) {
         activeStudentContextRef.current = { studentId, student, videoHash, videoFile };
+        console.log('[Student] Ref stored:', studentId);
       } else {
         activeStudentContextRef.current = null;
+        console.log('[Student] Ref cleared — no student selected or resolution failed');
       }
     }
 
@@ -742,10 +740,9 @@ const App: React.FC = () => {
     }
 
     // --- Recover student context for Phase 2 (runs after auto-verify may have flipped isVerifying) ---
-    let recoveredFromCurrentPhase1 = false;
     if (isVerifying) {
+      console.log('[Student] Phase 2 — ref:', activeStudentContextRef.current?.studentId, 'skillContext:', skillContext);
       if (activeStudentContextRef.current) {
-        recoveredFromCurrentPhase1 = true;
         student = activeStudentContextRef.current.student;
         studentId = activeStudentContextRef.current.studentId;
         videoHash = activeStudentContextRef.current.videoHash;
@@ -879,9 +876,8 @@ const App: React.FC = () => {
       }
 
       // --- Phase 2 cache hit: skip LLM if same video+skill already analysed for this student ---
-      // Skip cache when coming directly from current-session Phase 1 (ref was still set) — ensures fresh AI runs.
       let isCachedResponse = false;
-      if (!recoveredFromCurrentPhase1 && isVerifying && studentId && videoHash && skillContext) {
+      if (isVerifying && studentId && videoHash && skillContext) {
         try {
           const cached = await lookupByVideoHash(videoHash, studentId, skillContext);
           if (cached) {
@@ -923,6 +919,7 @@ const App: React.FC = () => {
       const proficiencyMatch = response.text.match(/\b(Beginning|Developing|Competent|Excellent)\b/i);
       const proficiencyLevel = proficiencyMatch ? proficiencyMatch[1] : undefined;
       if (studentId && skillContext && proficiencyLevel && !isCachedResponse) {
+        console.log('[Save] Saving analysis for', studentId, skillContext, proficiencyLevel);
         (async () => {
           let videoStoragePath: string | undefined;
           if (videoFile) {
@@ -945,10 +942,10 @@ const App: React.FC = () => {
             tokenUsage: response!.tokenUsage,
           }).catch(e => console.error('[Save] saveAnalysis failed:', e));
         })();
-        // Only clear ref after a real Phase 2 save — Phase 1 misbehavior saves should not clear
-        // the ref so Phase 2 can still recover studentId and save the proper graded analysis.
-        if (isVerifying) activeStudentContextRef.current = null;
-      } else if (isVerifying && studentId && skillContext && !proficiencyLevel) {
+        // Clear context — analysis saved
+        activeStudentContextRef.current = null;
+      } else if (studentId && skillContext && !proficiencyLevel) {
+        console.log('[Save] Skipped — no proficiency level in response (Phase 1 response, not grading)');
         activeStudentContextRef.current = null;
       }
 
@@ -1023,7 +1020,6 @@ const App: React.FC = () => {
         updatedAt: new Date()
       }));
     } finally {
-      isSendingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -1067,14 +1063,7 @@ const App: React.FC = () => {
   };
 
   if (showDashboard) {
-    return (
-      <Dashboard
-        onOpenChat={(student?: Student) => {
-          if (student) setSelectedStudent(student);
-          setShowDashboard(false);
-        }}
-      />
-    );
+    return <Dashboard onOpenChat={() => setShowDashboard(false)} />;
   }
 
   return (
@@ -1178,28 +1167,22 @@ const App: React.FC = () => {
                       { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
                       { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png' },
                       { id: 'openrouter', name: 'OpenRouter (Auto)', icon: 'qwen.png' },
-                    ].map((model) => {
-                      const locked = !user && model.id !== 'gemini';
-                      return (
+                    ].map((model) => (
                       <button
                         key={model.id}
-                        disabled={locked}
                         onClick={() => {
                           setSelectedModel(model.id as any);
                           setIsModelDropdownOpen(false);
                         }}
-                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${locked
-                          ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600'
-                          : selectedModel === model.id
-                            ? 'bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-slate-100'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${selectedModel === model.id
+                          ? 'bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-slate-100'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
                           }`}
                       >
                         <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-4 h-4 object-contain" />
                         {model.name}
                       </button>
-                    );
-                    })}
+                    ))}
                   </div>
                 </>
               )}
@@ -1288,8 +1271,6 @@ const App: React.FC = () => {
               selectedModel={selectedModel}
               skillMode={skillMode}
               onSkillModeChange={setSkillMode}
-              selectedStudent={selectedStudent}
-              onStudentChange={setSelectedStudent}
             />
           </div>
         </div>

@@ -12,17 +12,16 @@ interface ChatInputProps {
   selectedModel?: 'gemini' | 'claude' | 'openrouter';
   skillMode?: SkillMode;
   onSkillModeChange?: (mode: SkillMode) => void;
-  selectedStudent?: Student | null;
-  onStudentChange?: (student: Student | null) => void;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selectedModel = 'gemini', skillMode = 'fms', onSkillModeChange, selectedStudent = null, onStudentChange }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selectedModel = 'gemini', skillMode = 'fms', onSkillModeChange }) => {
   const [input, setInput] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showCamera, setShowCamera] = useState(false);
   const [vidStartTime, setVidStartTime] = useState<number | undefined>(undefined);
   const [vidEndTime, setVidEndTime] = useState<number | undefined>(undefined);
   const [skillName, setSkillName] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [studentPickerOpen, setStudentPickerOpen] = useState(false);
   const [studentSearch, setStudentSearch] = useState('');
@@ -104,6 +103,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
       setInput('');
       setSelectedFiles([]);
       setSkillName('');
+      setSelectedStudent(null);
       setVidStartTime(undefined);
       setVidEndTime(undefined);
       if (textareaRef.current) {
@@ -224,7 +224,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
                         </div>
                         <button
                           type="button"
-                          onClick={() => onStudentChange?.(null)}
+                          onClick={() => setSelectedStudent(null)}
                           className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors flex-shrink-0"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -268,7 +268,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
                                   <button
                                     key={s.id}
                                     type="button"
-                                    onClick={() => { onStudentChange?.(s); setStudentPickerOpen(false); setStudentSearch(''); }}
+                                    onClick={() => { setSelectedStudent(s); setStudentPickerOpen(false); setStudentSearch(''); }}
                                     className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors text-left"
                                   >
                                     <span className="font-medium text-slate-800 dark:text-white">{s.name}</span>
