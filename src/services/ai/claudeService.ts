@@ -369,8 +369,8 @@ export const sendMessageToClaudeAPI = async (
 
                 if (highPoint < noseY) {
                     if (isUnderhanded) {
-                        highSwingCheck = `❌ EXCESSIVE BACKSWING: Hand raised ABOVE HEAD level at Frame ${highPointFrame}. This violates the controlled low-swing requirement for ${skillName}.`;
-                        highSwingFailed = true;
+                        highSwingCheck = `⚠️ High swing detected (above head level at Frame ${highPointFrame}). Check if this was a follow-through or an erratic backswing. Do not automatically fail the backswing criterion.`;
+                        highSwingFailed = false;
                     } else {
                         highSwingCheck = `✅ Arm peaked above head level at Frame ${highPointFrame}. Normal for Overhand Throw, Chest Pass, or overhead striking.`;
                     }
@@ -536,13 +536,30 @@ ${(isSequencing || containsMultipleSkills) && isVerified ? `5. **Sequencing & Tr
 
         let specificChecklistText = activeSkillsText;
         if (activeSkillName) {
-            const checklist = skillMode === 'gymnastics'
-                ? getGymnasticsChecklist(activeSkillName)
-                : getSkillChecklist(activeSkillName);
-            const customRubric = teacherProfile?.customRubrics?.[activeSkillName];
+            const skillNames = activeSkillName.split(',').map(s => s.trim());
+            if (skillNames.length > 1) {
+                let combinedText = `*** SEQUENCE CHECKLIST FOR: ${activeSkillName} ***\n\n`;
+                let totalCriteria = 0;
+                let foundAny = false;
+                for (const sName of skillNames) {
+                    const checklist = skillMode === 'gymnastics' ? getGymnasticsChecklist(sName) : getSkillChecklist(sName);
+                    if (checklist.length > 0) {
+                        foundAny = true;
+                        combinedText += `SKILL: ${sName}\n${checklist.join('\n')}\n\n`;
+                        totalCriteria += checklist.length;
+                    }
+                }
+                if (foundAny) {
+                    specificChecklistText = combinedText + `REMINDER: This is a sequence of ${skillNames.length} skills. You MUST grade exactly ${totalCriteria} criteria across all the skills. Do not grade any other skills.\n(END OF SEQUENCE CHECKLIST)`;
+                }
+            } else {
+                const checklist = skillMode === 'gymnastics'
+                    ? getGymnasticsChecklist(activeSkillName)
+                    : getSkillChecklist(activeSkillName);
+                const customRubric = teacherProfile?.customRubrics?.[activeSkillName];
 
-            if (customRubric) {
-                specificChecklistText = `*** TEACHER'S CUSTOM RUBRIC FOR ${activeSkillName} ***
+                if (customRubric) {
+                    specificChecklistText = `*** TEACHER'S CUSTOM RUBRIC FOR ${activeSkillName} ***
 The teacher has provided a custom rubric with specific labels and groupings for this class.
 When grading "Beginning", "Developing", "Competent", or "Accomplished", you MUST use these groupings and criteria below:
 
@@ -562,14 +579,15 @@ If the student only demonstrates the "Beginning" characteristics (or fails to me
 When giving feedback, refer to the teacher's Labels (e.g. "You missed the '${customRubric.developing[0]?.label || 'Setup'}' position", or "You are at '${customRubric.beginning?.[0]?.label || 'Beginning'}'").
 Your Checklist Assessment MUST be grouped by these Levels and Labels instead of the standard 10 criteria.
 (END OF CUSTOM RUBRIC)`;
-            } else if (checklist.length > 0) {
-                specificChecklistText = `*** OFFICIAL CHECKLIST FOR ${activeSkillName} ***
+                } else if (checklist.length > 0) {
+                    specificChecklistText = `*** OFFICIAL CHECKLIST FOR ${activeSkillName} ***
 This skill has EXACTLY ${checklist.length} criteria. You MUST output EXACTLY ${checklist.length} checklist items — no more, no fewer. DO NOT merge, skip, or combine any criteria.
 
 ${checklist.join('\n')}
 
 REMINDER: The list above has ${checklist.length} items (1 through ${checklist.length}). Your Checklist Assessment section MUST contain ${checklist.length} bullet points. Count them before submitting your response.
 (END OF CHECKLIST)`;
+                }
             }
         }
 
@@ -690,7 +708,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
 **MANDATORY CHECKLIST RULES FOR UNDERHAND ROLL:**
 1. **Checklist Item #3 "Keep knees slightly bent"**: Look at "Setup Knee Bend" in biomechanics. If ❌ STRAIGHT KNEES → mark as ❌.
-2. **Checklist Item #5 "Swing dominant hand back at least to waist level"**: Look at "Backswing Height". If ❌ EXCESSIVE BACKSWING → mark as ❌.
+2. **Checklist Item #5 "Swing dominant hand back at least to waist level"**: Look at "Wind-up (Depth)" in biomechanics. If it says "No significant wind-up" → mark as ❌.
 3. **Checklist Item #8 "Release ball on the ground"**: Look at "Ball Release Point". If above waist/knee-waist → mark as ❌.
 
 - **CAMERA ANGLE AWARENESS**:
@@ -831,11 +849,12 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         let text = '';
         let tokenUsage = 0;
 
-        // Cache the system instruction too — it's large and stable within a session.
+        // Use Sonnet if there's video, pose data, or multiple skills to evaluate, or just default to Sonnet for better reasoning
         const hasVideo = mediaAttachments?.some(m => m.mimeType.startsWith('video/'));
+        const useSonnet = hasVideo || (poseData && poseData.length > 0) || (activeSkillName && activeSkillName.includes(','));
         const requestBody = {
-            model: hasVideo ? MODEL_SONNET : MODEL_HAIKU,
-            max_tokens: 1500,
+            model: useSonnet ? MODEL_SONNET : MODEL_HAIKU,
+            max_tokens: 4000,
             system: [
                 {
                     type: 'text' as const,
@@ -847,7 +866,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         };
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 60_000);
+        const timeout = setTimeout(() => controller.abort(), 120_000);
 
         // DEV: Vite proxies /api/claude → api.anthropic.com (key injected in vite.config.ts)
         // PROD: Vercel serverless /api/claude.ts handles the request
