@@ -653,7 +653,6 @@ ${checklist.join('\n')}
     let ragContext = '';
     try {
       if (currentMessage && currentMessage.trim().length > 3) {
-        console.log("🔍 Querying Vector DB for context...");
         const ragController = new AbortController();
         const ragTimeout = setTimeout(() => ragController.abort(), 30_000);
         const ragResponse = await fetch('/api/rag-search', {
@@ -907,7 +906,6 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
         // OR always compress to be safe? 
         // Let's always compress video analysis frames as they can be huge (10 frames * 1MB = 10MB)
         try {
-          console.log("Compressing frame for upload...");
           base64Data = await compressBase64Image(media.data);
         } catch (e) {
           console.warn("Compression failed, sending original", e);
