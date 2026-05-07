@@ -1,6 +1,6 @@
 
 export const config = {
-    maxDuration: 120,
+    runtime: 'edge',
 };
 
 export default async function handler(req: Request) {
