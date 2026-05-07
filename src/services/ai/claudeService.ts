@@ -847,7 +847,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         };
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 60_000);
+        const timeout = setTimeout(() => controller.abort(), 115_000);
 
         // DEV: Vite proxies /api/claude → api.anthropic.com (key injected in vite.config.ts)
         // PROD: Vercel serverless /api/claude.ts handles the request
