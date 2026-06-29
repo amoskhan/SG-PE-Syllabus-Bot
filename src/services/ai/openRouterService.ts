@@ -838,22 +838,16 @@ ${checklist.join('\n')}
             content: userContent
         });
 
-        // Map internal model IDs to OpenRouter model strings
+        // Route OpenRouter through the free-model router so it can pick from
+        // the currently available zero-cost providers at runtime.
         const modelMap: Record<string, string> = {
-            'openrouter': '', // Will be determined by input type
-            'openrouter-video': 'google/gemini-2.5-flash',
-            'openrouter-text': 'qwen/qwen3.6-plus:free',
+            'openrouter': 'openrouter/free',
+            'openrouter-video': 'openrouter/free',
+            'openrouter-text': 'openrouter/free',
         };
 
-        // Determine target model based on input type
-        let targetModel: string;
-        if (modelId === 'openrouter' || !modelId) {
-            // Route by input type: video → gemini, text/PDF → qwen
-            const hasVideo = mediaAttachments && mediaAttachments.some(m => m.mimeType.startsWith('video/'));
-            targetModel = hasVideo ? 'google/gemini-2.5-flash' : 'qwen/qwen3.6-plus:free';
-        } else {
-            targetModel = modelMap[modelId] || 'qwen/qwen3.6-plus:free';
-        }
+        // The free router already filters for free models and supports image input.
+        const targetModel = modelMap[modelId || 'openrouter'] || 'openrouter/free';
 
         const endpoint = useProxy ? '/api/openrouter' : "https://openrouter.ai/api/v1/chat/completions";
 

@@ -201,7 +201,7 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter'>('gemini');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter'>('openrouter');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
@@ -1151,7 +1151,7 @@ const App: React.FC = () => {
                 />
                 <span className="hidden sm:inline">
                   {selectedModel === 'gemini' ? 'Gemini 3 Flash' :
-                    selectedModel === 'openrouter' ? 'OpenRouter (Auto)' :
+                    selectedModel === 'openrouter' ? 'OpenRouter (Free)' :
                       'Claude Sonnet'}
                 </span>
                 <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1166,7 +1166,7 @@ const App: React.FC = () => {
                     {[
                       { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
                       { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png' },
-                      { id: 'openrouter', name: 'OpenRouter (Auto)', icon: 'qwen.png' },
+                      { id: 'openrouter', name: 'OpenRouter (Free)', icon: 'qwen.png' },
                     ].map((model) => (
                       <button
                         key={model.id}

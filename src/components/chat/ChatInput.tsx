@@ -427,7 +427,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
                 />
                 <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   {selectedModel === 'gemini' ? 'Gemini' :
-                   selectedModel === 'openrouter' ? 'OpenRouter' :
+                   selectedModel === 'openrouter' ? 'OpenRouter (Free)' :
                    'Claude'}
                 </span>
               </div>
