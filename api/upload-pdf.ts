@@ -48,6 +48,73 @@ async function extractPdfText(dataBuffer: Buffer): Promise<{ text: string; metho
     'Make sure pdf-parse is installed: run "npm install pdf-parse" or "yarn add pdf-parse".'
   );
 }
+// ── Context-aware chunker ─────────────────────────────────────────────────────
+// Fixes the core RAG quality problem: PDF table parsing splits level headers
+// ("PRIMARY 2 - GAMES AND SPORTS") from the skill outcomes below them.
+// This chunker tracks the current level+subject and prepends it into every chunk
+// so every retrieved piece is self-contained and answerable.
+function buildContextAwareChunks(text: string, maxChunkChars = 900): string[] {
+  // Patterns that identify a new level/subject section header in the parsed text.
+  // Plain hyphens are used because PDF parsers typically corrupt em dashes to '-' or '?'.
+  const HEADER_PATTERNS = [
+    /^(PRIMARY\s+\d(?:\s+AND\s+\d)?\s*[-–]\s*.+)$/i,
+    /^(SECONDARY\s+\d\s*[-–]\s*.+)$/i,
+    /^(PRE-UNIVERSITY\s*[-–]\s*.+)$/i,
+    /^(BY END OF PRIMARY \d\s*[-–]\s*.+)$/i,
+    /^(LEARNING OUTCOMES?)$/i,
+  ];
+
+  // Normalise: join lines that look like broken table cells.
+  // e.g. "Striking\n(with\nimplement)" → "Striking (with implement)"
+  const normalised = text
+    .replace(/\r\n/g, '\n')
+    // Join a line that ends without punctuation to the next short line (< 40 chars)
+    // that starts with lowercase or '(' — typical broken table cell symptom.
+    .replace(/([^\n.!?:,])\n([(a-z][^\n]{0,38})\n/g, '$1 $2\n')
+    // Replace corrupted dash characters with a plain hyphen
+    .replace(/[–—]/g, '-');
+
+  const lines = normalised.split('\n');
+
+  let currentContext = 'SINGAPORE MOE PE SYLLABUS 2024';
+  const chunks: string[] = [];
+  let buffer: string[] = [];
+
+  const flushBuffer = () => {
+    const content = buffer.join('\n').trim();
+    if (content.length >= 30) {
+      // Prepend the running context header so every chunk is self-contained
+      chunks.push(`[${currentContext}]\n\n${content}`);
+    }
+    buffer = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Detect a new section header
+    const isHeader = HEADER_PATTERNS.some(p => p.test(trimmed));
+    if (isHeader && trimmed.length > 0) {
+      flushBuffer();
+      // Keep the full header text as the new running context
+      // Collapse multi-word level names like "PRIMARY 1 AND 2" gracefully
+      currentContext = trimmed.replace(/\s+/g, ' ');
+      buffer.push(trimmed); // include header at top of next chunk too
+      continue;
+    }
+
+    buffer.push(line);
+
+    // Flush when the buffer approaches the max chunk size
+    const bufferText = buffer.join('\n');
+    if (bufferText.length >= maxChunkChars) {
+      flushBuffer();
+    }
+  }
+
+  flushBuffer(); // flush any remaining content
+  return chunks.filter(c => c.trim().length >= 50);
+}
 
 export default async function handler(req: any, res: any) {
   // ── CORS ────────────────────────────────────────────────────────────────────
@@ -111,10 +178,13 @@ export default async function handler(req: any, res: any) {
           });
         }
 
-        // ── STEP 2: Chunk text ────────────────────────────────────────────────
-        const rawChunks = text.match(/[\s\S]{1,1000}(\s|$)/g) || [];
-        const chunks = rawChunks.filter(c => c.trim().length >= 20);
-        console.log(`📄 ${rawChunks.length} raw chunks → ${chunks.length} usable chunks`);
+        // ── STEP 2: Chunk text (context-aware) ───────────────────────────────
+        // Problem: PDF-parsed syllabus tables produce fragmented text where
+        // the level heading ("PRIMARY 2") is far from the skill content.
+        // Solution: scan line-by-line, track the current level/subject,
+        // and prepend that context into every chunk so RAG results are self-contained.
+        const chunks = buildContextAwareChunks(text);
+        console.log(`📄 ${chunks.length} context-aware chunks created`);
 
         if (chunks.length === 0) {
           return res.status(422).json({ error: 'PDF had text but no usable chunks (all were too short).' });
