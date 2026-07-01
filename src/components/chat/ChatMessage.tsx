@@ -109,8 +109,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
 
           {/* Avatar (Only for Bot) */}
           {isBot && (
-            <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm mt-1">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+            <div className="flex-shrink-0 w-9 h-9 rounded-2xl bg-gradient-to-br from-indigo-600 via-sky-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-indigo-600/20 mt-1 ring-1 ring-white/40 dark:ring-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
               </svg>
             </div>
@@ -121,25 +121,25 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
           {/* Content */}
           <div
             id={`message-${message.id}`}
-            className={`flex flex-col gap-2 w-full min-w-0`}
+            className="flex flex-col gap-2 w-full min-w-0"
           >
-            <div className={`px-4 py-3 rounded-2xl break-words overflow-hidden ${isError
-              ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
+            <div className={`px-5 py-3 rounded-2xl break-words overflow-hidden shadow-xs ${isError
+              ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-300'
               : isBot
-                ? 'bg-transparent text-slate-800 dark:text-slate-200'
-                : 'bg-[#f4f4f4] dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 border border-transparent dark:border-zinc-700'
-              } ${isBot ? '' : 'rounded-tr-sm'}`}>
+                ? 'bg-indigo-50/10 dark:bg-zinc-900/30 border border-indigo-100/50 dark:border-zinc-800/30 text-slate-800 dark:text-slate-200 backdrop-blur-xs rounded-tl-xs'
+                : 'bg-gradient-to-br from-slate-900 to-slate-800 text-white dark:from-zinc-900 dark:to-zinc-850 dark:text-zinc-100 border border-slate-900/90 dark:border-zinc-800/80 shadow-md rounded-tr-xs'
+              }`}>
 
               {isBot ? (
-                <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/g, '')} />
+                <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/3\.\s+\*?\*?Best\s+Model\s+Tip\*?\*?:[^\n]+(\n|$)/gi, '')} />
               ) : (
-                <p className="whitespace-pre-wrap text-sm md:text-base">{message.text}</p>
+                <p className="whitespace-pre-wrap text-sm md:text-[15px] leading-relaxed">{message.text}</p>
               )}
 
               {/* Interactive Choice Chips (General Navigation or Skill Selection) */}
               {isBot && message.text.includes('[[SKILL_CHOICES:') && (
                 <div className="mt-4 flex flex-col gap-2">
-                  <div className="text-[10px] uppercase tracking-wider font-bold text-indigo-500/80 mb-1">
+                  <div className="text-[10px] uppercase tracking-[0.15em] font-extrabold text-indigo-600 dark:text-indigo-400 mb-1.5 ml-1">
                     {message.hasMedia ? "Select the correct skill to analyze:" : "What would you like to explore next?"}
                   </div>
 
@@ -152,10 +152,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                           key={idx}
                           onClick={() => !disabled && onSelectSkill?.(trimmedChoice)}
                           disabled={disabled}
-                          className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/40 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 border border-indigo-100 dark:border-indigo-800/50 rounded-xl text-sm font-medium text-indigo-700 dark:text-indigo-300 transition-all text-left flex items-center justify-between group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-indigo-50 disabled:hover:text-indigo-700 dark:disabled:hover:bg-indigo-900/40 dark:disabled:hover:text-indigo-300"
+                          className="px-5 py-3 bg-white dark:bg-zinc-900 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 border border-slate-200/80 dark:border-zinc-800 rounded-2xl text-sm font-semibold text-slate-700 dark:text-slate-200 transition-all duration-200 text-left flex items-center justify-between group shadow-xs hover:scale-[1.01] hover:shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-slate-700 dark:disabled:hover:bg-zinc-900 dark:disabled:hover:text-slate-200 disabled:scale-100 disabled:shadow-none"
                         >
                           <span>{trimmedChoice}</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-all transform translate-x-1 group-hover:translate-x-0" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
                         </button>
@@ -167,7 +167,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                   {!showAllSkillsGrid && message.hasMedia ? (
                     <button
                       onClick={() => setShowAllSkillsGrid(true)}
-                      className="mt-1 text-xs text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 px-2 py-1 transition-colors group"
+                      className="mt-1.5 text-xs text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 flex items-center gap-1.5 px-2 py-1 transition-colors group cursor-pointer font-semibold"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -176,14 +176,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                     </button>
                   ) : (
                     showAllSkillsGrid && (
-                      <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-top-1 duration-200">
-                        <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">{gridTitle}</div>
-                        <div className="grid grid-cols-2 gap-1.5">
+                      <div className="mt-2.5 p-4 bg-slate-50 dark:bg-zinc-900/50 rounded-2xl border border-slate-200/60 dark:border-zinc-800/80 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 dark:text-slate-500 mb-2.5">{gridTitle}</div>
+                        <div className="grid grid-cols-2 gap-2">
                           {allSkills.map((skill, idx) => (
                             <button
                               key={idx}
                               onClick={() => onSelectSkill?.(skill)}
-                              className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium transition-all text-left"
+                              className="px-3.5 py-2 bg-white dark:bg-zinc-905 hover:bg-indigo-600 hover:text-white border border-slate-200/80 dark:border-zinc-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 transition-all cursor-pointer shadow-2xs hover:scale-[1.01]"
                             >
                               {skill}
                             </button>
@@ -191,7 +191,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                         </div>
                         <button
                           onClick={() => setShowAllSkillsGrid(false)}
-                          className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 uppercase font-bold"
+                          className="mt-3 text-[10px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 uppercase font-bold tracking-wider cursor-pointer"
                         >
                           Back to guesses
                         </button>
@@ -204,7 +204,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
               {/* Multi-Select Chips (Gymnastics skill identification — teacher picks all skills performed) */}
               {isBot && message.text.includes('[[MULTI_SKILL_CHOICES:') && (
                 <div className="mt-4 flex flex-col gap-2">
-                  <div className="text-[10px] uppercase tracking-wider font-bold text-indigo-500/80 mb-1">
+                  <div className="text-[10px] uppercase tracking-[0.15em] font-extrabold text-indigo-600 dark:text-indigo-400 mb-1.5 ml-1">
                     Select all skills performed in this video:
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -217,18 +217,18 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                           onClick={() => {
                             if (disabled) return;
                             setSelectedMultiSkills(prev =>
-                              isSelected ? prev.filter(s => s !== trimmedChoice) : [...prev, trimmedChoice]
+                                isSelected ? prev.filter(s => s !== trimmedChoice) : [...prev, trimmedChoice]
                             );
                           }}
                           disabled={disabled}
-                          className={`px-4 py-2.5 border rounded-xl text-sm font-medium transition-all text-left flex items-center justify-between
+                          className={`px-5 py-3 border rounded-2xl text-sm font-semibold transition-all duration-200 text-left flex items-center justify-between cursor-pointer shadow-2xs hover:scale-[1.01]
                             ${isSelected
                               ? 'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-600 dark:border-indigo-500'
-                              : 'bg-indigo-50 dark:bg-indigo-900/40 border-indigo-100 dark:border-indigo-800/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-800/60'
+                              : 'bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-zinc-800'
                             } disabled:opacity-40 disabled:cursor-not-allowed`}
                         >
                           <span>{trimmedChoice}</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`} viewBox="0 0 20 20" fill="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-opacity duration-200 ${isSelected ? 'opacity-100' : 'opacity-0'}`} viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         </button>
@@ -243,7 +243,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                         setSelectedMultiSkills([]);
                       }}
                       disabled={disabled}
-                      className="mt-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="mt-2.5 px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-sm font-bold shadow-md shadow-indigo-600/10 active:scale-[0.99] transition-all cursor-pointer"
                     >
                       Analyze {selectedMultiSkills.length} selected skill{selectedMultiSkills.length > 1 ? 's' : ''} →
                     </button>
@@ -253,7 +253,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                   {!showAllMultiSkills ? (
                     <button
                       onClick={() => setShowAllMultiSkills(true)}
-                      className="mt-1 text-xs text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 px-2 py-1 transition-colors group"
+                      className="mt-1.5 text-xs text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 flex items-center gap-1.5 px-2 py-1 transition-colors group cursor-pointer font-semibold"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -261,11 +261,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                       <span>None of these? Select from all {ALL_GYMNASTICS_SKILLS.length} Gymnastics skills...</span>
                     </button>
                   ) : (
-                    <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="mt-2.5 p-4 bg-slate-50 dark:bg-zinc-900/50 rounded-2xl border border-slate-200/60 dark:border-zinc-800/80 animate-in fade-in slide-in-from-top-1 duration-200">
                       {GYMNASTICS_CATEGORIES.map(({ label, skills }) => (
-                        <div key={label} className="mb-3">
-                          <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">{label}</div>
-                          <div className="grid grid-cols-2 gap-1.5">
+                        <div key={label} className="mb-3.5">
+                          <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">{label}</div>
+                          <div className="grid grid-cols-2 gap-2">
                             {skills.map((skill) => {
                               const isSelected = selectedMultiSkills.includes(skill);
                               return (
@@ -278,10 +278,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                                     );
                                   }}
                                   disabled={disabled}
-                                  className={`px-3 py-1.5 border rounded-lg text-xs font-medium transition-all text-left flex items-center justify-between
+                                  className={`px-3 py-2 border rounded-xl text-xs font-semibold transition-all duration-150 text-left flex items-center justify-between cursor-pointer shadow-2xs hover:scale-[1.01]
                                     ${isSelected
                                       ? 'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-600 dark:border-indigo-500'
-                                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                                      : 'bg-white dark:bg-zinc-905 border-slate-200/80 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800'
                                     } disabled:opacity-40 disabled:cursor-not-allowed`}
                                 >
                                   <span>{skill}</span>
@@ -298,7 +298,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                       ))}
                       <button
                         onClick={() => setShowAllMultiSkills(false)}
-                        className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 uppercase font-bold"
+                        className="mt-3 text-[10px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 uppercase font-bold tracking-wider cursor-pointer"
                       >
                         Back to guesses
                       </button>
@@ -309,23 +309,23 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
 
               {/* Reference Image Display (TEACHER VERIFICATION MODE) */}
               {isBot && message.referenceImageURI && !message.text.includes('[[SKILL_CHOICES:') && (
-                <div className="mt-4 mb-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 rounded-lg flex flex-col sm:flex-row gap-4 items-center">
-                  <div className="flex-shrink-0 w-24 h-24 bg-white dark:bg-slate-700 rounded border border-red-200 dark:border-red-800 p-1">
+                <div className="mt-4 mb-2.5 p-4 bg-red-50/50 dark:bg-red-950/10 border border-red-100 dark:border-red-900/30 rounded-2xl flex flex-col sm:flex-row gap-4 items-center">
+                  <div className="flex-shrink-0 w-24 h-24 bg-white dark:bg-zinc-900 rounded-xl border border-red-200/50 dark:border-red-900/20 p-1 shadow-sm">
                     <img
                       src={message.referenceImageURI}
                       alt="Textbook Reference"
-                      className="w-full h-full object-cover rounded-sm cursor-pointer hover:opacity-90 transition-opacity"
+                      className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                       onClick={() => setLightboxSrc(message.referenceImageURI!)}
                     />
                   </div>
-                  <div className="flex-1 text-sm text-red-900 dark:text-red-200">
-                    <p className="font-bold text-red-700 flex items-center gap-1">
+                  <div className="flex-1 text-sm text-red-900 dark:text-red-300">
+                    <p className="font-bold text-red-700 dark:text-red-400 flex items-center gap-1.5">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
                       </svg>
                       Graded against MOE Syllabus Standard
                     </p>
-                    <p className="mt-1 text-xs opacity-80">
+                    <p className="mt-1 text-xs opacity-85 leading-relaxed">
                       Comparison based on the "Textbook Perfect" form shown on the left.
                     </p>
                   </div>

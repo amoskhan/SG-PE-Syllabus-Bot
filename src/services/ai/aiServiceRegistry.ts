@@ -1,6 +1,7 @@
 import { sendMessageToGemini } from './geminiService';
 import { sendMessageToClaudeAPI } from './claudeService';
 import { sendMessageToOpenRouter } from './openRouterService';
+import { sendMessageToDeepSeek } from './deepseekService';
 import { Content } from '@google/genai';
 import { MediaData, ChatResponse } from './geminiService';
 import { Message, Sender } from '../../types';
@@ -41,8 +42,12 @@ const openrouterWrapper: AIServiceFunction = async (history, currentMessage, pos
     return sendMessageToOpenRouter(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, 'openrouter', sessionId, teacherProfile, skillMode ?? 'fms');
 };
 
+const deepseekWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode) => {
+    return sendMessageToDeepSeek(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode ?? 'fms');
+};
+
 // Start with a registry that returns the FUNCTION
-export const getAIService = (modelId: 'gemini' | 'claude' | 'openrouter'): AIServiceFunction => {
+export const getAIService = (modelId: 'gemini' | 'claude' | 'openrouter' | 'deepseek'): AIServiceFunction => {
     switch (modelId) {
         case 'gemini':
             return geminiWrapper;
@@ -50,6 +55,8 @@ export const getAIService = (modelId: 'gemini' | 'claude' | 'openrouter'): AISer
             return claudeWrapper;
         case 'openrouter':
             return openrouterWrapper;
+        case 'deepseek':
+            return deepseekWrapper;
         default:
             return geminiWrapper;
     }

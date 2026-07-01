@@ -201,7 +201,7 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter'>('openrouter');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter' | 'deepseek'>('openrouter');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
@@ -1067,7 +1067,12 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-white dark:bg-slate-950 transition-colors overflow-x-hidden">
+    <div className="relative flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors overflow-x-hidden">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-32 -left-24 h-80 w-80 rounded-full bg-indigo-200/35 blur-3xl dark:bg-indigo-500/10" />
+        <div className="absolute top-28 -right-28 h-96 w-96 rounded-full bg-sky-200/30 blur-3xl dark:bg-cyan-500/10" />
+        <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-amber-100/30 blur-3xl dark:bg-amber-400/10" />
+      </div>
 
       <SessionSidebar
         sessions={sessions}
@@ -1090,18 +1095,18 @@ const App: React.FC = () => {
         onOpenSettings={() => setIsRubricBuilderOpen(true)}
       />
 
-      <div className="flex-1 flex flex-col h-full relative bg-white dark:bg-slate-950">
+      <div className="relative flex-1 flex flex-col h-full bg-white/75 dark:bg-slate-950/80 backdrop-blur-xl border-l border-white/60 dark:border-white/5 shadow-[0_0_80px_rgba(15,23,42,0.08)]">
         
         {/* Minimalist Floating Top Bar */}
         <div className="absolute top-0 left-0 right-0 z-30 p-3 md:p-4 flex items-center justify-between pointer-events-none">
           {/* Left: Mobile Sidebar Toggle */}
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto flex items-center gap-3">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="md:hidden p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+              className="md:hidden p-2.5 text-slate-700 dark:text-slate-200 bg-white/90 dark:bg-zinc-900/80 backdrop-blur-md rounded-xl border border-slate-200/40 dark:border-zinc-800/80 shadow-md transition-all hover:scale-105 active:scale-95"
               aria-label="Toggle Menu"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
             </button>
@@ -1112,29 +1117,29 @@ const App: React.FC = () => {
             {user && (
               <button
                 onClick={() => setShowDashboard(true)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur text-slate-600 dark:text-slate-300 text-sm font-medium flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors shadow-sm"
+                className="px-3.5 py-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm cursor-pointer"
                 title="Student Dashboard"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 <span className="hidden sm:inline">Dashboard</span>
               </button>
             )}
             <button
               onClick={() => setIsPdfModalOpen(true)}
-              className="px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur text-slate-600 dark:text-slate-300 text-sm font-medium flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors shadow-sm"
+              className="px-3.5 py-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm cursor-pointer"
               title="Add Syllabus PDF"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
               <span className="hidden sm:inline">Add PDF</span>
             </button>
 
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors text-slate-600 dark:text-slate-300 shadow-sm"
+              className="p-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer text-xs"
             >
               {isDarkMode ? '☀️' : '🌙'}
             </button>
@@ -1142,31 +1147,33 @@ const App: React.FC = () => {
             <div className="relative">
               <button
                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
+                className="px-3.5 py-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-xs font-bold text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-all cursor-pointer"
               >
                 <img
-                  src={`/assets/model-icons/${selectedModel === 'openrouter' ? 'qwen' : selectedModel}.png`}
+                  src={`/assets/model-icons/${selectedModel === 'deepseek' ? 'deepseek' : selectedModel === 'openrouter' ? 'qwen' : selectedModel}.png`}
                   alt={selectedModel}
                   className="w-4 h-4 object-contain"
                 />
                 <span className="hidden sm:inline">
                   {selectedModel === 'gemini' ? 'Gemini 3 Flash' :
                     selectedModel === 'openrouter' ? 'OpenRouter (Free)' :
+                    selectedModel === 'deepseek' ? 'DeepSeek V4 Flash' :
                       'Claude Sonnet'}
                 </span>
-                <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
               {isModelDropdownOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setIsModelDropdownOpen(false)} />
-                  <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 rounded-xl shadow-lg border border-slate-200 dark:border-zinc-800 overflow-hidden z-20 flex flex-col p-1">
+                  <div className="absolute top-full right-0 mt-2.5 w-52 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/60 dark:border-zinc-800/80 overflow-hidden z-20 flex flex-col p-1.5 animate-scale-in">
                     {[
-                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png' },
-                      { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png' },
-                      { id: 'openrouter', name: 'OpenRouter (Free)', icon: 'qwen.png' },
+                      { id: 'openrouter', name: 'OpenRouter (Free)', icon: 'qwen.png', desc: 'Fast general questions' },
+                      { id: 'deepseek', name: 'DeepSeek V4 Flash', icon: 'deepseek.png', desc: 'Accurate text chat' },
+                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png', desc: 'Strong visual analysis' },
+                      { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png', desc: 'Detailed skill feedback' },
                     ].map((model) => (
                       <button
                         key={model.id}
@@ -1174,13 +1181,16 @@ const App: React.FC = () => {
                           setSelectedModel(model.id as any);
                           setIsModelDropdownOpen(false);
                         }}
-                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${selectedModel === model.id
-                          ? 'bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-slate-100'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                        className={`w-full px-3 py-2 rounded-xl text-left transition-colors flex items-center gap-3 cursor-pointer ${selectedModel === model.id
+                          ? 'bg-indigo-50/80 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-semibold'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
                           }`}
                       >
-                        <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-4 h-4 object-contain" />
-                        {model.name}
+                        <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-5 h-5 object-contain" />
+                        <div className="flex flex-col">
+                          <span className="text-xs leading-tight font-medium">{model.name}</span>
+                          <span className="text-[9px] text-slate-400 dark:text-slate-500 font-normal">{model.desc}</span>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -1191,24 +1201,68 @@ const App: React.FC = () => {
         </div>
 
         {/* Main Chat Area */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth bg-white dark:bg-zinc-900 pt-16 md:pt-6">
-          <div className="max-w-4xl mx-auto min-h-full flex flex-col justify-end">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth pt-16 md:pt-6">
+          <div className="max-w-5xl mx-auto min-h-full flex flex-col justify-end">
 
             {/* Spacer for empty chat to push welcome down? No, standard flow */}
 
             {messages.length < 2 && (
               <div className="mb-8 animate-fade-in">
-                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 ml-1">Explore the Syllabus</h2>
-                <div className="flex flex-wrap gap-2">
-                  {PE_TOPICS.map((topic, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleChipClick(topic)}
-                      className="px-4 py-2 bg-white/80 dark:bg-slate-900/40 border border-slate-200/70 dark:border-slate-700/70 rounded-full text-sm text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-200/80 dark:hover:border-indigo-800 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all shadow-sm"
-                    >
-                      {topic}
-                    </button>
-                  ))}
+                <div className="mb-4 overflow-hidden rounded-3xl border border-slate-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-900/75 backdrop-blur-xl shadow-lg shadow-slate-900/5">
+                  <div className="p-6 border-b border-slate-100 dark:border-zinc-800/70">
+                    <div className="mb-4.5">
+                      <h2 className="text-xl md:text-2xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 bg-clip-text text-transparent">
+                        Start with a syllabus question or a movement clip
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
+                        Analyze movement execution or query MOE Physical Education syllabus standards instantly.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2.5">
+                      {[
+                        { label: 'OpenRouter', desc: 'fast general PE chat', icon: 'qwen.png', color: 'border-cyan-100 bg-cyan-50/50 text-cyan-700 dark:border-cyan-900/30 dark:bg-cyan-950/20 dark:text-cyan-400' },
+                        { label: 'DeepSeek', desc: 'accurate syllabus search', icon: 'deepseek.png', color: 'border-sky-100 bg-sky-50/50 text-sky-700 dark:border-sky-900/30 dark:bg-sky-950/20 dark:text-sky-400' },
+                        { label: 'Gemini', desc: 'grounded video grading', icon: 'gemini.png', color: 'border-indigo-100 bg-indigo-50/50 text-indigo-700 dark:border-indigo-900/30 dark:bg-indigo-950/20 dark:text-indigo-400' },
+                        { label: 'Claude', desc: 'detailed movement feedback', icon: 'claude.png', color: 'border-violet-100 bg-violet-50/50 text-violet-700 dark:border-violet-900/30 dark:bg-violet-950/20 dark:text-violet-400' }
+                      ].map((item) => (
+                        <span key={item.label} className={`inline-flex items-center rounded-2xl border px-3 py-1.5 text-xs font-semibold ${item.color} shadow-3xs`}>
+                          <img
+                            src={`/assets/model-icons/${item.icon}`}
+                            alt={item.label}
+                            className="w-4 h-4 object-contain mr-2 shrink-0 select-none opacity-95"
+                          />
+                          <strong className="mr-1">{item.label}:</strong>
+                          <span className="font-normal opacity-90">{item.desc}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                        <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
+                      </svg>
+                      Explore the MOE Syllabus
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {PE_TOPICS.map((topic, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleChipClick(topic)}
+                          className="group px-5 py-3.5 bg-slate-50/50 dark:bg-zinc-950/40 border border-slate-200/60 dark:border-zinc-800/80 rounded-2xl text-sm text-slate-700 dark:text-slate-200 hover:border-indigo-500/60 dark:hover:border-indigo-500/40 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-200 shadow-xs text-left cursor-pointer hover:scale-[1.01] hover:shadow-md"
+                        >
+                          <div className="flex items-center justify-between gap-3 h-full">
+                            <span className="font-semibold leading-normal">{topic}</span>
+                            <div className="w-6 h-6 rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center shadow-xs border border-slate-100 dark:border-zinc-800/50 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-200 group-hover:translate-x-0.5 shrink-0">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1261,7 +1315,7 @@ const App: React.FC = () => {
 
         {/* Footer Input */}
         <div className="p-4 bg-transparent shrink-0 z-10">
-          <div className="max-w-4xl mx-auto">
+          <div className="max-w-5xl mx-auto">
             {/* Model Selector Row */}
 
 

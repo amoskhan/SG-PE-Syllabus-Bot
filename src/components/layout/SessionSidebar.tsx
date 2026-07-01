@@ -61,7 +61,7 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
             {/* Mobile Overlay */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    className="fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs"
                     onClick={onClose}
                 />
             )}
@@ -69,41 +69,44 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
             {/* Sidebar Container */}
             <div className={`
         fixed md:relative inset-y-0 left-0 z-50
-        w-[280px] bg-[#fdfdfd] dark:bg-zinc-950 border-r border-slate-200/60 dark:border-slate-800/60
-        transform transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
+        w-[280px] bg-slate-50/95 dark:bg-zinc-950/95 backdrop-blur-md border-r border-slate-200/40 dark:border-zinc-900/50
+        transform transition-transform duration-300 ease-in-out shadow-xl md:shadow-none
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         flex flex-col h-full
       `}>
                 {/* Header / Logo */}
-                <div className="p-4 flex items-center justify-between sticky top-0 bg-[#fdfdfd] dark:bg-zinc-950 z-10">
-                    <div className="flex items-center gap-2 px-1">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-sm shadow-sm">
-                            <span className="text-lg">🤸</span>
+                <div className="p-4 flex items-center justify-between sticky top-0 bg-slate-50/95 dark:bg-zinc-950/95 backdrop-blur-md z-10 border-b border-slate-200/20 dark:border-zinc-900/20">
+                    <div className="flex items-center gap-2.5 px-1">
+                        <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-600 rounded-xl flex items-center justify-center text-white text-sm shadow-md shadow-indigo-600/10">
+                            <span className="text-xl leading-none">🤸</span>
                         </div>
-                        <h1 className="font-semibold text-sm text-slate-800 dark:text-slate-200 tracking-tight">
-                            SG PE Chatbot
-                        </h1>
+                        <div className="flex flex-col">
+                            <h1 className="font-bold text-sm text-slate-800 dark:text-slate-100 tracking-tight">
+                                SG PE Chatbot
+                            </h1>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold tracking-wider uppercase">MOE SYLLABUS</span>
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="md:hidden p-1.5 text-slate-400 hover:bg-slate-100 rounded-md transition-colors"
+                        className="md:hidden p-1.5 text-slate-400 dark:text-slate-500 hover:bg-slate-200/60 dark:hover:bg-zinc-900 rounded-lg transition-colors"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
                 {/* New Chat Button */}
-                <div className="px-3 pb-3">
+                <div className="px-4 pt-4 pb-2">
                     <button
                         onClick={() => {
                             onNewSession();
                             if (window.innerWidth < 768) onClose();
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-transparent hover:border-slate-200/60 dark:hover:border-slate-800/60 font-medium text-sm group"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 active:scale-[0.98] transition-all duration-200 group"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4 text-indigo-100 group-hover:scale-110 transition-transform">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                         </svg>
                         New Chat
@@ -111,88 +114,92 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
                 </div>
 
                 {/* Session List */}
-                <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-                    {sortedSessions.map((session) => (
-                        <button
-                            key={session.id}
-                            onClick={() => {
-                                onSwitchSession(session.id);
-                                if (window.innerWidth < 768) onClose();
-                            }}
-                            className={`
-                w-full text-left px-3 py-2.5 rounded-lg group relative flex items-center gap-2.5 transition-colors
-                ${session.id === currentSessionId
-                                    ? 'bg-slate-100 dark:bg-zinc-800/50 text-slate-900 dark:text-slate-100'
-                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-zinc-900/50'
-                                }
-              `}
-                        >
-                            <div className={`p-1 rounded-md shrink-0 flex items-center justify-center ${session.id === currentSessionId ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                                </svg>
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                                <h3 className={`text-sm font-medium truncate ${session.id === currentSessionId ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
-                                    {session.title || 'New Chat'}
-                                </h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-500 truncate">
-                                    {new Date(session.updatedAt).toLocaleDateString()} • {new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                            </div>
-
-                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                {/* Rename Button */}
-                                <div
-                                    onClick={(e) => handleRenameClick(session.id, session.title || 'New Chat', e)}
-                                    className="p-1.5 rounded-md text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors cursor-pointer"
-                                    title="Rename Chat"
-                                >
+                <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1.5 scrollbar-thin">
+                    {sortedSessions.map((session) => {
+                        const isActive = session.id === currentSessionId;
+                        return (
+                            <button
+                                key={session.id}
+                                onClick={() => {
+                                    onSwitchSession(session.id);
+                                    if (window.innerWidth < 768) onClose();
+                                }}
+                                className={`
+                    w-full text-left px-3 py-2.5 rounded-xl group relative flex items-center gap-2.5 transition-all duration-200 border-l-3
+                    ${isActive
+                                        ? 'bg-indigo-50/60 dark:bg-indigo-950/15 text-indigo-600 dark:text-indigo-400 border-indigo-600 dark:border-indigo-500 font-semibold shadow-xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-zinc-900/40 border-transparent hover:text-slate-800 dark:hover:text-slate-200'
+                                    }
+                  `}
+                            >
+                                <div className={`p-1 rounded-lg shrink-0 flex items-center justify-center transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-100/50 dark:bg-indigo-900/20' : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-zinc-900 group-hover:text-slate-500'}`}>
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                                     </svg>
                                 </div>
 
-                                {/* Delete Button */}
-                                <div
-                                    onClick={(e) => {
-                                        e.stopPropagation(); // Prevent switching
-                                        onDeleteSession(session.id, e);
-                                    }}
-                                    className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                    title="Delete Chat"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                                    </svg>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className={`text-sm font-medium truncate ${isActive ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                                        {session.title || 'New Chat'}
+                                    </h3>
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                                        {new Date(session.updatedAt).toLocaleDateString()} • {new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
                                 </div>
-                            </div>
-                        </button>
-                    ))}
+
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {/* Rename Button */}
+                                    <div
+                                        onClick={(e) => handleRenameClick(session.id, session.title || 'New Chat', e)}
+                                        className="p-1 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/80 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                                        title="Rename Chat"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                        </svg>
+                                    </div>
+
+                                    {/* Delete Button */}
+                                    <div
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // Prevent switching
+                                            onDeleteSession(session.id, e);
+                                        }}
+                                        className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                                        title="Delete Chat"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* User Profile / Settings (Bottom) */}
-                <div className="mt-auto border-t border-slate-200/60 dark:border-slate-800/60 p-3 flex flex-col gap-2 bg-[#fdfdfd] dark:bg-zinc-950">
+                <div className="mt-auto border-t border-slate-200/40 dark:border-zinc-900/60 p-4 flex flex-col gap-2 bg-slate-100/50 dark:bg-zinc-950/50">
                     {user ? (
-                        <div className="flex items-center gap-3 px-2 py-2 mb-1">
+                        <div className="flex items-center gap-3 px-2 py-2 mb-1 bg-white/60 dark:bg-zinc-900/40 border border-slate-200/20 dark:border-zinc-800/30 rounded-xl">
                             {teacherProfile?.avatar_url ? (
-                                <img src={teacherProfile.avatar_url} alt="Profile" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 object-cover" />
+                                <img src={teacherProfile.avatar_url} alt="Profile" className="w-9 h-9 rounded-full border border-slate-200/60 dark:border-zinc-800 object-cover shadow-xs" />
                             ) : (
-                                <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold flex items-center justify-center text-xs shrink-0">
+                                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shrink-0 shadow-xs">
                                     {(teacherProfile?.name || 'U')[0].toUpperCase()}
                                 </div>
                             )}
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
+                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
                                     {teacherProfile?.name || "Teacher"}
                                 </p>
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">PE Educator</span>
                             </div>
                         </div>
                     ) : (
                         <button
                             onClick={signInWithGoogle}
-                            className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm mb-2"
+                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-2 transition-all duration-200 shadow-sm mb-2 active:scale-[0.98]"
                         >
                             <svg className="w-4 h-4" viewBox="0 0 24 24">
                                 <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -205,12 +212,12 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
                     )}
 
                     {user && (
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col gap-1">
                             <button
                                 onClick={onOpenSettings}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-900 rounded-lg transition-colors flex items-center gap-2 font-medium"
+                                className="w-full text-left px-3 py-2 text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/40 dark:hover:bg-zinc-900/60 rounded-lg transition-colors flex items-center gap-2 font-medium"
                             >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-4 h-4 text-slate-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
@@ -218,9 +225,9 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
                             </button>
                             <button
                                 onClick={signOut}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-900 rounded-lg transition-colors flex items-center gap-2 font-medium"
+                                className="w-full text-left px-3 py-2 text-xs text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-slate-200/40 dark:hover:bg-zinc-900/60 rounded-lg transition-colors flex items-center gap-2 font-medium"
                             >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-4 h-4 text-slate-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
                                 </svg>
                                 Log out
