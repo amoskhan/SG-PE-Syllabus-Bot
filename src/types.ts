@@ -41,6 +41,9 @@ export interface Message {
   hasMedia?: boolean; // Flag if the message/conversation context includes media
   isCached?: boolean; // True if response came from video analysis cache
   studentId?: string; // Student this analysis belongs to
+  approvalStatus?: 'draft' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 export interface Student {

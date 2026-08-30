@@ -130,6 +130,38 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                 : 'bg-gradient-to-br from-slate-900 to-slate-800 text-white dark:from-zinc-900 dark:to-zinc-850 dark:text-zinc-100 border border-slate-900/90 dark:border-zinc-800/80 shadow-md rounded-tr-xs'
               }`}>
 
+              {/* Requirement 2: Draft / Teacher Approval Banner */}
+              {isBot && !isError && (
+                <div className="mb-3 flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-100/90 dark:bg-zinc-800/90 border border-slate-200/80 dark:border-zinc-700 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    {message.approvalStatus === 'approved' ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 text-[11px]">
+                        <span>✓</span>
+                        <span>Teacher Approved (Official)</span>
+                      </span>
+                    ) : (
+                      <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1 text-[11px]">
+                        <span>⚠️</span>
+                        <span>Draft AI Output — Requires Teacher Approval</span>
+                      </span>
+                    )}
+                  </div>
+                  {message.approvalStatus !== 'approved' && (
+                    <button
+                      onClick={() => {
+                        message.approvalStatus = 'approved';
+                        message.approvedBy = 'Teacher';
+                        message.approvedAt = new Date().toISOString();
+                        setLightboxSrc(lightboxSrc === '' ? null : '');
+                      }}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[10px] transition-colors cursor-pointer"
+                    >
+                      Approve ⭐
+                    </button>
+                  )}
+                </div>
+              )}
+
               {isBot ? (
                 <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/3\.\s+\*?\*?Best\s+Model\s+Tip\*?\*?:[^\n]+(\n|$)/gi, '')} />
               ) : (
@@ -382,7 +414,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
             )}
 
             {/* Analysis Breakdown (Visual Proof) */}
-            {!isBot && message.analysisFrames && message.analysisFrames.length > 0 && (
+            {message.analysisFrames && message.analysisFrames.length > 0 && (
               <div className="mt-3">
                 <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1 ml-1 flex items-center justify-between">
                   <div className="flex items-center gap-1">

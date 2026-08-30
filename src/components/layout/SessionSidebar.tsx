@@ -33,10 +33,24 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
     signOut,
     onOpenSettings
 }) => {
-    // Sort sessions by update time (newest first)
-    const sortedSessions = [...sessions].sort((a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
+    const [searchQuery, setSearchQuery] = React.useState('');
+
+    // Sort and filter sessions by title or message contents
+    const filteredSessions = React.useMemo(() => {
+        const sorted = [...sessions].sort((a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+        if (!searchQuery.trim()) return sorted;
+
+        const query = searchQuery.toLowerCase().trim();
+        return sorted.filter(session => {
+            const titleMatch = (session.title || 'New Chat').toLowerCase().includes(query);
+            const messagesMatch = session.messages?.some(msg =>
+                msg.text && msg.text.toLowerCase().includes(query)
+            );
+            return titleMatch || messagesMatch;
+        });
+    }, [sessions, searchQuery]);
 
     // Lock body scroll when sidebar is open on mobile
     React.useEffect(() => {
@@ -113,69 +127,122 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
                     </button>
                 </div>
 
+                {/* Search Bar */}
+                <div className="px-4 pb-2">
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Search chats..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-8 py-2 bg-slate-200/50 dark:bg-zinc-900 border border-slate-200/40 dark:border-zinc-800/40 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
+                        />
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                        </div>
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                </div>
+
                 {/* Session List */}
                 <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1.5 scrollbar-thin">
-                    {sortedSessions.map((session) => {
-                        const isActive = session.id === currentSessionId;
-                        return (
-                            <button
-                                key={session.id}
-                                onClick={() => {
-                                    onSwitchSession(session.id);
-                                    if (window.innerWidth < 768) onClose();
-                                }}
-                                className={`
-                    w-full text-left px-3 py-2.5 rounded-xl group relative flex items-center gap-2.5 transition-all duration-200 border-l-3
-                    ${isActive
-                                        ? 'bg-indigo-50/60 dark:bg-indigo-950/15 text-indigo-600 dark:text-indigo-400 border-indigo-600 dark:border-indigo-500 font-semibold shadow-xs'
-                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-zinc-900/40 border-transparent hover:text-slate-800 dark:hover:text-slate-200'
-                                    }
-                  `}
-                            >
-                                <div className={`p-1 rounded-lg shrink-0 flex items-center justify-center transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-100/50 dark:bg-indigo-900/20' : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-zinc-900 group-hover:text-slate-500'}`}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                                    </svg>
-                                </div>
-
-                                <div className="flex-1 min-w-0">
-                                    <h3 className={`text-sm font-medium truncate ${isActive ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                                        {session.title || 'New Chat'}
-                                    </h3>
-                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
-                                        {new Date(session.updatedAt).toLocaleDateString()} • {new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </p>
-                                </div>
-
-                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {/* Rename Button */}
-                                    <div
-                                        onClick={(e) => handleRenameClick(session.id, session.title || 'New Chat', e)}
-                                        className="p-1 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/80 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                                        title="Rename Chat"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                    {filteredSessions.length === 0 ? (
+                        <div className="text-center py-8 text-xs text-slate-400 dark:text-slate-500">
+                            {searchQuery.trim() ? 'No matching chats found' : 'No chats yet'}
+                        </div>
+                    ) : (
+                        filteredSessions.map((session) => {
+                            const isActive = session.id === currentSessionId;
+                            return (
+                                <button
+                                    key={session.id}
+                                    onClick={() => {
+                                        onSwitchSession(session.id);
+                                        if (window.innerWidth < 768) onClose();
+                                    }}
+                                    className={`
+                        w-full text-left px-3 py-2.5 rounded-xl group relative flex items-center gap-2.5 transition-all duration-200 border-l-3
+                        ${isActive
+                                            ? 'bg-indigo-50/60 dark:bg-indigo-950/15 text-indigo-600 dark:text-indigo-400 border-indigo-600 dark:border-indigo-500 font-semibold shadow-xs'
+                                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-zinc-900/40 border-transparent hover:text-slate-800 dark:hover:text-slate-200'
+                                        }
+                      `}
+                                >
+                                    <div className={`p-1 rounded-lg shrink-0 flex items-center justify-center transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-100/50 dark:bg-indigo-900/20' : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-zinc-900 group-hover:text-slate-500'}`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                                         </svg>
                                     </div>
 
-                                    {/* Delete Button */}
-                                    <div
-                                        onClick={(e) => {
-                                            e.stopPropagation(); // Prevent switching
-                                            onDeleteSession(session.id, e);
-                                        }}
-                                        className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                                        title="Delete Chat"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                                        </svg>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className={`text-sm font-medium truncate ${isActive ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                                            {session.title || 'New Chat'}
+                                        </h3>
+                                        {searchQuery.trim() && !session.title?.toLowerCase().includes(searchQuery.toLowerCase().trim()) && (() => {
+                                            const matchingMsg = session.messages?.find(msg => msg.text?.toLowerCase().includes(searchQuery.toLowerCase().trim()));
+                                            if (matchingMsg) {
+                                                const text = matchingMsg.text;
+                                                const index = text.toLowerCase().indexOf(searchQuery.toLowerCase().trim());
+                                                const start = Math.max(0, index - 15);
+                                                const end = Math.min(text.length, index + searchQuery.trim().length + 15);
+                                                const snippet = (start > 0 ? '...' : '') + text.substring(start, end).replace(/\n/g, ' ') + (end < text.length ? '...' : '');
+                                                return (
+                                                    <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium truncate mt-1 flex items-center gap-1 bg-indigo-50/40 dark:bg-indigo-950/20 px-1.5 py-0.5 rounded-md">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-2.5 h-2.5 shrink-0">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                                        </svg>
+                                                        <span className="truncate">"{snippet}"</span>
+                                                    </p>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+                                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                                            {new Date(session.updatedAt).toLocaleDateString()} • {new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
                                     </div>
-                                </div>
-                            </button>
-                        );
-                    })}
+
+                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {/* Rename Button */}
+                                        <div
+                                            onClick={(e) => handleRenameClick(session.id, session.title || 'New Chat', e)}
+                                            className="p-1 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/80 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                                            title="Rename Chat"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                            </svg>
+                                        </div>
+
+                                        {/* Delete Button */}
+                                        <div
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent switching
+                                                onDeleteSession(session.id, e);
+                                            }}
+                                            className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                                            title="Delete Chat"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </button>
+                            );
+                        })
+                    )}
                 </div>
 
                 {/* User Profile / Settings (Bottom) */}

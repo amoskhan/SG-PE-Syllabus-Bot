@@ -18,6 +18,25 @@ import { ALL_FMS_SKILLS } from './data/fundamentalMovementSkillsData';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './services/db/supabaseClient';
 import Dashboard from './pages/Dashboard';
+import { TeacherClassroomBoard } from './pages/TeacherClassroomBoard';
+import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal';
+import { PairCheckInModal } from './components/classroom/PairCheckInModal';
+import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
+import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
+import { getActivePairSession, clearActivePairSession, PairSessionData, getDB } from './services/offline/offlineStorage';
+import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
+
+const base64ToFile = (base64String: string, filename: string): File => {
+  const arr = base64String.split(',');
+  const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
+};
 
 const App: React.FC = () => {
   const { user, teacherProfile, signInWithGoogle, signOut, updateTeacherProfile } = useAuth();
@@ -209,6 +228,172 @@ const App: React.FC = () => {
   const [isRubricBuilderOpen, setIsRubricBuilderOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [skillMode, setSkillMode] = useState<SkillMode>('fms');
+
+  // Seesaw-Style Classroom & Peer-Coaching States
+  const [appMode, setAppMode] = useState<'home_screen' | 'chat' | 'teacher_board' | 'peer_coaching'>('home_screen');
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [isPairCheckInOpen, setIsPairCheckInOpen] = useState(false);
+  const [scannedLessonData, setScannedLessonData] = useState<{ lessonId: string; title: string; skillName: string; teacherId?: string }>({
+    lessonId: 'pe-lesson-today',
+    title: 'Overhand Throw Practice',
+    skillName: 'Overhand Throw',
+  });
+  const [activePairSession, setActivePairSession] = useState<PairSessionData | null>(null);
+  const [activePeerSessionData, setActivePeerSessionData] = useState<CompletedPeerSession | null>(null);
+
+  const handlePeerSessionToChat = async (data: CompletedPeerSession) => {
+    setActivePeerSessionData(data);
+    setAppMode('chat');
+
+    const bananaMet = Object.values(data.bananaCues).filter(Boolean).length;
+    const bananaTotal = Object.keys(data.bananaCues).length;
+    const appleMet = Object.values(data.appleCues).filter(Boolean).length;
+    const appleTotal = Object.keys(data.appleCues).length;
+
+    const newSessionId = `peer-coach-p${data.pairNumber}-${Date.now()}`;
+    const loadingMsgId = `msg-loading-${Date.now()}`;
+
+    // Show loading card immediately
+    const loadingMsg: Message = {
+      id: loadingMsgId,
+      sender: Sender.BOT,
+      timestamp: new Date(),
+      text: `## 🤖 Coach Bot is watching your videos...\n\n**Pair #${data.pairNumber} — ${data.skillName}**\n\n⏳ Extracting video frames...\n\n*This takes about 10–15 seconds. Hold tight!* 🎬`,
+      hasMedia: false,
+    };
+
+    const newSession: ChatSession = {
+      id: newSessionId,
+      title: `🍎🍌 Pair #${data.pairNumber} - ${data.skillName}`,
+      messages: [loadingMsg],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    setSessions((prev) => [newSession, ...prev]);
+    setCurrentSessionId(newSessionId);
+    currentSessionIdRef.current = newSessionId;
+
+    // Update a specific message's text in the loading session
+    const updateLoadingMsg = (progressText: string) => {
+      setSessions((prev) => prev.map(s =>
+        s.id === newSessionId
+          ? {
+              ...s,
+              messages: s.messages.map(m =>
+                m.id === loadingMsgId
+                  ? { ...m, text: `## 🤖 Coach Bot is watching your videos...\n\n**Pair #${data.pairNumber} — ${data.skillName}**\n\n✅ ${progressText}\n\n*Almost done! 🎬*` }
+                  : m
+              )
+            }
+          : s
+      ));
+    };
+
+    try {
+      const result = await runPeerCoachingAnalysis(
+        data.skillName,
+        data.bananaVideoBlob || null,
+        data.appleVideoBlob || null,
+        data.bananaCues,
+        data.appleCues,
+        updateLoadingMsg
+      );
+
+      const discrepancyNote = result.teacherReport.discrepancies.length > 0
+        ? `\n\n> ⚠️ **${result.teacherReport.discrepancies.length} peer vs AI disagreement${result.teacherReport.discrepancies.length > 1 ? 's' : ''} detected** — check Teacher Review Tray for details`
+        : '';
+
+      const coachingCard: Message = {
+        id: `msg-coaching-${Date.now()}`,
+        sender: Sender.BOT,
+        timestamp: new Date(),
+        text: `## 🏆 AI Coach Feedback — Pair #${data.pairNumber}\n\n**Peer Scores:** 🍌 Banana ${bananaMet}/${bananaTotal} | 🍎 Apple ${appleMet}/${appleTotal}\n\n---\n\n🍌 **Banana:** ${result.studentFeedback.bananaFeedback}\n\n🍎 **Apple:** ${result.studentFeedback.appleFeedback}${discrepancyNote}\n\n---\n*Detailed analysis sent to your teacher's review tray! 🏫*`,
+        hasMedia: true,
+        analysisFrames: [...data.bananaPoseFrames.slice(0, 2), ...data.applePoseFrames.slice(0, 2)],
+      };
+
+      // Swap loading card out for the real coaching card
+      setSessions((prev) => prev.map(s =>
+        s.id === newSessionId
+          ? { ...s, messages: [coachingCard], updatedAt: new Date() }
+          : s
+      ));
+
+      // Save AI results to IndexedDB on the pair's submission record
+      const submissionId = `pair-${data.pairNumber}-${data.lessonId}`;
+      try {
+        const db = await getDB();
+        const existing = await db.get('submissions', submissionId);
+        if (existing) {
+          existing.aiStudentFeedback = {
+            bananaFeedback: result.studentFeedback.bananaFeedback,
+            appleFeedback: result.studentFeedback.appleFeedback,
+            generatedAt: new Date().toISOString(),
+            modelUsed: 'gemini-2.5-flash',
+          };
+          existing.aiTeacherReport = {
+            bananaAnalysis: result.teacherReport.bananaAnalysis,
+            appleAnalysis: result.teacherReport.appleAnalysis,
+            bananaProficiency: result.teacherReport.bananaProficiency,
+            appleProficiency: result.teacherReport.appleProficiency,
+            teacherRecommendations: result.teacherReport.teacherRecommendations,
+            discrepancies: result.teacherReport.discrepancies,
+            generatedAt: new Date().toISOString(),
+            modelUsed: 'gemini-2.5-flash',
+          };
+          await db.put('submissions', existing);
+        }
+      } catch (e) {
+        console.warn('Could not save AI report to submission:', e);
+      }
+
+    } catch (e) {
+      console.warn('AI coaching analysis failed:', e);
+      // Fallback — replace loading with a simple peer-score card (no AI)
+      const fallbackCard: Message = {
+        id: `msg-fallback-${Date.now()}`,
+        sender: Sender.BOT,
+        timestamp: new Date(),
+        text: `## 🏆 Pair #${data.pairNumber} — ${data.skillName}\n\n**Peer Scores:** 🍌 Banana ${bananaMet}/${bananaTotal} | 🍎 Apple ${appleMet}/${appleTotal}\n\nGreat teamwork! Your evaluation has been sent to the teacher. 🏫\n\n*AI analysis was unavailable — ask your teacher for detailed feedback!*`,
+        hasMedia: false,
+      };
+      setSessions((prev) => prev.map(s =>
+        s.id === newSessionId
+          ? { ...s, messages: [fallbackCard], updatedAt: new Date() }
+          : s
+      ));
+    }
+  };
+
+  const handleAnalyzePeerPerformer = async (performer: 'Banana' | 'Apple') => {
+    if (!activePeerSessionData) return;
+    const frames = performer === 'Banana'
+      ? activePeerSessionData.bananaPoseFrames
+      : activePeerSessionData.applePoseFrames;
+
+    let files: File[] = [];
+    if (frames && frames.length > 0) {
+      files = frames.map((frame, idx) =>
+        base64ToFile(frame, `${performer.toLowerCase()}_frame_${idx + 1}.jpg`)
+      );
+    }
+
+    const text = `Coach, please analyze ${performer}'s ${activePeerSessionData.skillName} movement frames against the 2024 MOE PE Syllabus. Tell us what was done well and give us 1 tip to improve!`;
+    await handleSendMessage(text, files.length > 0 ? files : undefined, {
+      skillName: activePeerSessionData.skillName,
+      isVerified: true,
+    });
+  };
+
+  // Restore active pair session from IndexedDB if iPad reloads
+  useEffect(() => {
+    getActivePairSession().then((session) => {
+      if (session) {
+        setActivePairSession(session);
+      }
+    });
+  }, []);
 
   // Persist skillMode into the current session whenever it changes
   useEffect(() => {
@@ -1066,6 +1251,213 @@ const App: React.FC = () => {
     return <Dashboard onOpenChat={() => setShowDashboard(false)} />;
   }
 
+  if (appMode === 'home_screen') {
+    return (
+      <div className="relative flex flex-col h-screen w-screen bg-slate-950 overflow-hidden">
+        {/* Background gradient blobs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
+          <div className="absolute top-1/3 right-0 h-80 w-80 rounded-full bg-amber-500/15 blur-3xl" />
+          <div className="absolute bottom-0 left-1/4 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl" />
+        </div>
+
+        <div className="relative z-10 flex flex-col h-full">
+          {/* Top Bar */}
+          <div className="flex items-center justify-between px-6 pt-8 pb-4 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/40">
+                <span className="text-white text-xl font-black">PE</span>
+              </div>
+              <div>
+                <p className="text-white font-black text-base leading-tight">SG PE Coach</p>
+                <p className="text-slate-400 text-[11px]">2024 MOE Syllabus · AI-Powered</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Hero */}
+          <div className="flex-1 flex flex-col items-center justify-center px-6 pb-6 gap-6 overflow-y-auto">
+            <div className="text-center">
+              <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-3">Who are you today?</p>
+              <h1 className="text-3xl md:text-4xl font-black text-white leading-tight">
+                Choose your role 👇
+              </h1>
+            </div>
+
+            {/* Role Cards */}
+            <div className="w-full max-w-md flex flex-col gap-4">
+
+              {/* Resume banner — only shown if there's a saved pair session */}
+              {activePairSession && (
+                <button
+                  type="button"
+                  onClick={() => setAppMode('peer_coaching')}
+                  className="group w-full text-left bg-emerald-600/90 hover:bg-emerald-500 hover:scale-[1.02] active:scale-[0.97] rounded-2xl px-5 py-3.5 flex items-center gap-3 shadow-lg shadow-emerald-900/30 transition-all duration-200 cursor-pointer border border-emerald-400/30"
+                >
+                  <span className="text-2xl">▶️</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-black text-sm leading-tight">Resume Pair #{activePairSession.pairNumber}</p>
+                    <p className="text-emerald-200 text-xs font-medium truncate">Continue your active session</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await clearActivePairSession();
+                      setActivePairSession(null);
+                    }}
+                    className="text-emerald-300 hover:text-white text-xs font-bold px-2 py-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                  >
+                    Clear ✕
+                  </button>
+                </button>
+              )}
+
+              {/* Student Card — always opens QR scanner for a fresh start */}
+              <button
+                type="button"
+                onClick={() => setIsQrScannerOpen(true)}
+                className="group relative w-full text-left bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-6 shadow-2xl shadow-orange-500/30 transition-all duration-200 cursor-pointer overflow-hidden"
+              >
+                <div className="absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🍎🍌</div>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-3xl">🍎🍌</span>
+                  <span className="text-xl font-black text-white">I'm a Student</span>
+                  <svg className="ml-auto w-5 h-5 text-white/60 shrink-0 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </div>
+                <p className="text-orange-100 text-sm font-semibold leading-relaxed">
+                  Scan your teacher's QR code, record your PE moves, and get instant AI + teacher feedback.
+                </p>
+                <div className="mt-4 flex items-center gap-2 text-white/80 text-xs font-bold flex-wrap">
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">📷 Scan Class QR</span>
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">🎬 Record & Analyse</span>
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">🤖 AI Coach</span>
+                </div>
+              </button>
+
+              {/* Teacher Card */}
+              <button
+                type="button"
+                onClick={() => setAppMode('teacher_board')}
+                className="group relative w-full text-left bg-gradient-to-br from-indigo-600 to-violet-700 hover:from-indigo-500 hover:to-violet-600 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-6 shadow-2xl shadow-indigo-600/30 transition-all duration-200 cursor-pointer overflow-hidden"
+              >
+                <div className="absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🏫</div>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-3xl">🏫</span>
+                  <span className="text-xl font-black text-white">I'm a Teacher</span>
+                  <svg className="ml-auto w-5 h-5 text-white/60 shrink-0 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </div>
+                <p className="text-indigo-100 text-sm font-semibold leading-relaxed">
+                  Run your lesson, review student video submissions, and query the AI syllabus coach.
+                </p>
+                <div className="mt-4 flex items-center gap-2 text-white/80 text-xs font-bold flex-wrap">
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">📺 Project QR</span>
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">📥 Review Tray</span>
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">📊 Class Progress</span>
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">🤖 Syllabus Chat</span>
+                </div>
+              </button>
+
+              {/* Syllabus & Analysis Chatbot Card */}
+              <button
+                type="button"
+                onClick={() => setAppMode('chat')}
+                className="group relative w-full text-left bg-gradient-to-br from-teal-700/80 to-cyan-800/80 hover:from-teal-600/90 hover:to-cyan-700/90 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-6 shadow-2xl shadow-teal-900/40 border border-teal-600/30 transition-all duration-200 cursor-pointer overflow-hidden"
+              >
+                <div className="absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🤖</div>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-3xl">🤖</span>
+                  <span className="text-xl font-black text-white">Syllabus &amp; Analysis</span>
+                  <svg className="ml-auto w-5 h-5 text-white/60 shrink-0 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </div>
+                <p className="text-teal-100 text-sm font-semibold leading-relaxed">
+                  Ask PE syllabus questions or upload a video for AI movement analysis.
+                </p>
+                <div className="mt-4 flex items-center gap-2 text-white/80 text-xs font-bold flex-wrap">
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">💬 Ask Syllabus</span>
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">📹 Upload Video</span>
+                  <span className="px-2.5 py-1 bg-white/20 rounded-full">🏃 Movement AI</span>
+                </div>
+              </button>
+
+            </div>
+          </div>
+        </div>
+
+        {/* Existing Modals */}
+        <ClassQrScannerModal
+          isOpen={isQrScannerOpen}
+          onClose={() => setIsQrScannerOpen(false)}
+          onScanSuccess={(data) => {
+            // data.teacherId comes from the QR payload embedded by the teacher's board
+            setScannedLessonData(data);
+            setIsQrScannerOpen(false);
+            setIsPairCheckInOpen(true);
+          }}
+        />
+        <PairCheckInModal
+          isOpen={isPairCheckInOpen}
+          lessonId={scannedLessonData.lessonId}
+          lessonTitle={scannedLessonData.title}
+          skillName={scannedLessonData.skillName || 'Overhand Throw'}
+          onCompleteCheckIn={(pairData) => {
+            // Carry teacherId + skillName from the QR into the saved session
+            setActivePairSession({
+              ...pairData,
+              teacherId: scannedLessonData.teacherId,
+              skillName: scannedLessonData.skillName,
+            });
+            setIsPairCheckInOpen(false);
+            setAppMode('peer_coaching');
+          }}
+          onCancel={() => setIsPairCheckInOpen(false)}
+        />
+      </div>
+    );
+  }
+
+  if (appMode === 'teacher_board') {
+    return (
+      <TeacherClassroomBoard
+        onOpenChat={() => setAppMode('home_screen')}
+        teacherId={user?.id}
+        onOpenStudentSession={() => {
+          setScannedLessonData({
+            lessonId: 'pe-lesson-today',
+            title: 'Overhand Throw Practice',
+            skillName: 'Overhand Throw',
+            teacherId: user?.id,
+          });
+          setIsPairCheckInOpen(true);
+        }}
+      />
+    );
+  }
+
+  if (appMode === 'peer_coaching' && activePairSession) {
+    return (
+      <div className="relative h-screen w-screen overflow-hidden">
+        <PeerCoachingSession
+          pairNumber={activePairSession.pairNumber}
+          lessonId={activePairSession.lessonId}
+          skillName={activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw'}
+          pairPhoto={activePairSession.pairPhoto}
+          teacherId={activePairSession.teacherId}
+          onSessionComplete={() => {
+            clearActivePairSession();
+            setActivePairSession(null);
+            setAppMode('home_screen');
+          }}
+          onSendToCoachBot={handlePeerSessionToChat}
+          onExit={() => {
+            setAppMode('home_screen');
+          }}
+        />
+        <TeacherHelpBeacon pairNumber={activePairSession.pairNumber} />
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors overflow-x-hidden">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -1097,10 +1489,49 @@ const App: React.FC = () => {
 
       <div className="relative flex-1 flex flex-col h-full bg-white/75 dark:bg-slate-950/80 backdrop-blur-xl border-l border-white/60 dark:border-white/5 shadow-[0_0_80px_rgba(15,23,42,0.08)]">
         
+        {/* Dedicated Student Station Header when in Pair Practice Mode */}
+        {activePeerSessionData && (
+          <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 border-b border-indigo-500/40 px-4 py-2.5 flex items-center justify-between shadow-lg shrink-0 z-40">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🍎🍌</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 bg-indigo-500/30 text-indigo-300 font-black text-xs rounded-full border border-indigo-400/40 shadow-xs">
+                    Pair #{activePeerSessionData.pairNumber}
+                  </span>
+                  <p className="text-sm font-black text-white">
+                    {activePeerSessionData.skillName} Practice Station
+                  </p>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  AI Coach Bot is active. Ask for movement feedback or power tips!
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAppMode('peer_coaching')}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🎥 Record New Attempt</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAppMode('teacher_board')}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Teacher Board
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Minimalist Floating Top Bar */}
-        <div className="absolute top-0 left-0 right-0 z-30 p-3 md:p-4 flex items-center justify-between pointer-events-none">
-          {/* Left: Mobile Sidebar Toggle */}
-          <div className="pointer-events-auto flex items-center gap-3">
+        <div className={`absolute top-0 left-0 right-0 z-30 p-3 md:p-4 flex items-center justify-between pointer-events-none ${activePeerSessionData ? 'hidden' : ''}`}>
+          {/* Left: Mobile Sidebar Toggle + Home Back */}
+          <div className="pointer-events-auto flex items-center gap-2">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="md:hidden p-2.5 text-slate-700 dark:text-slate-200 bg-white/90 dark:bg-zinc-900/80 backdrop-blur-md rounded-xl border border-slate-200/40 dark:border-zinc-800/80 shadow-md transition-all hover:scale-105 active:scale-95"
@@ -1110,10 +1541,45 @@ const App: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
             </button>
+            <button
+              onClick={() => setAppMode('home_screen')}
+              className="p-2.5 text-slate-600 dark:text-slate-300 bg-white/90 dark:bg-zinc-900/80 backdrop-blur-md rounded-xl border border-slate-200/40 dark:border-zinc-800/80 shadow-md transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 text-xs font-bold pr-3"
+              title="Back to Home"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+              </svg>
+              <span className="hidden sm:inline">Home</span>
+            </button>
           </div>
 
           {/* Right: Actions Cluster */}
           <div className="flex items-center gap-2 pointer-events-auto">
+            {/* Class Partner Mode (Apple & Banana) */}
+            <button
+              onClick={() => {
+                if (activePairSession) {
+                  setAppMode('peer_coaching');
+                } else {
+                  setIsQrScannerOpen(true);
+                }
+              }}
+              className="px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs font-black flex items-center gap-1.5 hover:bg-amber-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+              title="Classroom Partner Coaching (Apple & Banana)"
+            >
+              <span>🍎🍌</span>
+              <span>Partner Mode</span>
+            </button>
+
+            {/* Teacher Board & Review Tray */}
+            <button
+              onClick={() => setAppMode('teacher_board')}
+              className="px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+              title="Teacher Whiteboard QR & Review Tray"
+            >
+              <span>🏫</span>
+              <span className="hidden sm:inline">Teacher Board</span>
+            </button>
             {user && (
               <button
                 onClick={() => setShowDashboard(true)}
@@ -1206,7 +1672,7 @@ const App: React.FC = () => {
 
             {/* Spacer for empty chat to push welcome down? No, standard flow */}
 
-            {messages.length < 2 && (
+            {messages.length < 2 && !activePeerSessionData && (
               <div className="mb-8 animate-fade-in">
                 <div className="mb-4 overflow-hidden rounded-3xl border border-slate-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-900/75 backdrop-blur-xl shadow-lg shadow-slate-900/5">
                   <div className="p-6 border-b border-slate-100 dark:border-zinc-800/70">
@@ -1316,8 +1782,43 @@ const App: React.FC = () => {
         {/* Footer Input */}
         <div className="p-4 bg-transparent shrink-0 z-10">
           <div className="max-w-5xl mx-auto">
-            {/* Model Selector Row */}
-
+            {/* AI Coach Action Chips for Apple & Banana */}
+            {activePeerSessionData && (
+              <div className="flex gap-2 overflow-x-auto pb-2.5 mb-1 scrollbar-thin px-1">
+                <button
+                  type="button"
+                  disabled={isLoading || isProcessing}
+                  onClick={() => handleAnalyzePeerPerformer('Banana')}
+                  className="px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-black shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                >
+                  <span>🍌 Analyze Banana's Form (AI Vision)</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isLoading || isProcessing}
+                  onClick={() => handleAnalyzePeerPerformer('Apple')}
+                  className="px-3.5 py-2 bg-red-500/20 hover:bg-red-500/30 active:scale-95 border border-red-500/40 text-red-300 rounded-xl text-xs font-black shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                >
+                  <span>🍎 Analyze Apple's Form (AI Vision)</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isLoading || isProcessing}
+                  onClick={() => handleSendMessage(`Coach, how can we get more distance and power on our ${activePeerSessionData.skillName}?`)}
+                  className="px-3 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 active:scale-95 border border-indigo-500/40 text-indigo-300 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <span>⚡ How to get more power?</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isLoading || isProcessing}
+                  onClick={() => handleSendMessage(`Give us a fun 2-minute partner challenge drill for ${activePeerSessionData.skillName}!`)}
+                  className="px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 active:scale-95 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <span>🎮 Fun Partner Drill</span>
+                </button>
+              </div>
+            )}
 
             <ChatInput
               onSendMessage={handleSendMessage}
@@ -1388,6 +1889,30 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Classroom Modals */}
+      <ClassQrScannerModal
+        isOpen={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        onScanSuccess={(lesson) => {
+          setIsQrScannerOpen(false);
+          setScannedLessonData(lesson);
+          setIsPairCheckInOpen(true);
+        }}
+      />
+
+      <PairCheckInModal
+        isOpen={isPairCheckInOpen}
+        lessonId={scannedLessonData.lessonId}
+        lessonTitle={scannedLessonData.title}
+        skillName={scannedLessonData.skillName}
+        onCompleteCheckIn={(sessionData) => {
+          setIsPairCheckInOpen(false);
+          setActivePairSession(sessionData);
+          setAppMode('peer_coaching');
+        }}
+        onCancel={() => setIsPairCheckInOpen(false)}
+      />
 
       <Analytics />
     </div>

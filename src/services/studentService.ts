@@ -85,6 +85,31 @@ export const uploadVideoToStorage = async (
     return path;
 };
 
+/**
+ * Upload a video blob from a student device using the teacher's ID from the QR code.
+ * No authenticated user required — the teacherId comes from the scanned QR payload.
+ * Path: student-videos/{teacherId}/pair_submissions/{lessonId}/pair_{pairNumber}/{performer}_{timestamp}.mp4
+ */
+export const uploadGuestVideo = async (
+    blob: Blob,
+    teacherId: string,
+    lessonId: string,
+    pairNumber: number,
+    performer: 'apple' | 'banana',
+    skillName: string,
+): Promise<string | null> => {
+    const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const path = `${teacherId}/pair_submissions/${lessonId}/pair_${pairNumber}/${performer}_${safeName}_${Date.now()}.mp4`;
+    const { error } = await supabase.storage
+        .from('student-videos')
+        .upload(path, blob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
+    if (error) { console.error('[GuestUpload] error:', error); return null; }
+    // Return public URL so teacher's Review Tray can play it immediately
+    const { data } = supabase.storage.from('student-videos').getPublicUrl(path);
+    return data.publicUrl ?? null;
+};
+
+
 export const getSignedVideoUrl = async (storagePath: string): Promise<string | null> => {
     const { data, error } = await supabase.storage
         .from('student-videos')
