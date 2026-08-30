@@ -97,6 +97,7 @@ export const uploadGuestVideo = async (
     pairNumber: number,
     performer: 'apple' | 'banana',
     skillName: string,
+    pairPhoto?: string,
 ): Promise<string | null> => {
     const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const path = `${teacherId}/pair_submissions/${lessonId}/pair_${pairNumber}/${performer}_${safeName}_${Date.now()}.mp4`;
@@ -106,8 +107,36 @@ export const uploadGuestVideo = async (
     if (error) { console.error('[GuestUpload] error:', error); return null; }
     // Return public URL so teacher's Review Tray can play it immediately
     const { data } = supabase.storage.from('student-videos').getPublicUrl(path);
-    return data.publicUrl ?? null;
+    const publicUrl = data.publicUrl ?? null;
+
+    if (publicUrl) {
+      // Upsert record to pair_submissions so teacher Review Tray on any device shows the clip live
+      try {
+        const subId = `sub-${lessonId}-p${pairNumber}`;
+        const updateData: Record<string, any> = {
+          id: subId,
+          lesson_id: lessonId,
+          pair_number: pairNumber,
+          skill_name: skillName,
+          teacher_id: teacherId,
+          status: 'pending_sync',
+          created_at: new Date().toISOString(),
+        };
+        if (pairPhoto) updateData.pair_photo = pairPhoto;
+        if (performer === 'banana') {
+          updateData.banana_video_url = publicUrl;
+        } else {
+          updateData.apple_video_url = publicUrl;
+        }
+        await supabase.from('pair_submissions').upsert(updateData, { onConflict: 'id' });
+      } catch (e) {
+        console.warn('[GuestUpload] DB record sync note:', e);
+      }
+    }
+
+    return publicUrl;
 };
+
 
 
 export const getSignedVideoUrl = async (storagePath: string): Promise<string | null> => {

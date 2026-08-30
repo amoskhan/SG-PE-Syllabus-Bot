@@ -5,6 +5,10 @@ import {
   PairSubmissionRecord,
   updateSubmissionStatus,
 } from '../services/offline/offlineStorage';
+import {
+  fetchTeacherSubmissions,
+  updateCloudSubmissionStatus,
+} from '../services/cloudSyncService';
 import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
 
 interface TeacherClassroomBoardProps {
@@ -99,20 +103,39 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
       .catch(console.error);
   }, [lessonId, selectedSkill, teacherId]);
 
-  // Load submissions from IndexedDB
+  // Load submissions from Supabase Cloud (multi-device) + local IndexedDB
   useEffect(() => {
     loadSubmissions();
     const interval = setInterval(loadSubmissions, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [teacherId]);
 
   const loadSubmissions = async () => {
-    const all = await getAllSubmissions();
-    setSubmissions(all);
+    let cloudSubs: PairSubmissionRecord[] = [];
+    if (teacherId) {
+      cloudSubs = await fetchTeacherSubmissions(teacherId);
+    }
+    const localSubs = await getAllSubmissions();
+
+    // Merge cloud and local submissions by id (cloud takes precedence for cross-device sync)
+    const subMap = new Map<string, PairSubmissionRecord>();
+    for (const sub of localSubs) {
+      subMap.set(sub.id, sub);
+    }
+    for (const sub of cloudSubs) {
+      subMap.set(sub.id, sub);
+    }
+    const merged = Array.from(subMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    setSubmissions(merged);
   };
 
   const handleApprove = async (sub: PairSubmissionRecord, star: boolean = true) => {
     await updateSubmissionStatus(sub.id, 'approved', teacherFeedbackText || 'Well done pair!', star);
+    if (teacherId) {
+      await updateCloudSubmissionStatus(sub.id, 'approved', teacherFeedbackText || 'Well done pair!', star);
+    }
     setTeacherFeedbackText('');
     setActiveReviewSub(null);
     loadSubmissions();
@@ -120,6 +143,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   const handleRequestRedo = async (sub: PairSubmissionRecord) => {
     await updateSubmissionStatus(sub.id, 'needs_redo', teacherFeedbackText || 'Please try again with partner.');
+    if (teacherId) {
+      await updateCloudSubmissionStatus(sub.id, 'needs_redo', teacherFeedbackText || 'Please try again with partner.');
+    }
     setTeacherFeedbackText('');
     setActiveReviewSub(null);
     loadSubmissions();
@@ -131,7 +157,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     <div className="h-screen flex flex-col bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
       
       {/* Teacher Top Navigation */}
-      <header className="h-16 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 px-6 flex items-center justify-between shadow-xs">
+      <header className="min-h-16 h-auto py-2.5 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 px-4 md:px-6 flex flex-wrap md:flex-nowrap items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🏫</span>
           <div>
@@ -143,26 +169,26 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
         </div>
 
         {/* View Mode Switcher */}
-        <div className="flex items-center gap-2 bg-slate-100 dark:bg-zinc-800 p-1 rounded-xl">
+        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-800 p-1 rounded-xl">
           <button
             onClick={() => setViewMode('PROJECTOR')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               viewMode === 'PROJECTOR'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
             }`}
           >
-            📽️ Whiteboard QR Projector
+            📽️ Projector
           </button>
           <button
             onClick={() => setViewMode('REVIEW_TRAY')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               viewMode === 'REVIEW_TRAY'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
             }`}
           >
-            <span>📥 Seesaw Review Tray</span>
+            <span>📥 Review Tray</span>
             {unapprovedCount > 0 && (
               <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-[10px] font-black animate-pulse">
                 {unapprovedCount}
@@ -172,21 +198,22 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
         </div>
 
         {/* Quick Launch Buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={onOpenStudentSession}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1 cursor-pointer"
+            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1 cursor-pointer"
           >
-            <span>📱 Test Student iPad Flow</span>
+            <span>📱 Test iPad Flow</span>
           </button>
           <button
             onClick={onOpenChat}
-            className="px-3.5 py-2 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl text-xs font-semibold"
+            className="px-3 py-2 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200"
           >
-            Back to Syllabus Bot
+            Back to Bot
           </button>
         </div>
       </header>
+
 
       {/* VIEW 1: WHITEBOARD PROJECTOR (FOR CLASSROOM SETUP) */}
       {viewMode === 'PROJECTOR' && (
@@ -417,7 +444,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
                       <span>🎬 Recorded Videos:</span>
                       <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                        {[sub.appleRole.videoBlob, sub.bananaRole.videoBlob].filter(Boolean).length} / 2 Clips Saved
+                        {[sub.appleRole.videoBlob || sub.appleRole.videoUrl, sub.bananaRole.videoBlob || sub.bananaRole.videoUrl].filter(Boolean).length} / 2 Clips Saved
                       </span>
                     </div>
 

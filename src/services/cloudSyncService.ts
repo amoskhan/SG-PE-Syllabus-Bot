@@ -8,8 +8,8 @@ export async function backupSubmissionToSupabase(
   bananaVideoUrl?: string;
   appleVideoUrl?: string;
 }> {
-  let bananaVideoUrl: string | undefined;
-  let appleVideoUrl: string | undefined;
+  let bananaVideoUrl: string | undefined = submission.appleRole.videoUrl;
+  let appleVideoUrl: string | undefined = submission.bananaRole.videoUrl;
 
   const timestamp = Date.now();
   // If teacherId provided (from QR), nest under teacher folder so it appears in their dashboard
@@ -73,8 +73,11 @@ export async function backupSubmissionToSupabase(
       pair_number: submission.pairNumber,
       skill_name: submission.skillName,
       teacher_id: teacherId ?? null,
-      banana_video_url: bananaVideoUrl,
-      apple_video_url: appleVideoUrl,
+      pair_photo: submission.pairPhoto || null,
+      banana_video_url: bananaVideoUrl || null,
+      apple_video_url: appleVideoUrl || null,
+      banana_cues: submission.appleRole.cues || [],
+      apple_cues: submission.bananaRole.cues || [],
       ai_student_feedback: submission.aiStudentFeedback ?? null,
       ai_teacher_report: submission.aiTeacherReport ?? null,
       status: submission.status,
@@ -85,5 +88,91 @@ export async function backupSubmissionToSupabase(
   }
 
   return { bananaVideoUrl, appleVideoUrl };
+}
+
+/**
+ * Fetch all student pair submissions for a given teacher from Supabase.
+ * Allows the teacher to view all student videos from any phone, laptop, or tablet.
+ */
+export async function fetchTeacherSubmissions(
+  teacherId: string,
+  lessonId?: string,
+): Promise<PairSubmissionRecord[]> {
+  try {
+    let query = supabase
+      .from("pair_submissions")
+      .select("*")
+      .eq("teacher_id", teacherId)
+      .order("created_at", { ascending: false });
+
+    if (lessonId) {
+      query = query.eq("lesson_id", lessonId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("[CloudSync] fetchTeacherSubmissions error:", error);
+      return [];
+    }
+
+    return (data || []).map((row: any): PairSubmissionRecord => ({
+      id: row.id,
+      lessonId: row.lesson_id || 'pe-lesson-today',
+      pairNumber: row.pair_number || 1,
+      skillName: row.skill_name || 'Overhand Throw',
+      pairPhoto: row.pair_photo || '',
+      appleRole: {
+        studentPerformer: 'Banana',
+        evaluator: 'Apple',
+        videoUrl: row.banana_video_url || undefined,
+        cues: Array.isArray(row.banana_cues) ? row.banana_cues : [],
+      },
+      bananaRole: {
+        studentPerformer: 'Apple',
+        evaluator: 'Banana',
+        videoUrl: row.apple_video_url || undefined,
+        cues: Array.isArray(row.apple_cues) ? row.apple_cues : [],
+      },
+      aiStudentFeedback: row.ai_student_feedback || undefined,
+      aiTeacherReport: row.ai_teacher_report || undefined,
+      status: row.status || 'pending_sync',
+      teacherFeedback: row.teacher_feedback || undefined,
+      teacherStar: row.teacher_star || false,
+      createdAt: row.created_at || new Date().toISOString(),
+    }));
+  } catch (e) {
+    console.error("[CloudSync] fetchTeacherSubmissions unexpected error:", e);
+    return [];
+  }
+}
+
+/**
+ * Update the review status, star, or feedback of a submission in Supabase cloud.
+ */
+export async function updateCloudSubmissionStatus(
+  id: string,
+  status: PairSubmissionRecord['status'],
+  feedback?: string,
+  star?: boolean,
+): Promise<void> {
+  try {
+    const updatePayload: Record<string, any> = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    if (feedback !== undefined) updatePayload.teacher_feedback = feedback;
+    if (star !== undefined) updatePayload.teacher_star = star;
+
+    const { error } = await supabase
+      .from("pair_submissions")
+      .update(updatePayload)
+      .eq("id", id);
+
+    if (error) {
+      console.error("[CloudSync] updateCloudSubmissionStatus error:", error);
+    }
+  } catch (e) {
+    console.error("[CloudSync] updateCloudSubmissionStatus unexpected error:", e);
+  }
 }
 

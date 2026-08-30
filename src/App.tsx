@@ -40,6 +40,15 @@ const base64ToFile = (base64String: string, filename: string): File => {
 
 const App: React.FC = () => {
   const { user, teacherProfile, signInWithGoogle, signOut, updateTeacherProfile } = useAuth();
+
+  const handleSignOut = async () => {
+    await clearActivePairSession();
+    setActivePairSession(null);
+    setActivePeerSessionData(null);
+    setShowDashboard(false);
+    setAppMode('home_screen');
+    await signOut();
+  };
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -1338,17 +1347,33 @@ const App: React.FC = () => {
               {/* Teacher Card */}
               <button
                 type="button"
-                onClick={() => setAppMode('teacher_board')}
+                onClick={() => {
+                  if (user) {
+                    setAppMode('teacher_board');
+                  } else {
+                    signInWithGoogle();
+                  }
+                }}
                 className="group relative w-full text-left bg-gradient-to-br from-indigo-600 to-violet-700 hover:from-indigo-500 hover:to-violet-600 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-6 shadow-2xl shadow-indigo-600/30 transition-all duration-200 cursor-pointer overflow-hidden"
               >
                 <div className="absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🏫</div>
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-3xl">🏫</span>
                   <span className="text-xl font-black text-white">I'm a Teacher</span>
+                  {!user && (
+                    <span className="px-2.5 py-0.5 bg-amber-400 text-slate-950 font-black text-[10px] rounded-full uppercase tracking-wider">
+                      Sign In
+                    </span>
+                  )}
+                  {user && (
+                    <span className="px-2.5 py-0.5 bg-emerald-400/30 text-emerald-200 font-bold text-[10px] rounded-full border border-emerald-400/40">
+                      Logged In
+                    </span>
+                  )}
                   <svg className="ml-auto w-5 h-5 text-white/60 shrink-0 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                 </div>
                 <p className="text-indigo-100 text-sm font-semibold leading-relaxed">
-                  Run your lesson, review student video submissions, and query the AI syllabus coach.
+                  {user ? "Run your lesson, review student video submissions live, and query the AI syllabus coach." : "Sign in with Google to project your class QR code and review student video submissions."}
                 </p>
                 <div className="mt-4 flex items-center gap-2 text-white/80 text-xs font-bold flex-wrap">
                   <span className="px-2.5 py-1 bg-white/20 rounded-full">📺 Project QR</span>
@@ -1357,6 +1382,7 @@ const App: React.FC = () => {
                   <span className="px-2.5 py-1 bg-white/20 rounded-full">🤖 Syllabus Chat</span>
                 </div>
               </button>
+
 
               {/* Syllabus & Analysis Chatbot Card */}
               <button
@@ -1483,7 +1509,7 @@ const App: React.FC = () => {
         user={user}
         teacherProfile={teacherProfile}
         signInWithGoogle={signInWithGoogle}
-        signOut={signOut}
+        signOut={handleSignOut}
         onOpenSettings={() => setIsRubricBuilderOpen(true)}
       />
 
@@ -1573,13 +1599,20 @@ const App: React.FC = () => {
 
             {/* Teacher Board & Review Tray */}
             <button
-              onClick={() => setAppMode('teacher_board')}
+              onClick={() => {
+                if (user) {
+                  setAppMode('teacher_board');
+                } else {
+                  signInWithGoogle();
+                }
+              }}
               className="px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer"
-              title="Teacher Whiteboard QR & Review Tray"
+              title={user ? "Teacher Whiteboard QR & Review Tray" : "Sign In to Open Teacher Board"}
             >
               <span>🏫</span>
               <span className="hidden sm:inline">Teacher Board</span>
             </button>
+
             {user && (
               <button
                 onClick={() => setShowDashboard(true)}

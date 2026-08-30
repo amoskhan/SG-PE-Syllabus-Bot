@@ -416,12 +416,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     const setState = performer === 'banana' ? setBananaSaveState : setAppleSaveState;
     setState('saving');
     try {
-      const url = await uploadGuestVideo(blob, teacherId, lessonId, pairNumber, performer, skillName);
+      const url = await uploadGuestVideo(blob, teacherId, lessonId, pairNumber, performer, skillName, pairPhoto);
       setState(url ? 'saved' : 'error');
     } catch {
       setState('error');
     }
   };
+
 
   // Final Submit Action
   const handleSubmitSession = async () => {

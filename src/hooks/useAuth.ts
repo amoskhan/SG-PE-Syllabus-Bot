@@ -152,12 +152,18 @@ export const useAuth = () => {
     if (user) {
       localStorage.removeItem(`sg_pe_profile_${user.id}`);
     }
+    try {
+      localStorage.removeItem('sg_pe_last_session');
+    } catch {}
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Error logging out:', error);
     }
+    setUser(null);
+    setTeacherProfile(null);
     setLoading(false);
   };
+
 
   return {
     user,
