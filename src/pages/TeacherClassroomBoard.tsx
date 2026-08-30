@@ -8,8 +8,10 @@ import {
 import {
   fetchTeacherSubmissions,
   updateCloudSubmissionStatus,
+  backupSubmissionToSupabase,
 } from '../services/cloudSyncService';
 import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
+
 
 interface TeacherClassroomBoardProps {
   onOpenChat: () => void;
@@ -117,6 +119,15 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     }
     const localSubs = await getAllSubmissions();
 
+    // Auto-sync any existing local submissions to Supabase cloud if teacher is logged in
+    if (teacherId && localSubs.length > 0) {
+      for (const localSub of localSubs) {
+        if (!cloudSubs.some((c) => c.id === localSub.id)) {
+          backupSubmissionToSupabase(localSub, teacherId).catch(console.warn);
+        }
+      }
+    }
+
     // Merge cloud and local submissions by id (cloud takes precedence for cross-device sync)
     const subMap = new Map<string, PairSubmissionRecord>();
     for (const sub of localSubs) {
@@ -130,6 +141,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     );
     setSubmissions(merged);
   };
+
 
   const handleApprove = async (sub: PairSubmissionRecord, star: boolean = true) => {
     await updateSubmissionStatus(sub.id, 'approved', teacherFeedbackText || 'Well done pair!', star);
