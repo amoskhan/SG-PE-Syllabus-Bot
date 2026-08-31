@@ -139,6 +139,96 @@ export const uploadGuestVideo = async (
 };
 
 
+/**
+ * Unified peer session upload — uploads both Apple and Banana performer videos
+ * to Supabase Storage with the correct contentType (critical for iOS Safari),
+ * then does ONE upsert to pair_submissions with full data including cues.
+ *
+ * This is the SINGLE source of truth for the student "Send to Teacher" action.
+ * Called by PeerCoachingSession.handleSubmitSession when teacherId is available (QR scanned).
+ */
+export const uploadPeerSessionToTeacher = async (params: {
+  teacherId: string;
+  lessonId: string;
+  pairNumber: number;
+  skillName: string;
+  pairPhoto?: string;
+  bananaBlob?: Blob;   // Video of Banana PERFORMING (recorded by Apple)
+  appleBlob?: Blob;    // Video of Apple PERFORMING (recorded by Banana)
+  bananaCues?: any[];
+  appleCues?: any[];
+}): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean }> => {
+  const { teacherId, lessonId, pairNumber, skillName, pairPhoto, bananaBlob, appleBlob, bananaCues, appleCues } = params;
+  const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const subId = `sub-${lessonId}-p${pairNumber}-${safeName}`;
+  const ts = Date.now();
+
+  let bananaVideoUrl: string | undefined;
+  let appleVideoUrl: string | undefined;
+
+  // ── Upload Banana performer video ──────────────────────────────────────────
+  if (bananaBlob && bananaBlob.size > 0) {
+    const path = `${teacherId}/pair_submissions/${lessonId}/pair_${pairNumber}/banana_${safeName}_${ts}.mp4`;
+    console.log('[Upload] Uploading banana video to:', path, 'size:', bananaBlob.size);
+    const { error } = await supabase.storage
+      .from('student-videos')
+      .upload(path, bananaBlob, { cacheControl: '3600', upsert: true, contentType: 'video/mp4' });
+    if (error) {
+      console.error('[Upload] Banana video upload FAILED:', error.message, error);
+    } else {
+      const { data } = supabase.storage.from('student-videos').getPublicUrl(path);
+      bananaVideoUrl = data.publicUrl;
+      console.log('[Upload] Banana video uploaded ✓', bananaVideoUrl);
+    }
+  }
+
+  // ── Upload Apple performer video ───────────────────────────────────────────
+  if (appleBlob && appleBlob.size > 0) {
+    const path = `${teacherId}/pair_submissions/${lessonId}/pair_${pairNumber}/apple_${safeName}_${ts}.mp4`;
+    console.log('[Upload] Uploading apple video to:', path, 'size:', appleBlob.size);
+    const { error } = await supabase.storage
+      .from('student-videos')
+      .upload(path, appleBlob, { cacheControl: '3600', upsert: true, contentType: 'video/mp4' });
+    if (error) {
+      console.error('[Upload] Apple video upload FAILED:', error.message, error);
+    } else {
+      const { data } = supabase.storage.from('student-videos').getPublicUrl(path);
+      appleVideoUrl = data.publicUrl;
+      console.log('[Upload] Apple video uploaded ✓', appleVideoUrl);
+    }
+  }
+
+  // ── Single upsert with all data ────────────────────────────────────────────
+  const upsertPayload: Record<string, any> = {
+    id: subId,
+    lesson_id: lessonId,
+    pair_number: pairNumber,
+    skill_name: skillName,
+    teacher_id: teacherId,
+    status: 'pending_sync',
+    created_at: new Date().toISOString(),
+  };
+  if (pairPhoto) upsertPayload.pair_photo = pairPhoto;
+  if (bananaVideoUrl) upsertPayload.banana_video_url = bananaVideoUrl;
+  if (appleVideoUrl) upsertPayload.apple_video_url = appleVideoUrl;
+  if (bananaCues) upsertPayload.banana_cues = bananaCues;
+  if (appleCues) upsertPayload.apple_cues = appleCues;
+
+  console.log('[Upload] Upserting pair_submissions row:', subId, upsertPayload);
+  const { error: dbError } = await supabase
+    .from('pair_submissions')
+    .upsert(upsertPayload, { onConflict: 'id' });
+
+  if (dbError) {
+    console.error('[Upload] pair_submissions upsert FAILED:', dbError.message, dbError);
+    return { bananaVideoUrl, appleVideoUrl, success: false };
+  }
+
+  console.log('[Upload] pair_submissions upserted successfully ✓');
+  return { bananaVideoUrl, appleVideoUrl, success: true };
+};
+
+
 
 export const getSignedVideoUrl = async (storagePath: string): Promise<string | null> => {
     const { data, error } = await supabase.storage

@@ -12,7 +12,7 @@ import {
   getDB,
 } from '../../services/offline/offlineStorage';
 import { backupSubmissionToSupabase } from '../../services/cloudSyncService';
-import { uploadGuestVideo } from '../../services/studentService';
+import { uploadGuestVideo, uploadPeerSessionToTeacher } from '../../services/studentService';
 import { poseDetectionService } from '../../services/vision/poseDetectionService';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 
@@ -78,6 +78,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isOfflineSaved, setIsOfflineSaved] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [showFullChecklist, setShowFullChecklist] = useState(false);
   // Per-video cloud save state — tracks "Save to Teacher" button independent of full peer-assessment flow
   const [bananaSaveState, setBananaSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -499,52 +500,76 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   };
 
 
-  // Final Submit Action
+  // Final Submit Action — uses the unified uploadPeerSessionToTeacher path
+  // which correctly sets contentType: 'video/mp4' (critical for iOS Safari)
+  // and does a single upsert with all data.
   const handleSubmitSession = async () => {
     setIsSaving(true);
+    setSubmitError(null);
 
-    const mapCues = (rated: Record<string, boolean>): PeerCueResult[] => {
-      return allCues.map((c) => ({
+    const mapCues = (rated: Record<string, boolean>): PeerCueResult[] =>
+      allCues.map((c) => ({
         cueIndex: c.itemNumber,
         criterionText: c.syllabusCriterion,
         isObserved: rated[c.id] ?? false,
       }));
-    };
-
-    const submission: PairSubmissionRecord = {
-      id: `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`,
-      lessonId,
-      pairNumber,
-      skillName,
-      pairPhoto,
-      appleRole: {
-        studentPerformer: 'Banana',
-        evaluator: 'Apple',
-        videoBlob: bananaVideoBlob || undefined,
-        cues: mapCues(bananaCues),
-      },
-      bananaRole: {
-        studentPerformer: 'Apple',
-        evaluator: 'Banana',
-        videoBlob: appleVideoBlob || undefined,
-        cues: mapCues(appleCues),
-      },
-      status: 'pending_sync',
-      createdAt: new Date().toISOString(),
-    };
 
     try {
-      await queuePairSubmission(submission);
-      // Attempt cloud backup immediately so the teacher dashboard receives it
-      try {
-        await backupSubmissionToSupabase(submission, teacherId);
-      } catch (cloudErr) {
-        console.warn('[PeerSession] Cloud sync note:', cloudErr);
+      // ── Cloud upload (teacher always provides teacherId via QR scan) ────────
+      if (teacherId) {
+        console.log('[Submit] Uploading session to teacher:', teacherId);
+        const result = await uploadPeerSessionToTeacher({
+          teacherId,
+          lessonId,
+          pairNumber,
+          skillName,
+          pairPhoto,
+          bananaBlob: bananaVideoBlob || undefined,
+          appleBlob: appleVideoBlob || undefined,
+          bananaCues: mapCues(bananaCues),
+          appleCues: mapCues(appleCues),
+        });
+
+        if (!result.success) {
+          setSubmitError('Video uploaded but could not reach teacher dashboard. Please check your connection and try again.');
+          console.warn('[Submit] uploadPeerSessionToTeacher returned success=false');
+        } else {
+          console.log('[Submit] Cloud upload complete ✓ banana:', result.bananaVideoUrl, 'apple:', result.appleVideoUrl);
+        }
+      } else {
+        console.warn('[Submit] No teacherId — QR was not scanned. Saving locally only.');
       }
+
+      // ── Local IndexedDB backup (always, regardless of cloud result) ─────────
+      const submission: PairSubmissionRecord = {
+        id: `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`,
+        lessonId,
+        pairNumber,
+        skillName,
+        pairPhoto,
+        appleRole: {
+          studentPerformer: 'Banana',
+          evaluator: 'Apple',
+          videoBlob: bananaVideoBlob || undefined,
+          cues: mapCues(bananaCues),
+        },
+        bananaRole: {
+          studentPerformer: 'Apple',
+          evaluator: 'Banana',
+          videoBlob: appleVideoBlob || undefined,
+          cues: mapCues(appleCues),
+        },
+        status: 'pending_sync',
+        createdAt: new Date().toISOString(),
+      };
+      await queuePairSubmission(submission);
+
       setIsOfflineSaved(true);
       setStep('SESSION_COMPLETED');
     } catch (e) {
-      console.error('Queue submission failed:', e);
+      console.error('[Submit] Unexpected error:', e);
+      setSubmitError('Something went wrong. Please try again.');
+      // Still move to completed so student isn't stuck
       setIsOfflineSaved(true);
       setStep('SESSION_COMPLETED');
     } finally {
@@ -1098,6 +1123,14 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               >
                 <span>{isSaving ? '🚀 Syncing to Teacher Review Tray…' : 'Send to Teacher Review Tray 🚀'}</span>
               </button>
+
+              {/* Error banner — shown if cloud upload fails */}
+              {submitError && (
+                <div className="w-full px-3 py-2 bg-red-900/60 border border-red-500 rounded-xl text-red-200 text-xs font-medium flex items-start gap-2">
+                  <span className="text-base shrink-0">⚠️</span>
+                  <span>{submitError}</span>
+                </div>
+              )}
 
               {/* SECONDARY ROW */}
               <div className="flex gap-2">
