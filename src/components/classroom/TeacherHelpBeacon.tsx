@@ -21,14 +21,14 @@ export const TeacherHelpBeacon: React.FC<TeacherHelpBeaconProps> = ({
 
   return (
     <>
-      {/* Floating corner button */}
+      {/* Floating corner button positioned above mobile action buttons */}
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold rounded-2xl shadow-lg shadow-amber-500/30 text-xs transition-all cursor-pointer"
+        className="fixed bottom-24 right-3 sm:bottom-6 sm:right-6 z-40 flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold rounded-full shadow-lg shadow-amber-500/30 text-xs transition-all cursor-pointer border border-amber-400/40 backdrop-blur-xs"
         title="Need help with iPad or pairing?"
       >
-        <span className="text-base">🙋‍♂️</span>
+        <span className="text-sm">🙋‍♂️</span>
         <span>Help</span>
       </button>
 

@@ -102,7 +102,7 @@ export async function fetchTeacherSubmissions(
     let query = supabase
       .from("pair_submissions")
       .select("*")
-      .eq("teacher_id", teacherId)
+      .or(`teacher_id.eq.${teacherId},teacher_id.is.null`)
       .order("created_at", { ascending: false });
 
     if (lessonId) {

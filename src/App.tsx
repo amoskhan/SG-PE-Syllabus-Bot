@@ -1462,7 +1462,7 @@ const App: React.FC = () => {
 
   if (appMode === 'peer_coaching' && activePairSession) {
     return (
-      <div className="relative h-screen w-screen overflow-hidden">
+      <div className="relative h-[100dvh] w-full overflow-hidden bg-slate-900">
         <PeerCoachingSession
           pairNumber={activePairSession.pairNumber}
           lessonId={activePairSession.lessonId}

@@ -535,14 +535,18 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
     try {
       await queuePairSubmission(submission);
-      // Fire-and-forget background cloud backup — passes teacherId so videos land in teacher's bucket
-      backupSubmissionToSupabase(submission, teacherId).catch((e) =>
-        console.warn('Background Supabase video backup note:', e)
-      );
+      // Attempt cloud backup immediately so the teacher dashboard receives it
+      try {
+        await backupSubmissionToSupabase(submission, teacherId);
+      } catch (cloudErr) {
+        console.warn('[PeerSession] Cloud sync note:', cloudErr);
+      }
       setIsOfflineSaved(true);
       setStep('SESSION_COMPLETED');
     } catch (e) {
       console.error('Queue submission failed:', e);
+      setIsOfflineSaved(true);
+      setStep('SESSION_COMPLETED');
     } finally {
       setIsSaving(false);
     }
@@ -593,18 +597,18 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       </div>
 
       {/* MAIN VIEWPORT */}
-      <div className="flex-1 relative flex flex-col items-center justify-center p-3 overflow-y-auto">
+      <div className="flex-1 relative flex flex-col items-center p-2.5 sm:p-4 overflow-y-auto pb-36">
 
         {/* STEP 1: APPLE RECORDING BANANA */}
         {(step === 'APPLE_INTRO' || step === 'APPLE_RECORDING') && (
-          <div className="w-full h-full max-w-2xl flex flex-col items-center justify-between">
-            <div className="w-full bg-slate-800/80 rounded-2xl p-2.5 mb-2 text-center border border-slate-700">
+          <div className="w-full max-w-xl flex flex-col items-center justify-between gap-3">
+            <div className="w-full bg-slate-800/90 rounded-2xl p-3 text-center border border-slate-700">
               <span className="text-xs font-bold text-red-300">🍎 Apple's Turn to Record:</span>
               <p className="text-sm font-black text-white">Point camera at Banana performing {skillName}!</p>
             </div>
 
             {/* Camera Viewport */}
-            <div className="relative w-full flex-1 max-h-[60vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
+            <div className="relative w-full h-56 sm:h-72 max-h-[40vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
               <video
                 ref={(el) => {
                   videoPreviewRef.current = el;
@@ -617,7 +621,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               />
 
               {isRecording && (
-                <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-red-600/90 text-white rounded-full text-xs font-bold animate-pulse">
+                <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 bg-red-600/90 text-white rounded-full text-xs font-bold animate-pulse">
                   <div className="w-2.5 h-2.5 bg-white rounded-full" />
                   <span>RECORDING: {recordSeconds}s</span>
                 </div>
@@ -625,7 +629,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             </div>
 
             {/* Big Kid Record / Stop Button & Upload Video Option */}
-            <div className="w-full pt-3 flex flex-col items-center gap-2">
+            <div className="w-full flex flex-col items-center gap-2">
               <input
                 ref={uploadInputBananaRef}
                 type="file"
@@ -648,7 +652,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     <button
                       type="button"
                       onClick={() => handleStartRecording('Banana')}
-                      className="flex-1 py-4 bg-red-600 hover:bg-red-500 active:scale-98 text-white text-sm md:text-base font-black rounded-3xl shadow-xl shadow-red-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      className="flex-1 py-3.5 sm:py-4 bg-red-600 hover:bg-red-500 active:scale-98 text-white text-sm sm:text-base font-black rounded-2xl sm:rounded-3xl shadow-xl shadow-red-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <div className="w-3.5 h-3.5 bg-white rounded-full animate-ping" />
                       <span>Record Live 🎥</span>
@@ -656,7 +660,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     <button
                       type="button"
                       onClick={() => uploadInputBananaRef.current?.click()}
-                      className="px-5 py-4 bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 text-sm md:text-base font-bold rounded-3xl border border-slate-700 shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      className="px-4 sm:px-5 py-3.5 sm:py-4 bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 text-xs sm:text-sm font-bold rounded-2xl sm:rounded-3xl border border-slate-700 shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>📁 Upload Video</span>
                     </button>
@@ -676,32 +680,44 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
         {/* STEP 2: APPLE REVIEWS BANANA WITH MOE PE SYLLABUS CUES */}
         {step === 'APPLE_REVIEW' && (
-          <div className="w-full max-w-xl flex flex-col h-full justify-between pb-2 animate-fade-in">
-            <div className="bg-slate-800/90 p-3 rounded-2xl border border-slate-700 mb-2">
+          <div className="w-full max-w-xl flex flex-col pb-4 animate-fade-in">
+            <div className="bg-slate-800/90 p-3 rounded-2xl border border-slate-700 mb-3">
               <p className="text-xs font-bold text-amber-400">🍎 Apple, check Banana's movement:</p>
               <p className="text-xs text-slate-400">Watch the replay and tap thumbs up or down for each syllabus rule.</p>
             </div>
 
             {/* Video Replay with VideoAnalysisPlayer */}
-            {bananaVideoUrl && (
-              <div className="w-full max-h-56 bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3 flex items-center justify-center">
+            {bananaVideoUrl ? (
+              <div className="w-full aspect-video sm:aspect-auto sm:max-h-52 bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3 flex items-center justify-center">
                 <VideoAnalysisPlayer src={bananaVideoUrl} label="Banana with AI Skeleton" />
+              </div>
+            ) : (
+              <div className="w-full bg-slate-800/60 rounded-2xl border-2 border-dashed border-indigo-500/50 p-4 mb-3 flex flex-col items-center justify-center text-center gap-2">
+                <span className="text-2xl">📹</span>
+                <p className="text-xs font-bold text-slate-300">No video recorded for Banana yet</p>
+                <button
+                  type="button"
+                  onClick={() => uploadInputBananaRef.current?.click()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>📁 Upload Video for Banana</span>
+                </button>
               </div>
             )}
 
             {/* MediaPipe Skeleton Freeze Frames */}
             {bananaPoseFrames.length > 0 && (
               <div className="mb-3">
-                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5 px-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1 px-1">
                   <span>AI Skeleton Motion Capture</span>
                   <span className="text-emerald-400 font-extrabold">✓ {bananaPoseFrames.length} Frames Tracked</span>
                 </div>
-                <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
                   {bananaPoseFrames.map((frame, i) => (
-                    <div key={i} className="relative shrink-0 w-24 h-24 rounded-2xl overflow-hidden border-2 border-indigo-500/80 bg-black shadow-md">
+                    <div key={i} className="relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-indigo-500/80 bg-black shadow-sm">
                       <img src={frame} alt={`Frame ${i + 1}`} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 bg-black/80 text-[10px] font-mono font-bold text-white rounded-md backdrop-blur-xs">
-                        Frame #{i + 1}
+                      <span className="absolute bottom-0.5 left-1 px-1 py-0.2 bg-black/80 text-[9px] font-mono font-bold text-white rounded backdrop-blur-xs">
+                        #{i + 1}
                       </span>
                     </div>
                   ))}
@@ -736,11 +752,11 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             </div>
 
             {/* MOE Syllabus Peer Cues List */}
-            <div className="space-y-2.5 flex-1 overflow-y-auto pr-1">
+            <div className="space-y-2 mb-3">
               {displayedCues.map((cue) => {
                 const isChecked = bananaCues[cue.id];
                 return (
-                  <div key={cue.id} className="p-3 bg-slate-800/80 rounded-2xl border border-slate-700 flex items-center justify-between gap-3">
+                  <div key={cue.id} className="p-2.5 bg-slate-800/80 rounded-2xl border border-slate-700 flex items-center justify-between gap-2.5">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-mono font-black px-1.5 py-0.5 bg-slate-700 text-indigo-300 rounded">
@@ -749,7 +765,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                         <span className="text-base">{cue.icon}</span>
                         <p className="text-xs font-black text-white leading-tight">{cue.kidFriendlyText}</p>
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-1 line-clamp-1 italic">
+                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
                         MOE Standard: {cue.syllabusCriterion}
                       </p>
                     </div>
@@ -783,48 +799,57 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               })}
             </div>
 
-            {/* Actions: Re-do or Continue to Swap Roles */}
-            <div className="flex gap-2 mt-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setBananaVideoUrl(null);
-                  setBananaVideoBlob(null);
-                  setBananaPoseFrames([]);
-                  setBananaSaveState('idle');
-                  setStep('APPLE_INTRO');
-                }}
-                className="px-4 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl text-xs border border-slate-700 transition-all cursor-pointer"
-              >
-                ↺ Re-do {skillName}
-              </button>
-
-              {/* Save to Teacher — uploads instantly, independent of peer assessment */}
-              {bananaVideoBlob && (
-                <button
-                  type="button"
-                  disabled={bananaSaveState === 'saving' || bananaSaveState === 'saved'}
-                  onClick={() => handleSaveToTeacher('banana')}
-                  className={`px-4 py-3.5 font-bold rounded-2xl text-xs transition-all cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5 ${
-                    bananaSaveState === 'saved'
-                      ? 'bg-emerald-700 text-white'
-                      : bananaSaveState === 'error'
-                      ? 'bg-red-700 text-white'
-                      : 'bg-sky-600 hover:bg-sky-500 text-white'
-                  }`}
-                >
-                  {bananaSaveState === 'saving' ? '⏳ Saving…' : bananaSaveState === 'saved' ? '✓ Saved!' : bananaSaveState === 'error' ? '⚠ Retry' : teacherId ? '☁️ Save to Teacher' : '💾 Save to iPad'}
-                </button>
-              )}
-
+            {/* Actions: Re-do, Upload, Continue */}
+            <div className="flex flex-col gap-2 mt-2">
               <button
                 type="button"
                 onClick={() => setStep('SWAP_PROMPT')}
-                className="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-500 font-black rounded-2xl text-sm shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 font-black rounded-2xl text-base shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Next: Swap Roles 🍎 ⇄ 🍌</span>
                 <span>→</span>
               </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBananaVideoUrl(null);
+                    setBananaVideoBlob(null);
+                    setBananaPoseFrames([]);
+                    setBananaSaveState('idle');
+                    setStep('APPLE_INTRO');
+                  }}
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border border-slate-700 transition-all cursor-pointer text-center"
+                >
+                  ↺ Re-record
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => uploadInputBananaRef.current?.click()}
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border border-slate-700 transition-all cursor-pointer text-center"
+                >
+                  📁 {bananaVideoUrl ? 'Change Video' : 'Upload Video'}
+                </button>
+
+                {bananaVideoBlob && (
+                  <button
+                    type="button"
+                    disabled={bananaSaveState === 'saving' || bananaSaveState === 'saved'}
+                    onClick={() => handleSaveToTeacher('banana')}
+                    className={`flex-1 py-3 font-bold rounded-xl text-xs transition-all cursor-pointer disabled:cursor-not-allowed text-center ${
+                      bananaSaveState === 'saved'
+                        ? 'bg-emerald-700 text-white'
+                        : bananaSaveState === 'error'
+                        ? 'bg-red-700 text-white'
+                        : 'bg-sky-700 hover:bg-sky-600 text-white'
+                    }`}
+                  >
+                    {bananaSaveState === 'saving' ? '⏳ Saving…' : bananaSaveState === 'saved' ? '✓ Saved!' : bananaSaveState === 'error' ? '⚠ Retry' : '☁️ Save Video'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -865,13 +890,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
         {/* STEP 4: BANANA RECORDING APPLE */}
         {step === 'BANANA_RECORDING' && (
-          <div className="w-full h-full max-w-2xl flex flex-col items-center justify-between">
-            <div className="w-full bg-slate-800/80 rounded-2xl p-2.5 mb-2 text-center border border-slate-700">
+          <div className="w-full max-w-xl flex flex-col items-center justify-between gap-3">
+            <div className="w-full bg-slate-800/90 rounded-2xl p-3 text-center border border-slate-700">
               <span className="text-xs font-bold text-amber-400">🍌 Banana's Turn to Record:</span>
               <p className="text-sm font-black text-white">Hold camera steady! Apple is performing {skillName}.</p>
             </div>
 
-            <div className="relative w-full flex-1 max-h-[60vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
+            <div className="relative w-full h-56 sm:h-72 max-h-[40vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
               <video
                 ref={(el) => {
                   videoPreviewRef.current = el;
@@ -884,7 +909,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               />
               
               {isRecording && (
-                <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-slate-950 rounded-full text-xs font-black animate-pulse">
+                <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-slate-950 rounded-full text-xs font-black animate-pulse">
                   <div className="w-2.5 h-2.5 bg-slate-950 rounded-full" />
                   <span>RECORDING: {recordSeconds}s</span>
                 </div>
@@ -892,7 +917,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             </div>
 
             {/* Big Kid Record / Stop Button for Banana & Upload Video Option */}
-            <div className="w-full pt-3 flex flex-col items-center gap-2">
+            <div className="w-full flex flex-col items-center gap-2">
               <input
                 ref={uploadInputAppleRef}
                 type="file"
@@ -915,14 +940,14 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     <button
                       type="button"
                       onClick={() => handleStartRecording('Apple')}
-                      className="flex-1 py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-3xl text-sm md:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      className="flex-1 py-3.5 sm:py-4 bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 font-black rounded-2xl sm:rounded-3xl text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>Record Live 🎥</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => uploadInputAppleRef.current?.click()}
-                      className="px-5 py-4 bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 text-sm md:text-base font-bold rounded-3xl border border-slate-700 shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      className="px-4 sm:px-5 py-3.5 sm:py-4 bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 text-xs sm:text-sm font-bold rounded-2xl sm:rounded-3xl border border-slate-700 shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>📁 Upload Video</span>
                     </button>
@@ -942,32 +967,44 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
         {/* STEP 5: BANANA REVIEWS APPLE */}
         {step === 'BANANA_REVIEW' && (
-          <div className="w-full max-w-xl flex flex-col h-full justify-between pb-2 animate-fade-in">
-            <div className="bg-slate-800/90 p-3 rounded-2xl border border-slate-700 mb-2">
+          <div className="w-full max-w-xl flex flex-col pb-4 animate-fade-in">
+            <div className="bg-slate-800/90 p-3 rounded-2xl border border-slate-700 mb-3">
               <p className="text-xs font-bold text-amber-400">🍌 Banana, check Apple's movement:</p>
               <p className="text-xs text-slate-400">Watch the replay and check off the syllabus rules.</p>
             </div>
 
             {/* Video Replay with VideoAnalysisPlayer */}
-            {appleVideoUrl && (
-              <div className="w-full max-h-56 bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3 flex items-center justify-center">
+            {appleVideoUrl ? (
+              <div className="w-full aspect-video sm:aspect-auto sm:max-h-52 bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3 flex items-center justify-center">
                 <VideoAnalysisPlayer src={appleVideoUrl} label="Apple with AI Skeleton" />
+              </div>
+            ) : (
+              <div className="w-full bg-slate-800/60 rounded-2xl border-2 border-dashed border-amber-500/50 p-4 mb-3 flex flex-col items-center justify-center text-center gap-2">
+                <span className="text-2xl">📹</span>
+                <p className="text-xs font-bold text-slate-300">No video recorded for Apple yet</p>
+                <button
+                  type="button"
+                  onClick={() => uploadInputAppleRef.current?.click()}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>📁 Upload Video for Apple</span>
+                </button>
               </div>
             )}
 
             {/* MediaPipe Skeleton Freeze Frames */}
             {applePoseFrames.length > 0 && (
               <div className="mb-3">
-                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5 px-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1 px-1">
                   <span>AI Skeleton Motion Capture</span>
                   <span className="text-emerald-400 font-extrabold">✓ {applePoseFrames.length} Frames Tracked</span>
                 </div>
-                <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
                   {applePoseFrames.map((frame, i) => (
-                    <div key={i} className="relative shrink-0 w-24 h-24 rounded-2xl overflow-hidden border-2 border-amber-500/80 bg-black shadow-md">
+                    <div key={i} className="relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-amber-500/80 bg-black shadow-sm">
                       <img src={frame} alt={`Frame ${i + 1}`} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 bg-black/80 text-[10px] font-mono font-bold text-white rounded-md backdrop-blur-xs">
-                        Frame #{i + 1}
+                      <span className="absolute bottom-0.5 left-1 px-1 py-0.2 bg-black/80 text-[9px] font-mono font-bold text-white rounded backdrop-blur-xs">
+                        #{i + 1}
                       </span>
                     </div>
                   ))}
@@ -1002,11 +1039,11 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             </div>
 
             {/* MOE Syllabus Peer Cues List */}
-            <div className="space-y-2.5 flex-1 overflow-y-auto pr-1">
+            <div className="space-y-2 mb-3">
               {displayedCues.map((cue) => {
                 const isChecked = appleCues[cue.id];
                 return (
-                  <div key={cue.id} className="p-3 bg-slate-800/80 rounded-2xl border border-slate-700 flex items-center justify-between gap-3">
+                  <div key={cue.id} className="p-2.5 bg-slate-800/80 rounded-2xl border border-slate-700 flex items-center justify-between gap-2.5">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-mono font-black px-1.5 py-0.5 bg-slate-700 text-amber-300 rounded">
@@ -1015,7 +1052,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                         <span className="text-base">{cue.icon}</span>
                         <p className="text-xs font-black text-white leading-tight">{cue.kidFriendlyText}</p>
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-1 line-clamp-1 italic">
+                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
                         MOE Standard: {cue.syllabusCriterion}
                       </p>
                     </div>
@@ -1049,9 +1086,19 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               })}
             </div>
 
-            {/* Actions: Re-do or Submit to Teacher */}
-            <div className="flex flex-col gap-2 mt-3">
-              {/* Row 1: Backup saves */}
+            {/* Actions: Prominent Submit + Secondary Actions */}
+            <div className="flex flex-col gap-2 mt-2">
+              {/* PRIMARY ACTION BUTTON */}
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={handleSubmitSession}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 font-black rounded-2xl text-base shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                <span>{isSaving ? '🚀 Syncing to Teacher Review Tray…' : 'Send to Teacher Review Tray 🚀'}</span>
+              </button>
+
+              {/* SECONDARY ROW */}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -1062,53 +1109,31 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     setAppleSaveState('idle');
                     setStep('SWAP_PROMPT');
                   }}
-                  className="px-4 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl text-xs border border-slate-700 transition-all cursor-pointer"
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border border-slate-700 transition-all cursor-pointer text-center"
                 >
-                  ↺ Re-do {skillName}
+                  ↺ Re-record
                 </button>
 
-                {/* Save to Teacher — Apple's video, uploads instantly */}
-                {appleVideoBlob && (
-                  <button
-                    type="button"
-                    disabled={appleSaveState === 'saving' || appleSaveState === 'saved'}
-                    onClick={() => handleSaveToTeacher('apple')}
-                    className={`flex-1 py-3.5 font-bold rounded-2xl text-xs transition-all cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-1.5 ${
-                      appleSaveState === 'saved'
-                        ? 'bg-emerald-700 text-white'
-                        : appleSaveState === 'error'
-                        ? 'bg-red-700 text-white'
-                        : 'bg-sky-600 hover:bg-sky-500 text-white'
-                    }`}
-                  >
-                    {appleSaveState === 'saving' ? '⏳ Saving…' : appleSaveState === 'saved' ? '✓ Saved!' : appleSaveState === 'error' ? '⚠ Retry' : teacherId ? '☁️ Save to Teacher' : '💾 Save to iPad'}
-                  </button>
-                )}
-              </div>
+                <button
+                  type="button"
+                  onClick={() => uploadInputAppleRef.current?.click()}
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border border-slate-700 transition-all cursor-pointer text-center"
+                >
+                  📁 {appleVideoUrl ? 'Change Video' : 'Upload Video'}
+                </button>
 
-              {/* Row 2: Save locally (no review tray) or full submit */}
-              <div className="flex gap-2">
                 <button
                   type="button"
                   disabled={isSaving || isOfflineSaved}
                   onClick={handleSaveLocally}
-                  className={`px-4 py-3.5 font-bold rounded-2xl text-xs border transition-all cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5 ${
+                  className={`flex-1 py-3 font-bold rounded-xl text-xs border transition-all cursor-pointer text-center ${
                     isOfflineSaved
                       ? 'bg-slate-700 border-slate-600 text-emerald-400'
                       : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
                   }`}
-                  title="Save progress to this device without sending to the teacher review tray"
+                  title="Save copy directly to iPad storage"
                 >
-                  {isOfflineSaved ? '✓ Saved to iPad' : '💾 Save to iPad'}
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isSaving}
-                  onClick={handleSubmitSession}
-                  className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-500 font-black rounded-2xl text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <span>{isSaving ? 'Saving… ⏳' : 'Send to Teacher Review Tray 🚀'}</span>
+                  {isOfflineSaved ? '✓ Saved iPad' : '💾 Save iPad'}
                 </button>
               </div>
             </div>
