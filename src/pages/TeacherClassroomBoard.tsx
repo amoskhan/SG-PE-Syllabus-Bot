@@ -4,10 +4,12 @@ import {
   getAllSubmissions,
   PairSubmissionRecord,
   updateSubmissionStatus,
+  deleteSubmission,
 } from '../services/offline/offlineStorage';
 import {
   fetchTeacherSubmissions,
   updateCloudSubmissionStatus,
+  deleteCloudSubmission,
   backupSubmissionToSupabase,
 } from '../services/cloudSyncService';
 import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
@@ -164,6 +166,16 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   };
 
   const unapprovedCount = submissions.filter((s) => s.status === 'pending_sync').length;
+
+  const handleDelete = async (sub: PairSubmissionRecord) => {
+    if (!confirm(`Delete Pair #${sub.pairNumber} — ${sub.skillName}? This cannot be undone.`)) return;
+    await deleteSubmission(sub.id);
+    if (teacherId) {
+      await deleteCloudSubmission(sub.id);
+    }
+    setActiveReviewSub(null);
+    loadSubmissions();
+  };
 
   return (
     <div className="h-screen flex flex-col bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
@@ -482,6 +494,13 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                         ⭐ Quick Approve
                       </button>
                     )}
+                    <button
+                      onClick={() => handleDelete(sub)}
+                      className="px-2.5 py-2 bg-red-100 hover:bg-red-200 dark:bg-red-950 dark:hover:bg-red-900 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      title="Delete submission"
+                    >
+                      🗑️
+                    </button>
                   </div>
                 </div>
               ))}

@@ -191,3 +191,8 @@ export const getCachedLessonConfig = async () => {
   const db = await getDB();
   return db.get('lesson_cache', 'active_lesson');
 };
+
+export const deleteSubmission = async (id: string): Promise<void> => {
+  const db = await getDB();
+  await db.delete('submissions', id);
+};

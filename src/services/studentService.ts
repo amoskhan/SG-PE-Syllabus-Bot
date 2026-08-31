@@ -112,7 +112,8 @@ export const uploadGuestVideo = async (
     if (publicUrl) {
       // Upsert record to pair_submissions so teacher Review Tray on any device shows the clip live
       try {
-        const subId = `sub-${lessonId}-p${pairNumber}`;
+        const safeSkill = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const subId = `sub-${lessonId}-p${pairNumber}-${safeSkill}`;
         const updateData: Record<string, any> = {
           id: subId,
           lesson_id: lessonId,

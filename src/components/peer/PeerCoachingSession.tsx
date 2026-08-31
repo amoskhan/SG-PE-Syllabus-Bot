@@ -60,7 +60,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 }) => {
   const [step, setStep] = useState<Step>('APPLE_INTRO');
   const [isRecording, setIsRecording] = useState(false);
-  const [recordSecondsLeft, setRecordSecondsLeft] = useState(5);
+  const [recordSeconds, setRecordSeconds] = useState(0);
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
 
   // Turn 1 Data (Banana performs, Apple records)
@@ -226,7 +226,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     }
   };
 
-  // Start 5-Second Recording with Countdown
+  // Start Recording — student taps Stop when done (no fixed time limit)
   const handleStartRecording = (performer: 'Banana' | 'Apple') => {
     if (isRecording) return;
     currentPerformerRef.current = performer;
@@ -241,7 +241,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
     recordedChunksRef.current = [];
     setIsRecording(true);
-    setRecordSecondsLeft(5);
+    setRecordSeconds(0);
 
     // Initial snapshot at start
     setTimeout(() => captureLivePoseSnapshot(performer), 400);
@@ -281,17 +281,10 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       console.warn('Recording start error:', e);
     }
 
+    // Count-up timer — students stop manually when done
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setRecordSecondsLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          timerRef.current = null;
-          handleStopRecording();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setRecordSeconds((prev) => prev + 1);
     }, 1000);
   };
 
@@ -437,7 +430,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     };
 
     const submission: PairSubmissionRecord = {
-      id: `sub-${lessonId}-p${pairNumber}-${Date.now()}`,
+      id: `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`,
       lessonId,
       pairNumber,
       skillName,
@@ -544,7 +537,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               {isRecording && (
                 <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-red-600/90 text-white rounded-full text-xs font-bold animate-pulse">
                   <div className="w-2.5 h-2.5 bg-white rounded-full" />
-                  <span>RECORDING: {recordSecondsLeft}s</span>
+                  <span>RECORDING: {recordSeconds}s</span>
                 </div>
               )}
             </div>
@@ -558,7 +551,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                   className="w-full py-4 bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 text-base md:text-lg font-black rounded-3xl shadow-xl transition-all flex items-center justify-center gap-3 cursor-pointer animate-pulse"
                 >
                   <div className="w-4 h-4 bg-slate-950 rounded-xs" />
-                  <span>Done with {skillName}! Stop & Review ⏹️ ({recordSecondsLeft}s)</span>
+                  <span>Stop Recording ⏹️ ({recordSeconds}s)</span>
                 </button>
               ) : (
                 <div className="w-full flex flex-col gap-2">
@@ -568,7 +561,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     className="w-full py-4 bg-red-600 hover:bg-red-500 active:scale-98 text-white text-lg font-black rounded-3xl shadow-xl shadow-red-600/30 transition-all flex items-center justify-center gap-3 cursor-pointer"
                   >
                     <div className="w-4 h-4 bg-white rounded-full animate-ping" />
-                    <span>Tap to Record Banana (5s) 🎥</span>
+                    <span>Tap to Record Banana 🎥</span>
                   </button>
                   <button
                     type="button"
@@ -758,7 +751,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               onClick={() => handleStartRecording('Apple')}
               className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-lg shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Banana is Ready: Record Apple (5s) 🎥</span>
+              <span>Banana is Ready: Record Apple 🎥</span>
             </button>
           </div>
         )}
@@ -786,7 +779,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               {isRecording && (
                 <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-slate-950 rounded-full text-xs font-black animate-pulse">
                   <div className="w-2.5 h-2.5 bg-slate-950 rounded-full" />
-                  <span>RECORDING: {recordSecondsLeft}s</span>
+                  <span>RECORDING: {recordSeconds}s</span>
                 </div>
               )}
             </div>
@@ -800,7 +793,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                   className="w-full py-4 bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 text-base md:text-lg font-black rounded-3xl shadow-xl transition-all flex items-center justify-center gap-3 cursor-pointer animate-pulse"
                 >
                   <div className="w-4 h-4 bg-slate-950 rounded-xs" />
-                  <span>Done with {skillName}! Stop & Review ⏹️ ({recordSecondsLeft}s)</span>
+                  <span>Stop Recording ⏹️ ({recordSeconds}s)</span>
                 </button>
               ) : (
                 <div className="w-full flex flex-col gap-2">
@@ -809,7 +802,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     onClick={() => handleStartRecording('Apple')}
                     className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-lg shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Tap to Record Apple (5s) 🎥</span>
+                    <span>Tap to Record Apple 🎥</span>
                   </button>
                   <button
                     type="button"

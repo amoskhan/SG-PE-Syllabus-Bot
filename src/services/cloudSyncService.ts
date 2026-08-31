@@ -176,3 +176,20 @@ export async function updateCloudSubmissionStatus(
   }
 }
 
+/**
+ * Delete a submission from Supabase cloud by ID.
+ */
+export async function deleteCloudSubmission(id: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("pair_submissions")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("[CloudSync] deleteCloudSubmission error:", error);
+    }
+  } catch (e) {
+    console.error("[CloudSync] deleteCloudSubmission unexpected error:", e);
+  }
+}
