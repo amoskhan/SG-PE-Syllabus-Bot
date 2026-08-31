@@ -95,15 +95,18 @@ export async function backupSubmissionToSupabase(
  * Allows the teacher to view all student videos from any phone, laptop, or tablet.
  */
 export async function fetchTeacherSubmissions(
-  teacherId: string,
+  teacherId?: string,
   lessonId?: string,
 ): Promise<PairSubmissionRecord[]> {
   try {
     let query = supabase
       .from("pair_submissions")
       .select("*")
-      .or(`teacher_id.eq.${teacherId},teacher_id.is.null`)
       .order("created_at", { ascending: false });
+
+    if (teacherId) {
+      query = query.or(`teacher_id.eq.${teacherId},teacher_id.is.null`);
+    }
 
     if (lessonId) {
       query = query.eq("lesson_id", lessonId);

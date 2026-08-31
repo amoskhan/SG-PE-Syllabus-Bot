@@ -119,10 +119,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   const loadSubmissions = async () => {
     const deleted = deletedIdsRef.current;
 
-    let cloudSubs: PairSubmissionRecord[] = [];
-    if (teacherId) {
-      cloudSubs = await fetchTeacherSubmissions(teacherId);
-    }
+    const cloudSubs = await fetchTeacherSubmissions(teacherId);
     const localSubs = await getAllSubmissions();
 
     // Auto-sync any existing local submissions to Supabase cloud if teacher is logged in

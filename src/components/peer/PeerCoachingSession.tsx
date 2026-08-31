@@ -554,6 +554,21 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-white select-none">
+      {/* Global Hidden File Inputs for Apple & Banana Video Uploads */}
+      <input
+        ref={uploadInputBananaRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => handleVideoFileUpload(e, 'Banana')}
+      />
+      <input
+        ref={uploadInputAppleRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => handleVideoFileUpload(e, 'Apple')}
+      />
       
       {/* Top Bar: Role Indicators & Step Progress */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800 backdrop-blur-md">
@@ -630,13 +645,6 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
             {/* Big Kid Record / Stop Button & Upload Video Option */}
             <div className="w-full flex flex-col items-center gap-2">
-              <input
-                ref={uploadInputBananaRef}
-                type="file"
-                accept="video/*"
-                className="hidden"
-                onChange={(e) => handleVideoFileUpload(e, 'Banana')}
-              />
               {isRecording ? (
                 <button
                   type="button"
@@ -918,13 +926,6 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
             {/* Big Kid Record / Stop Button for Banana & Upload Video Option */}
             <div className="w-full flex flex-col items-center gap-2">
-              <input
-                ref={uploadInputAppleRef}
-                type="file"
-                accept="video/*"
-                className="hidden"
-                onChange={(e) => handleVideoFileUpload(e, 'Apple')}
-              />
               {isRecording ? (
                 <button
                   type="button"
