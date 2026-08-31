@@ -66,13 +66,15 @@ export async function backupSubmissionToSupabase(
     }
   }
 
+  const validTeacherId = (teacherId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(teacherId)) ? teacherId : null;
+
   try {
-    await supabase.from("pair_submissions").upsert({
+    const { error: upsertErr } = await supabase.from("pair_submissions").upsert({
       id: submission.id,
       lesson_id: submission.lessonId,
       pair_number: submission.pairNumber,
       skill_name: submission.skillName,
-      teacher_id: teacherId ?? null,
+      teacher_id: validTeacherId,
       pair_photo: submission.pairPhoto || null,
       banana_video_url: bananaVideoUrl || null,
       apple_video_url: appleVideoUrl || null,
@@ -83,11 +85,44 @@ export async function backupSubmissionToSupabase(
       status: submission.status,
       created_at: submission.createdAt,
     });
+    if (upsertErr) {
+      console.error("[CloudBackup] Supabase DB metadata sync error:", upsertErr);
+    } else {
+      console.log(`[CloudBackup] Successfully upserted submission ${submission.id} to Supabase ✓`);
+    }
   } catch (e) {
     console.warn("[CloudBackup] Supabase DB metadata sync note:", e);
   }
 
   return { bananaVideoUrl, appleVideoUrl };
+}
+
+function mapRowToSubmission(row: any): PairSubmissionRecord {
+  return {
+    id: row.id,
+    lessonId: row.lesson_id || 'pe-lesson-today',
+    pairNumber: row.pair_number || 1,
+    skillName: row.skill_name || 'Overhand Throw',
+    pairPhoto: row.pair_photo || '',
+    appleRole: {
+      studentPerformer: 'Banana',
+      evaluator: 'Apple',
+      videoUrl: row.banana_video_url || undefined,
+      cues: Array.isArray(row.banana_cues) ? row.banana_cues : [],
+    },
+    bananaRole: {
+      studentPerformer: 'Apple',
+      evaluator: 'Banana',
+      videoUrl: row.apple_video_url || undefined,
+      cues: Array.isArray(row.apple_cues) ? row.apple_cues : [],
+    },
+    aiStudentFeedback: row.ai_student_feedback || undefined,
+    aiTeacherReport: row.ai_teacher_report || undefined,
+    status: row.status || 'pending_sync',
+    teacherFeedback: row.teacher_feedback || undefined,
+    teacherStar: row.teacher_star || false,
+    createdAt: row.created_at || new Date().toISOString(),
+  };
 }
 
 /**
@@ -99,12 +134,14 @@ export async function fetchTeacherSubmissions(
   lessonId?: string,
 ): Promise<PairSubmissionRecord[]> {
   try {
+    const isValidUUID = teacherId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(teacherId);
+
     let query = supabase
       .from("pair_submissions")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (teacherId) {
+    if (isValidUUID) {
       query = query.or(`teacher_id.eq.${teacherId},teacher_id.is.null`);
     }
 
@@ -114,35 +151,20 @@ export async function fetchTeacherSubmissions(
 
     const { data, error } = await query;
     if (error) {
-      console.error("[CloudSync] fetchTeacherSubmissions error:", error);
-      return [];
+      console.warn("[CloudSync] fetchTeacherSubmissions filtered query error, trying unconditional fetch:", error);
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from("pair_submissions")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (fallbackError) {
+        console.error("[CloudSync] fetchTeacherSubmissions fallback error:", fallbackError);
+        return [];
+      }
+      return (fallbackData || []).map(mapRowToSubmission);
     }
 
-    return (data || []).map((row: any): PairSubmissionRecord => ({
-      id: row.id,
-      lessonId: row.lesson_id || 'pe-lesson-today',
-      pairNumber: row.pair_number || 1,
-      skillName: row.skill_name || 'Overhand Throw',
-      pairPhoto: row.pair_photo || '',
-      appleRole: {
-        studentPerformer: 'Banana',
-        evaluator: 'Apple',
-        videoUrl: row.banana_video_url || undefined,
-        cues: Array.isArray(row.banana_cues) ? row.banana_cues : [],
-      },
-      bananaRole: {
-        studentPerformer: 'Apple',
-        evaluator: 'Banana',
-        videoUrl: row.apple_video_url || undefined,
-        cues: Array.isArray(row.apple_cues) ? row.apple_cues : [],
-      },
-      aiStudentFeedback: row.ai_student_feedback || undefined,
-      aiTeacherReport: row.ai_teacher_report || undefined,
-      status: row.status || 'pending_sync',
-      teacherFeedback: row.teacher_feedback || undefined,
-      teacherStar: row.teacher_star || false,
-      createdAt: row.created_at || new Date().toISOString(),
-    }));
+    return (data || []).map(mapRowToSubmission);
   } catch (e) {
     console.error("[CloudSync] fetchTeacherSubmissions unexpected error:", e);
     return [];

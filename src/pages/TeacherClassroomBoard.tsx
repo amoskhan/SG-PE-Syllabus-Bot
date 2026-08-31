@@ -417,9 +417,19 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 Review peer ratings and AI motion analysis before publishing to class portfolio
               </p>
             </div>
-            <span className="px-3.5 py-1.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-full font-black text-xs">
-              {submissions.length} Total Submissions
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={loadSubmissions}
+                className="px-3 py-1.5 bg-slate-200 dark:bg-zinc-800 hover:bg-slate-300 dark:hover:bg-zinc-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+              <span className="px-3.5 py-1.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-full font-black text-xs">
+                {submissions.length} Total Submissions
+              </span>
+            </div>
           </div>
 
           {submissions.length === 0 ? (
