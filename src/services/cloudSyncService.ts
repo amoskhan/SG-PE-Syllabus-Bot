@@ -177,19 +177,67 @@ export async function updateCloudSubmissionStatus(
 }
 
 /**
- * Delete a submission from Supabase cloud by ID.
+ * Extracts the storage object path from a Supabase public storage URL.
+ * e.g. "https://xyz.supabase.co/storage/v1/object/public/student-videos/path/to/file.mp4"
+ *   → "path/to/file.mp4"
+ * Returns null if the URL doesn't match the expected Supabase storage pattern.
  */
-export async function deleteCloudSubmission(id: string): Promise<void> {
+function extractStoragePath(url: string): string | null {
+  try {
+    const marker = '/student-videos/';
+    const idx = url.indexOf(marker);
+    if (idx === -1) return null;
+    // Decode URI components and strip any query string
+    return decodeURIComponent(url.slice(idx + marker.length).split('?')[0]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Delete a submission from Supabase cloud — removes both the video files from
+ * Storage AND the metadata row from the pair_submissions table.
+ */
+export async function deleteCloudSubmission(
+  id: string,
+  submission?: PairSubmissionRecord,
+): Promise<void> {
+  // 1. Delete video files from Storage (if we have the URLs)
+  if (submission) {
+    const videoUrls = [
+      submission.appleRole.videoUrl,
+      submission.bananaRole.videoUrl,
+    ].filter(Boolean) as string[];
+
+    const paths = videoUrls.map(extractStoragePath).filter(Boolean) as string[];
+
+    if (paths.length > 0) {
+      try {
+        const { error: storageError } = await supabase.storage
+          .from('student-videos')
+          .remove(paths);
+        if (storageError) {
+          console.warn('[CloudSync] Storage file deletion partial error:', storageError.message);
+        } else {
+          console.log(`[CloudSync] Deleted ${paths.length} storage file(s) for submission ${id}`);
+        }
+      } catch (e) {
+        console.warn('[CloudSync] Storage deletion unexpected error:', e);
+      }
+    }
+  }
+
+  // 2. Delete the metadata row from pair_submissions
   try {
     const { error } = await supabase
-      .from("pair_submissions")
+      .from('pair_submissions')
       .delete()
-      .eq("id", id);
+      .eq('id', id);
 
     if (error) {
-      console.error("[CloudSync] deleteCloudSubmission error:", error);
+      console.error('[CloudSync] deleteCloudSubmission DB error:', error);
     }
   } catch (e) {
-    console.error("[CloudSync] deleteCloudSubmission unexpected error:", e);
+    console.error('[CloudSync] deleteCloudSubmission unexpected error:', e);
   }
 }

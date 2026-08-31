@@ -86,6 +86,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const uploadInputBananaRef = useRef<HTMLInputElement>(null); // file upload for Banana performer
+  const uploadInputAppleRef = useRef<HTMLInputElement>(null);  // file upload for Apple performer
   const allCues: PeerSyllabusCue[] = getAllCuesForSkill(skillName);
   const coreCues: PeerSyllabusCue[] = getCoreCuesForSkill(skillName);
   const displayedCues = showFullChecklist ? allCues : coreCues;
@@ -335,6 +337,25 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       if (videoUrl) setAppleVideoUrl(videoUrl);
       setStep('BANANA_REVIEW');
     }
+  };
+
+  const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>, performer: 'Banana' | 'Apple') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const videoUrl = URL.createObjectURL(file);
+    if (performer === 'Banana') {
+      setBananaVideoBlob(file);
+      setBananaVideoUrl(videoUrl);
+      extractPoseFrames(file, setBananaPoseFrames);
+      setStep('APPLE_REVIEW');
+    } else {
+      setAppleVideoBlob(file);
+      setAppleVideoUrl(videoUrl);
+      extractPoseFrames(file, setApplePoseFrames);
+      setStep('BANANA_REVIEW');
+    }
+    e.target.value = '';
   };
 
   // Extract keyframes and overlay local MediaPipe pose skeleton safely
@@ -603,8 +624,15 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               )}
             </div>
 
-            {/* Big Kid Record / Stop Button */}
+            {/* Big Kid Record / Stop Button & Upload Video Option */}
             <div className="w-full pt-3 flex flex-col items-center gap-2">
+              <input
+                ref={uploadInputBananaRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => handleVideoFileUpload(e, 'Banana')}
+              />
               {isRecording ? (
                 <button
                   type="button"
@@ -616,14 +644,23 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 </button>
               ) : (
                 <div className="w-full flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleStartRecording('Banana')}
-                    className="w-full py-4 bg-red-600 hover:bg-red-500 active:scale-98 text-white text-lg font-black rounded-3xl shadow-xl shadow-red-600/30 transition-all flex items-center justify-center gap-3 cursor-pointer"
-                  >
-                    <div className="w-4 h-4 bg-white rounded-full animate-ping" />
-                    <span>Tap to Record Banana 🎥</span>
-                  </button>
+                  <div className="flex gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={() => handleStartRecording('Banana')}
+                      className="flex-1 py-4 bg-red-600 hover:bg-red-500 active:scale-98 text-white text-sm md:text-base font-black rounded-3xl shadow-xl shadow-red-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <div className="w-3.5 h-3.5 bg-white rounded-full animate-ping" />
+                      <span>Record Live 🎥</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => uploadInputBananaRef.current?.click()}
+                      className="px-5 py-4 bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 text-sm md:text-base font-bold rounded-3xl border border-slate-700 shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span>📁 Upload Video</span>
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => finalizeRecording('Banana')}
@@ -807,13 +844,22 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => handleStartRecording('Apple')}
-              className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-lg shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>Banana is Ready: Record Apple 🎥</span>
-            </button>
+            <div className="flex flex-col gap-2 w-full">
+              <button
+                type="button"
+                onClick={() => handleStartRecording('Apple')}
+                className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-lg shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Record Apple Live 🎥</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => uploadInputAppleRef.current?.click()}
+                className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-2xl text-sm border border-slate-600 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>📁 Or Upload Video of Apple</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -845,8 +891,15 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               )}
             </div>
 
-            {/* Big Kid Record / Stop Button for Banana */}
+            {/* Big Kid Record / Stop Button for Banana & Upload Video Option */}
             <div className="w-full pt-3 flex flex-col items-center gap-2">
+              <input
+                ref={uploadInputAppleRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => handleVideoFileUpload(e, 'Apple')}
+              />
               {isRecording ? (
                 <button
                   type="button"
@@ -858,13 +911,22 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 </button>
               ) : (
                 <div className="w-full flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleStartRecording('Apple')}
-                    className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-lg shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>Tap to Record Apple 🎥</span>
-                  </button>
+                  <div className="flex gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={() => handleStartRecording('Apple')}
+                      className="flex-1 py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-3xl text-sm md:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span>Record Live 🎥</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => uploadInputAppleRef.current?.click()}
+                      className="px-5 py-4 bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 text-sm md:text-base font-bold rounded-3xl border border-slate-700 shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span>📁 Upload Video</span>
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => finalizeRecording('Apple')}

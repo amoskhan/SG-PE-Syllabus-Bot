@@ -186,9 +186,10 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     // 3. Delete from local IndexedDB
     await deleteSubmission(sub.id);
 
-    // 4. Delete from Supabase cloud (requires DELETE RLS policy — see supabase_add_delete_policy.sql)
+    // 4. Delete from Supabase cloud — removes video files from Storage AND the DB row
+    // Requires DELETE RLS policy — see supabase_add_delete_policy.sql
     if (teacherId) {
-      await deleteCloudSubmission(sub.id);
+      await deleteCloudSubmission(sub.id, sub);
     }
   };
 
