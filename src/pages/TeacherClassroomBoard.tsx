@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import {
   getAllSubmissions,
@@ -76,6 +76,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   const [submissions, setSubmissions] = useState<PairSubmissionRecord[]>([]);
   const [activeReviewSub, setActiveReviewSub] = useState<PairSubmissionRecord | null>(null);
   const [teacherFeedbackText, setTeacherFeedbackText] = useState('');
+  // Track IDs optimistically deleted so the 3s polling loop doesn't re-add them
+  const deletedIdsRef = useRef<Set<string>>(new Set());
 
   // Mock live check-in statuses for pairs (1 to 15)
   const [pairStatuses, setPairStatuses] = useState<
@@ -115,6 +117,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   }, [teacherId]);
 
   const loadSubmissions = async () => {
+    const deleted = deletedIdsRef.current;
+
     let cloudSubs: PairSubmissionRecord[] = [];
     if (teacherId) {
       cloudSubs = await fetchTeacherSubmissions(teacherId);
@@ -122,21 +126,23 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     const localSubs = await getAllSubmissions();
 
     // Auto-sync any existing local submissions to Supabase cloud if teacher is logged in
+    // Skip deleted ones so they don't get re-uploaded
     if (teacherId && localSubs.length > 0) {
       for (const localSub of localSubs) {
-        if (!cloudSubs.some((c) => c.id === localSub.id)) {
+        if (!deleted.has(localSub.id) && !cloudSubs.some((c) => c.id === localSub.id)) {
           backupSubmissionToSupabase(localSub, teacherId).catch(console.warn);
         }
       }
     }
 
     // Merge cloud and local submissions by id (cloud takes precedence for cross-device sync)
+    // Exclude any optimistically deleted IDs
     const subMap = new Map<string, PairSubmissionRecord>();
     for (const sub of localSubs) {
-      subMap.set(sub.id, sub);
+      if (!deleted.has(sub.id)) subMap.set(sub.id, sub);
     }
     for (const sub of cloudSubs) {
-      subMap.set(sub.id, sub);
+      if (!deleted.has(sub.id)) subMap.set(sub.id, sub);
     }
     const merged = Array.from(subMap.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -169,12 +175,21 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   const handleDelete = async (sub: PairSubmissionRecord) => {
     if (!confirm(`Delete Pair #${sub.pairNumber} — ${sub.skillName}? This cannot be undone.`)) return;
+
+    // 1. Register ID immediately so the 3s polling loop skips it going forward
+    deletedIdsRef.current.add(sub.id);
+
+    // 2. Optimistically remove from UI state right away — don't wait for async
+    setSubmissions((prev) => prev.filter((s) => s.id !== sub.id));
+    setActiveReviewSub(null);
+
+    // 3. Delete from local IndexedDB
     await deleteSubmission(sub.id);
+
+    // 4. Delete from Supabase cloud (requires DELETE RLS policy — see supabase_add_delete_policy.sql)
     if (teacherId) {
       await deleteCloudSubmission(sub.id);
     }
-    setActiveReviewSub(null);
-    loadSubmissions();
   };
 
   return (

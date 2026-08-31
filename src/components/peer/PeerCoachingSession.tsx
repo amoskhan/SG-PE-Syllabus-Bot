@@ -9,6 +9,7 @@ import {
   queuePairSubmission,
   PairSubmissionRecord,
   PeerCueResult,
+  getDB,
 } from '../../services/offline/offlineStorage';
 import { backupSubmissionToSupabase } from '../../services/cloudSyncService';
 import { uploadGuestVideo } from '../../services/studentService';
@@ -399,20 +400,80 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   };
 
   /**
-   * Instantly upload a single recorded video to the teacher's Supabase bucket.
-   * Students can do this right after recording — no peer assessment required.
+   * Upload a single recorded video to the teacher's Supabase bucket (cloud backup).
+   * If no teacherId (QR not scanned), falls back to saving locally to IndexedDB.
    */
   const handleSaveToTeacher = async (performer: 'banana' | 'apple') => {
-    if (!teacherId) return; // No teacher ID from QR — skip cloud save
     const blob = performer === 'banana' ? bananaVideoBlob : appleVideoBlob;
     if (!blob) return;
     const setState = performer === 'banana' ? setBananaSaveState : setAppleSaveState;
     setState('saving');
     try {
-      const url = await uploadGuestVideo(blob, teacherId, lessonId, pairNumber, performer, skillName, pairPhoto);
-      setState(url ? 'saved' : 'error');
+      if (teacherId) {
+        // Cloud upload path
+        const url = await uploadGuestVideo(blob, teacherId, lessonId, pairNumber, performer, skillName, pairPhoto);
+        setState(url ? 'saved' : 'error');
+      } else {
+        // No QR / no teacherId — save video blob to local submission in IndexedDB as backup
+        const safeSkill = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const localId = `sub-${lessonId}-p${pairNumber}-${safeSkill}`;
+        const db = await getDB();
+        const existing = await db.get('submissions', localId);
+        if (existing) {
+          if (performer === 'banana') existing.appleRole = { ...existing.appleRole, videoBlob: blob };
+          else existing.bananaRole = { ...existing.bananaRole, videoBlob: blob };
+          await db.put('submissions', existing);
+        }
+        setState('saved');
+      }
     } catch {
       setState('error');
+    }
+  };
+
+  /**
+   * Save full session to iPad (IndexedDB) WITHOUT submitting to the teacher's review tray.
+   * Useful when students want a local backup or teacher hasn't set up the lesson QR yet.
+   */
+  const handleSaveLocally = async () => {
+    setIsSaving(true);
+    const mapCues = (rated: Record<string, boolean>): PeerCueResult[] =>
+      allCues.map((c) => ({
+        cueIndex: c.itemNumber,
+        criterionText: c.syllabusCriterion,
+        isObserved: rated[c.id] ?? false,
+      }));
+
+    const submission: PairSubmissionRecord = {
+      id: `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`,
+      lessonId,
+      pairNumber,
+      skillName,
+      pairPhoto,
+      appleRole: {
+        studentPerformer: 'Banana',
+        evaluator: 'Apple',
+        videoBlob: bananaVideoBlob || undefined,
+        cues: mapCues(bananaCues),
+      },
+      bananaRole: {
+        studentPerformer: 'Apple',
+        evaluator: 'Banana',
+        videoBlob: appleVideoBlob || undefined,
+        cues: mapCues(appleCues),
+      },
+      status: 'pending_sync',
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      await queuePairSubmission(submission);
+      setIsOfflineSaved(true);
+      // Show brief success without moving to SESSION_COMPLETED so student can still formally submit
+    } catch (e) {
+      console.error('Local save failed:', e);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -702,7 +763,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               </button>
 
               {/* Save to Teacher — uploads instantly, independent of peer assessment */}
-              {teacherId && bananaVideoBlob && (
+              {bananaVideoBlob && (
                 <button
                   type="button"
                   disabled={bananaSaveState === 'saving' || bananaSaveState === 'saved'}
@@ -715,7 +776,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                       : 'bg-sky-600 hover:bg-sky-500 text-white'
                   }`}
                 >
-                  {bananaSaveState === 'saving' ? '⏳ Saving…' : bananaSaveState === 'saved' ? '✓ Saved!' : bananaSaveState === 'error' ? '⚠ Retry' : '💾 Save to Teacher'}
+                  {bananaSaveState === 'saving' ? '⏳ Saving…' : bananaSaveState === 'saved' ? '✓ Saved!' : bananaSaveState === 'error' ? '⚠ Retry' : teacherId ? '☁️ Save to Teacher' : '💾 Save to iPad'}
                 </button>
               )}
 
@@ -927,47 +988,67 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             </div>
 
             {/* Actions: Re-do or Submit to Teacher */}
-            <div className="flex gap-2 mt-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setAppleVideoUrl(null);
-                  setAppleVideoBlob(null);
-                  setApplePoseFrames([]);
-                  setAppleSaveState('idle');
-                  setStep('SWAP_PROMPT');
-                }}
-                className="px-4 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl text-xs border border-slate-700 transition-all cursor-pointer"
-              >
-                ↺ Re-do {skillName}
-              </button>
-
-              {/* Save to Teacher — Apple's video, uploads instantly */}
-              {teacherId && appleVideoBlob && (
+            <div className="flex flex-col gap-2 mt-3">
+              {/* Row 1: Backup saves */}
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  disabled={appleSaveState === 'saving' || appleSaveState === 'saved'}
-                  onClick={() => handleSaveToTeacher('apple')}
-                  className={`px-4 py-3.5 font-bold rounded-2xl text-xs transition-all cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5 ${
-                    appleSaveState === 'saved'
-                      ? 'bg-emerald-700 text-white'
-                      : appleSaveState === 'error'
-                      ? 'bg-red-700 text-white'
-                      : 'bg-sky-600 hover:bg-sky-500 text-white'
-                  }`}
+                  onClick={() => {
+                    setAppleVideoUrl(null);
+                    setAppleVideoBlob(null);
+                    setApplePoseFrames([]);
+                    setAppleSaveState('idle');
+                    setStep('SWAP_PROMPT');
+                  }}
+                  className="px-4 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl text-xs border border-slate-700 transition-all cursor-pointer"
                 >
-                  {appleSaveState === 'saving' ? '⏳ Saving…' : appleSaveState === 'saved' ? '✓ Saved!' : appleSaveState === 'error' ? '⚠ Retry' : '💾 Save to Teacher'}
+                  ↺ Re-do {skillName}
                 </button>
-              )}
 
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={handleSubmitSession}
-                className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-500 font-black rounded-2xl text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                <span>{isSaving ? 'Saving to iPad… ⏳' : 'Send to Teacher Review Tray 🚀'}</span>
-              </button>
+                {/* Save to Teacher — Apple's video, uploads instantly */}
+                {appleVideoBlob && (
+                  <button
+                    type="button"
+                    disabled={appleSaveState === 'saving' || appleSaveState === 'saved'}
+                    onClick={() => handleSaveToTeacher('apple')}
+                    className={`flex-1 py-3.5 font-bold rounded-2xl text-xs transition-all cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-1.5 ${
+                      appleSaveState === 'saved'
+                        ? 'bg-emerald-700 text-white'
+                        : appleSaveState === 'error'
+                        ? 'bg-red-700 text-white'
+                        : 'bg-sky-600 hover:bg-sky-500 text-white'
+                    }`}
+                  >
+                    {appleSaveState === 'saving' ? '⏳ Saving…' : appleSaveState === 'saved' ? '✓ Saved!' : appleSaveState === 'error' ? '⚠ Retry' : teacherId ? '☁️ Save to Teacher' : '💾 Save to iPad'}
+                  </button>
+                )}
+              </div>
+
+              {/* Row 2: Save locally (no review tray) or full submit */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving || isOfflineSaved}
+                  onClick={handleSaveLocally}
+                  className={`px-4 py-3.5 font-bold rounded-2xl text-xs border transition-all cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5 ${
+                    isOfflineSaved
+                      ? 'bg-slate-700 border-slate-600 text-emerald-400'
+                      : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+                  }`}
+                  title="Save progress to this device without sending to the teacher review tray"
+                >
+                  {isOfflineSaved ? '✓ Saved to iPad' : '💾 Save to iPad'}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleSubmitSession}
+                  className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-500 font-black rounded-2xl text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <span>{isSaving ? 'Saving… ⏳' : 'Send to Teacher Review Tray 🚀'}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
