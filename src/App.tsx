@@ -320,6 +320,9 @@ const App: React.FC = () => {
   const [activePeerSessionData, setActivePeerSessionData] = useState<CompletedPeerSession | null>(null);
   const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
   const lastSeenTeacherFeedbackRef = useRef<string | null>(null);
+  // Set once we confirm the active pair has already submitted a recording — enables the
+  // "back to AI Coach chat" path on the home screen so the student can see teacher feedback.
+  const [activePairSubmission, setActivePairSubmission] = useState<PairSubmissionRecord | null>(null);
 
   const handlePeerSessionToChat = async (data: CompletedPeerSession) => {
     setActivePeerSessionData(data);
@@ -515,6 +518,21 @@ const App: React.FC = () => {
       console.warn(`[PeerAnalyze] ${performer}: no video clip available (memory wiped + cloud fetch failed) — falling back to ${files?.length ?? 0} pose frames`);
     }
 
+    if (!files || files.length === 0) {
+      updateSessionAndSync(currentSessionIdRef.current, session => ({
+        ...session,
+        messages: [...session.messages, {
+          id: `no-media-${Date.now()}`,
+          sender: Sender.BOT,
+          timestamp: new Date(),
+          text: `⚠️ I couldn't load ${performer}'s recording for analysis. Tap **📹 Record again** to capture a fresh attempt, then try analysing.`,
+          isError: true,
+        }],
+        updatedAt: new Date(),
+      }));
+      return;
+    }
+
     // Peer flow has no individual student context — don't let a stale ref mis-save the analysis
     activeStudentContextRef.current = null;
 
@@ -620,6 +638,81 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePairSession?.pairNumber, activePairSession?.lessonId, activePeerSessionData, appMode]);
+
+  // Check whether the active (restored) pair already submitted a recording — so the home
+  // screen can offer "back to AI Coach chat" instead of only "record again".
+  useEffect(() => {
+    const pair = activePairSession;
+    if (!pair) { setActivePairSubmission(null); return; }
+    const skillName = pair.skillName || scannedLessonData.skillName || 'Overhand Throw';
+    const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
+    let cancelled = false;
+    (async () => {
+      let sub: PairSubmissionRecord | null = null;
+      try { sub = (await (await getDB()).get('submissions', subId)) as PairSubmissionRecord ?? null; } catch { /* ignore */ }
+      if (!sub) {
+        try {
+          const { data } = await supabase.from('pair_submissions').select('*').eq('id', subId).maybeSingle();
+          if (data) sub = data as unknown as PairSubmissionRecord;
+        } catch { /* ignore */ }
+      }
+      if (!cancelled) setActivePairSubmission(sub);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePairSession?.pairNumber, activePairSession?.lessonId, appMode]);
+
+  const peerCuesToMap = (skillName: string, list?: { cueIndex: number; isObserved: boolean }[]): Record<string, boolean> => {
+    const cues = OFFICIAL_FMS_PEER_CUES[skillName] || [];
+    return Object.fromEntries(
+      cues.map(c => [c.id, !!list?.find(r => r.cueIndex === c.itemNumber)?.isObserved])
+    );
+  };
+
+  // Restore the Practice Station chat (AI coach + teacher feedback) for a pair that has
+  // already recorded. Video clips are re-fetched from Supabase on demand.
+  const handleResumePracticeChat = async () => {
+    const pair = activePairSession;
+    if (!pair) return;
+    const skillName = pair.skillName || activePairSubmission?.skillName || scannedLessonData.skillName || 'Overhand Throw';
+    const sub = activePairSubmission;
+
+    setActivePeerSessionData({
+      pairNumber: pair.pairNumber,
+      lessonId: pair.lessonId,
+      skillName,
+      pairPhoto: pair.pairPhoto || sub?.pairPhoto || '',
+      applePoseFrames: [],
+      bananaPoseFrames: [],
+      appleCues: peerCuesToMap(skillName, sub?.bananaRole?.cues),
+      bananaCues: peerCuesToMap(skillName, sub?.appleRole?.cues),
+    });
+
+    // Reuse the pair's existing chat if it's still in the list, else start a fresh one
+    const existing = sessions.find(
+      s => s.id.startsWith(`peer-coach-p${pair.pairNumber}-`) || (s.title || '').includes(`Pair #${pair.pairNumber}`)
+    );
+    if (existing) {
+      setCurrentSessionId(existing.id);
+      currentSessionIdRef.current = existing.id;
+    } else {
+      const id = `peer-coach-p${pair.pairNumber}-${Date.now()}`;
+      const welcome: Message = {
+        id: `resume-${Date.now()}`,
+        sender: Sender.BOT,
+        timestamp: new Date(),
+        text: `## 🍎🍌 Practice Station — Pair #${pair.pairNumber}\n\nWelcome back! Tap **🍌 Analyze Banana's Form** or **🍎 Analyze Apple's Form** for a full AI grading, then **📤 Send to Teacher for Grading**. Your teacher's feedback shows up here.`,
+        hasMedia: false,
+      };
+      setSessions(prev => [
+        { id, title: `🍎🍌 Pair #${pair.pairNumber} - ${skillName}`, messages: [welcome], createdAt: new Date(), updatedAt: new Date() },
+        ...prev,
+      ]);
+      setCurrentSessionId(id);
+      currentSessionIdRef.current = id;
+    }
+    setAppMode('chat');
+  };
 
   // Shared handler for both PairCheckInModal instances — merges QR context, then
   // syncs the check-in to Supabase so the teacher's board (another device) shows it live.
@@ -1558,28 +1651,51 @@ const App: React.FC = () => {
 
               {/* Resume banner — only shown if there's a saved pair session */}
               {activePairSession && (
-                <button
-                  type="button"
-                  onClick={() => setAppMode('peer_coaching')}
-                  className="group w-full text-left bg-emerald-600/90 hover:bg-emerald-500 hover:scale-[1.02] active:scale-[0.97] rounded-2xl px-5 py-3.5 flex items-center gap-3 shadow-lg shadow-emerald-900/30 transition-all duration-200 cursor-pointer border border-emerald-400/30"
-                >
-                  <span className="text-2xl">▶️</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-black text-sm leading-tight">Resume Pair #{activePairSession.pairNumber}</p>
-                    <p className="text-emerald-200 text-xs font-medium truncate">Continue your active session</p>
+                <div className="w-full bg-emerald-600/90 rounded-2xl px-4 py-3.5 shadow-lg shadow-emerald-900/30 border border-emerald-400/30 flex flex-col gap-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🍎🍌</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-black text-sm leading-tight">Pair #{activePairSession.pairNumber} — active session</p>
+                      <p className="text-emerald-100/90 text-xs font-medium truncate">
+                        {activePairSubmission ? 'Recording submitted · see your AI coach & teacher feedback' : 'Continue where you left off'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await clearActivePairSession();
+                        setActivePairSession(null);
+                        setActivePeerSessionData(null);
+                      }}
+                      className="text-emerald-200 hover:text-white text-xs font-bold px-2 py-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                    >
+                      Clear ✕
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      await clearActivePairSession();
-                      setActivePairSession(null);
-                    }}
-                    className="text-emerald-300 hover:text-white text-xs font-bold px-2 py-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-                  >
-                    Clear ✕
-                  </button>
-                </button>
+                  <div className="flex gap-2">
+                    {activePairSubmission && (
+                      <button
+                        type="button"
+                        onClick={handleResumePracticeChat}
+                        className="flex-[1.3] px-3 py-2.5 bg-white text-emerald-700 hover:bg-emerald-50 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <span>💬</span><span>AI Coach &amp; Feedback</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setAppMode('peer_coaching')}
+                      className={`px-3 py-2.5 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                        activePairSubmission
+                          ? 'flex-1 bg-emerald-500/40 hover:bg-emerald-500/60 text-white border border-emerald-300/40'
+                          : 'flex-1 bg-white text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      <span>📹</span><span>{activePairSubmission ? 'Record again' : 'Continue recording'}</span>
+                    </button>
+                  </div>
+                </div>
               )}
 
               {/* Student Card — always opens QR scanner for a fresh start */}
@@ -1776,32 +1892,32 @@ const App: React.FC = () => {
           const bananaTotal = Object.keys(bananaCues).length;
           return (
           <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 border-b border-indigo-500/40 px-3 md:px-5 py-3 shrink-0 z-40 shadow-lg">
-            <div className="max-w-5xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="max-w-5xl mx-auto flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
               {/* Left: identity + AI pill + peer cue scores */}
-              <div className="flex items-start gap-3 min-w-0">
-                <span className="text-2xl shrink-0">🍎🍌</span>
+              <div className="flex items-start gap-2.5 min-w-0">
+                <span className="text-xl shrink-0">🍎🍌</span>
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2.5 py-0.5 bg-indigo-500/30 text-indigo-200 font-black text-xs rounded-full border border-indigo-400/40">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="px-2 py-0.5 bg-indigo-500/30 text-indigo-200 font-black text-[11px] rounded-full border border-indigo-400/40">
                       Pair #{activePeerSessionData.pairNumber}
                     </span>
-                    <p className="text-sm font-black text-white truncate">
-                      {activePeerSessionData.skillName} Practice Station
+                    <p className="text-sm font-black text-white">
+                      {activePeerSessionData.skillName} · Practice Station
                     </p>
                   </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[11px] font-bold border border-emerald-400/30">
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[10px] font-bold border border-emerald-400/30">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       AI Coach active
                     </span>
                     {appleTotal > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[11px] font-bold">
-                        🍎 {appleMet}/{appleTotal} cues
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[10px] font-bold">
+                        🍎 {appleMet}/{appleTotal}
                       </span>
                     )}
                     {bananaTotal > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[11px] font-bold">
-                        🍌 {bananaMet}/{bananaTotal} cues
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[10px] font-bold">
+                        🍌 {bananaMet}/{bananaTotal}
                       </span>
                     )}
                   </div>
@@ -1809,23 +1925,23 @@ const App: React.FC = () => {
               </div>
 
               {/* Right: model choice for AI analysis + primary actions */}
-              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
                 <ModelPicker selectedModel={selectedModel} onSelect={setSelectedModel} align="right" variant="dark" />
                 <button
                   type="button"
                   onClick={() => setAppMode('peer_coaching')}
-                  className="flex-1 sm:flex-none px-3 sm:px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
-                  <span className="sm:hidden">🎥 Record</span>
-                  <span className="hidden sm:inline">🎥 Record New Attempt</span>
+                  <span className="lg:hidden">🎥 Record</span>
+                  <span className="hidden lg:inline">🎥 Record New Attempt</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setAppMode('teacher_board')}
-                  className="flex-1 sm:flex-none px-3 sm:px-3.5 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+                  className="px-3 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
                 >
-                  <span className="sm:hidden">🏫 Board</span>
-                  <span className="hidden sm:inline">🏫 Teacher Board</span>
+                  <span className="lg:hidden">🏫 Board</span>
+                  <span className="hidden lg:inline">🏫 Teacher Board</span>
                 </button>
               </div>
             </div>
