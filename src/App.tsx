@@ -23,7 +23,7 @@ import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal'
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
@@ -584,6 +584,22 @@ const App: React.FC = () => {
       if (priorUser && /\bbanana\b/i.test(priorUser.text)) performer = 'Banana';
     }
 
+    // Peer ratings still held in the live session. The per-clip "Save to Teacher" button
+    // (uploadGuestVideo) creates the submission row without cues, so if the pair never
+    // tapped the final "Submit to Teacher" the checklist would otherwise never reach the
+    // teacher's board. Carry it here so this path is self-sufficient.
+    const ratedToCueResults = (rated?: Record<string, boolean>): PeerCueResult[] => {
+      if (!rated || Object.keys(rated).length === 0) return [];
+      return getAllCuesForSkill(skillName).map(c => ({
+        cueIndex: c.itemNumber,
+        criterionText: c.syllabusCriterion,
+        isObserved: !!rated[c.id],
+      }));
+    };
+    // appleRole = Apple evaluating Banana, so it carries the ratings ABOUT Banana.
+    const bananaPerformerCues = ratedToCueResults(activePeerSessionData?.bananaCues);
+    const applePerformerCues = ratedToCueResults(activePeerSessionData?.appleCues);
+
     const db = await getDB();
     let record = await db.get('submissions', subId) as PairSubmissionRecord | undefined;
     if (!record) {
@@ -593,11 +609,19 @@ const App: React.FC = () => {
         pairNumber: ctx.pairNumber,
         skillName,
         pairPhoto: ctx.pairPhoto,
-        appleRole: { studentPerformer: 'Banana', evaluator: 'Apple', cues: [] },
-        bananaRole: { studentPerformer: 'Apple', evaluator: 'Banana', cues: [] },
+        appleRole: { studentPerformer: 'Banana', evaluator: 'Apple', cues: bananaPerformerCues },
+        bananaRole: { studentPerformer: 'Apple', evaluator: 'Banana', cues: applePerformerCues },
         status: 'pending_sync',
         createdAt: new Date().toISOString(),
       };
+    } else {
+      // Existing record but the peer checklist never made it (clip-by-clip save path)
+      if (!record.appleRole.cues?.length && bananaPerformerCues.length) {
+        record.appleRole = { ...record.appleRole, cues: bananaPerformerCues };
+      }
+      if (!record.bananaRole.cues?.length && applePerformerCues.length) {
+        record.bananaRole = { ...record.bananaRole, cues: applePerformerCues };
+      }
     }
     const entry: AiChatAnalysisEntry = {
       analysisText: message.text,
