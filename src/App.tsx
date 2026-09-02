@@ -26,7 +26,7 @@ import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
-import { OFFICIAL_FMS_PEER_CUES } from './data/peerSyllabusCues';
+import { getAllCuesForSkill } from './data/peerSyllabusCues';
 
 type ModelId = 'gemini' | 'claude' | 'openrouter' | 'deepseek';
 
@@ -455,7 +455,9 @@ const App: React.FC = () => {
 
   // "🤝 Peer Assessment Checklist" bot card shown just before the AI grading.
   const buildPeerChecklistMessage = (performer: 'Apple' | 'Banana', skillName: string): Message => {
-    const cues = OFFICIAL_FMS_PEER_CUES[skillName] || [];
+    // Same lookup the recording screen used — falls back to the default cues for skills
+    // (Bounce, Bounce pass) that aren't in OFFICIAL_FMS_PEER_CUES, so the card can't read 0/0.
+    const cues = getAllCuesForSkill(skillName);
     const rated = (performer === 'Apple' ? activePeerSessionData?.appleCues : activePeerSessionData?.bananaCues) || {};
     const lines = cues.length > 0
       ? cues.map(c => `- ${rated[c.id] ? '✅' : '❌'} ${c.itemNumber}. ${c.syllabusCriterion}`).join('\n')
@@ -676,7 +678,7 @@ const App: React.FC = () => {
   }, [activePairSession?.pairNumber, activePairSession?.lessonId, appMode]);
 
   const peerCuesToMap = (skillName: string, list?: { cueIndex: number; isObserved: boolean }[]): Record<string, boolean> => {
-    const cues = OFFICIAL_FMS_PEER_CUES[skillName] || [];
+    const cues = getAllCuesForSkill(skillName);
     return Object.fromEntries(
       cues.map(c => [c.id, !!list?.find(r => r.cueIndex === c.itemNumber)?.isObserved])
     );

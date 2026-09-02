@@ -243,8 +243,8 @@ export const uploadPeerSessionToTeacher = async (params: {
     if (pairPhoto) updatePayload.pair_photo = pairPhoto;
     if (bananaVideoUrl) updatePayload.banana_video_url = bananaVideoUrl;
     if (appleVideoUrl) updatePayload.apple_video_url = appleVideoUrl;
-    if (bananaCues) updatePayload.banana_cues = bananaCues;
-    if (appleCues) updatePayload.apple_cues = appleCues;
+    if (bananaCues?.length) updatePayload.banana_cues = bananaCues;
+    if (appleCues?.length) updatePayload.apple_cues = appleCues;
     if (claimToken) updatePayload.claim_token = claimToken;
 
     console.log('[Upload] Updating pair_submissions row (student columns only):', subId);

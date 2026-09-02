@@ -90,11 +90,14 @@ export async function backupSubmissionToSupabase(
       }
       const updatePayload: Record<string, any> = {
         skill_name: submission.skillName,
-        banana_cues: submission.appleRole.cues || [],
-        apple_cues: submission.bananaRole.cues || [],
         status: submission.status, // trigger maps to 'resubmitted' if already reviewed
         updated_at: new Date().toISOString(),
       };
+      // Only write cues when we actually have some. An AI-analysis submit can arrive
+      // with a fabricated blank record (see handleSubmitChecklistToTeacher) — writing
+      // [] here would wipe the pair's peer checklist in the cloud.
+      if (submission.appleRole.cues?.length) updatePayload.banana_cues = submission.appleRole.cues;
+      if (submission.bananaRole.cues?.length) updatePayload.apple_cues = submission.bananaRole.cues;
       if (submission.pairPhoto) updatePayload.pair_photo = submission.pairPhoto;
       if (bananaVideoUrl) updatePayload.banana_video_url = bananaVideoUrl;
       if (appleVideoUrl) updatePayload.apple_video_url = appleVideoUrl;
