@@ -71,11 +71,12 @@ export interface PairSubmissionRecord {
     apple?: AiChatAnalysisEntry;
     banana?: AiChatAnalysisEntry;
   };
-  status: 'pending_sync' | 'synced' | 'approved' | 'needs_redo';
+  status: 'pending_sync' | 'synced' | 'approved' | 'needs_redo' | 'resubmitted';
   teacherFeedback?: string;
   teacherStar?: boolean;
   createdAt: string;
   syncedAt?: string;
+  claimToken?: string; // identifies the group that owns this pair (see getOrCreatePairClaimToken)
 }
 
 export interface PairSessionData {
@@ -152,6 +153,38 @@ export const getActivePairSession = async (): Promise<PairSessionData | null> =>
 export const clearActivePairSession = async (): Promise<void> => {
   const db = await getDB();
   await db.delete('pair_session', 'current_session');
+};
+
+// ─── Pair Claim Token ────────────────────────────────────────────────────────
+// A random id this device generates once per lesson and keeps in localStorage.
+// It marks "this group" so the same group can resume its own pair after a reload,
+// while a different group is blocked from writing to a pair number already taken.
+
+const claimTokenKey = (lessonId: string) => `pe_pair_claim_${lessonId}`;
+
+export const getOrCreatePairClaimToken = (lessonId: string): string => {
+  const key = claimTokenKey(lessonId);
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const token =
+      (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `tok-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, token);
+    return token;
+  } catch {
+    // localStorage unavailable (private mode etc.) — fall back to an ephemeral token
+    return `tok-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+};
+
+export const clearPairClaimToken = (lessonId: string): void => {
+  try {
+    localStorage.removeItem(claimTokenKey(lessonId));
+  } catch {
+    /* ignore */
+  }
 };
 
 // ─── Offline Queue Submissions ────────────────────────────────────────────────

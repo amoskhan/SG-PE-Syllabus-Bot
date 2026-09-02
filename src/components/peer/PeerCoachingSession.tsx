@@ -10,6 +10,7 @@ import {
   PairSubmissionRecord,
   PeerCueResult,
   getDB,
+  getOrCreatePairClaimToken,
 } from '../../services/offline/offlineStorage';
 import { backupSubmissionToSupabase } from '../../services/cloudSyncService';
 import { uploadGuestVideo, uploadPeerSessionToTeacher } from '../../services/studentService';
@@ -433,7 +434,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     try {
       if (teacherId) {
         // Cloud upload path
-        const url = await uploadGuestVideo(blob, teacherId, lessonId, pairNumber, performer, skillName, pairPhoto);
+        const url = await uploadGuestVideo(blob, teacherId, lessonId, pairNumber, performer, skillName, pairPhoto, getOrCreatePairClaimToken(lessonId));
         setState(url ? 'saved' : 'error');
       } else {
         // No QR / no teacherId — save video blob to local submission in IndexedDB as backup
@@ -528,9 +529,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           appleBlob: appleVideoBlob || undefined,
           bananaCues: mapCues(bananaCues),
           appleCues: mapCues(appleCues),
+          claimToken: getOrCreatePairClaimToken(lessonId),
         });
 
-        if (!result.success) {
+        if (result.blocked) {
+          setSubmitError(`Pair ${pairNumber} is already in use by another group. Ask your teacher to clear it, or check in again with a different pair number.`);
+          console.warn('[Submit] uploadPeerSessionToTeacher blocked — pair claimed by another group');
+        } else if (!result.success) {
           setSubmitError('Video uploaded but could not reach teacher dashboard. Please check your connection and try again.');
           console.warn('[Submit] uploadPeerSessionToTeacher returned success=false');
         } else {

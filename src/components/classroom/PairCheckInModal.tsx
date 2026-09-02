@@ -7,6 +7,7 @@ interface PairCheckInModalProps {
   lessonId: string;
   lessonTitle: string;
   skillName: string;
+  claimedPairNumbers?: Set<number>; // pair numbers already checked in by other groups
   onCompleteCheckIn: (sessionData: PairSessionData) => void;
   onCancel: () => void;
 }
@@ -16,6 +17,7 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
   lessonId,
   lessonTitle,
   skillName,
+  claimedPairNumbers,
   onCompleteCheckIn,
   onCancel,
 }) => {
@@ -236,21 +238,28 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
             </div>
 
             <div className="grid grid-cols-5 gap-2.5 w-full max-w-md my-2">
-              {Array.from({ length: 15 }, (_, i) => i + 1).map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => setSelectedPairNumber(num)}
-                  className={`aspect-square rounded-2xl font-black text-lg md:text-xl transition-all duration-150 flex flex-col items-center justify-center shadow-xs cursor-pointer ${
-                    selectedPairNumber === num
-                      ? 'bg-indigo-600 text-white scale-105 shadow-md shadow-indigo-600/30 ring-4 ring-indigo-200 dark:ring-indigo-900'
-                      : 'bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-zinc-700 hover:bg-indigo-50 dark:hover:bg-zinc-700'
-                  }`}
-                >
-                  <span>{num}</span>
-                  <span className="text-[9px] uppercase font-bold opacity-70">Pair</span>
-                </button>
-              ))}
+              {Array.from({ length: 15 }, (_, i) => i + 1).map((num) => {
+                const taken = claimedPairNumbers?.has(num) && selectedPairNumber !== num;
+                return (
+                  <button
+                    key={num}
+                    type="button"
+                    disabled={taken}
+                    onClick={() => setSelectedPairNumber(num)}
+                    title={taken ? `Pair ${num} is already in use by another group` : undefined}
+                    className={`relative aspect-square rounded-2xl font-black text-lg md:text-xl transition-all duration-150 flex flex-col items-center justify-center shadow-xs ${
+                      taken
+                        ? 'bg-slate-100 dark:bg-zinc-800/50 text-slate-300 dark:text-zinc-600 border border-slate-200 dark:border-zinc-800 cursor-not-allowed'
+                        : selectedPairNumber === num
+                        ? 'bg-indigo-600 text-white scale-105 shadow-md shadow-indigo-600/30 ring-4 ring-indigo-200 dark:ring-indigo-900 cursor-pointer'
+                        : 'bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-zinc-700 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer'
+                    }`}
+                  >
+                    <span>{taken ? '🔒' : num}</span>
+                    <span className="text-[9px] uppercase font-bold opacity-70">{taken ? 'Taken' : 'Pair'}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <button

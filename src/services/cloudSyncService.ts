@@ -4,9 +4,11 @@ import { PairSubmissionRecord, getDB } from "./offline/offlineStorage";
 export async function backupSubmissionToSupabase(
   submission: PairSubmissionRecord,
   teacherId?: string,
+  claimToken?: string,
 ): Promise<{
   bananaVideoUrl?: string;
   appleVideoUrl?: string;
+  blocked?: boolean;
 }> {
   let bananaVideoUrl: string | undefined = submission.appleRole.videoUrl;
   let appleVideoUrl: string | undefined = submission.bananaRole.videoUrl;
@@ -67,29 +69,79 @@ export async function backupSubmissionToSupabase(
   }
 
   const validTeacherId = (teacherId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(teacherId)) ? teacherId : null;
+  const token = claimToken ?? submission.claimToken;
 
+  // Never blind-upsert the whole row: an omitted column would be nulled by
+  // supabase-js (defaultToNull), which is how teacher_feedback / teacher_star /
+  // ai_* used to vanish on a student re-upload. Instead: insert if new, else
+  // update ONLY the student-owned columns. The DB trigger (protect_teacher_columns)
+  // is the belt-and-braces guarantee.
   try {
-    const { error: upsertErr } = await supabase.from("pair_submissions").upsert({
-      id: submission.id,
-      lesson_id: submission.lessonId,
-      pair_number: submission.pairNumber,
-      skill_name: submission.skillName,
-      teacher_id: validTeacherId,
-      pair_photo: submission.pairPhoto || null,
-      banana_video_url: bananaVideoUrl || null,
-      apple_video_url: appleVideoUrl || null,
-      banana_cues: submission.appleRole.cues || [],
-      apple_cues: submission.bananaRole.cues || [],
-      ai_student_feedback: submission.aiStudentFeedback ?? null,
-      ai_teacher_report: submission.aiTeacherReport ?? null,
-      ai_chat_analysis: submission.aiChatAnalysis ?? null,
-      status: submission.status,
-      created_at: submission.createdAt,
-    });
-    if (upsertErr) {
-      console.error("[CloudBackup] Supabase DB metadata sync error:", upsertErr);
+    const { data: existing } = await supabase
+      .from("pair_submissions")
+      .select("id, claim_token")
+      .eq("id", submission.id)
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.claim_token && token && existing.claim_token !== token) {
+        console.warn(`[CloudBackup] submission ${submission.id} owned by another group — write blocked`);
+        return { bananaVideoUrl, appleVideoUrl, blocked: true };
+      }
+      const updatePayload: Record<string, any> = {
+        skill_name: submission.skillName,
+        banana_cues: submission.appleRole.cues || [],
+        apple_cues: submission.bananaRole.cues || [],
+        status: submission.status, // trigger maps to 'resubmitted' if already reviewed
+        updated_at: new Date().toISOString(),
+      };
+      if (submission.pairPhoto) updatePayload.pair_photo = submission.pairPhoto;
+      if (bananaVideoUrl) updatePayload.banana_video_url = bananaVideoUrl;
+      if (appleVideoUrl) updatePayload.apple_video_url = appleVideoUrl;
+      if (submission.aiStudentFeedback) updatePayload.ai_student_feedback = submission.aiStudentFeedback;
+      if (submission.aiTeacherReport) updatePayload.ai_teacher_report = submission.aiTeacherReport;
+      if (submission.aiChatAnalysis) updatePayload.ai_chat_analysis = submission.aiChatAnalysis;
+      if (token) updatePayload.claim_token = token;
+
+      const { error: updErr } = await supabase
+        .from("pair_submissions")
+        .update(updatePayload)
+        .eq("id", submission.id);
+      if (updErr) {
+        if (String(updErr.message || "").includes("PAIR_CLAIMED")) {
+          return { bananaVideoUrl, appleVideoUrl, blocked: true };
+        }
+        console.error("[CloudBackup] Supabase DB metadata update error:", updErr);
+      } else {
+        console.log(`[CloudBackup] Updated submission ${submission.id} (student columns only) ✓`);
+      }
     } else {
-      console.log(`[CloudBackup] Successfully upserted submission ${submission.id} to Supabase ✓`);
+      const { error: insErr } = await supabase.from("pair_submissions").insert({
+        id: submission.id,
+        lesson_id: submission.lessonId,
+        pair_number: submission.pairNumber,
+        skill_name: submission.skillName,
+        teacher_id: validTeacherId,
+        pair_photo: submission.pairPhoto || null,
+        banana_video_url: bananaVideoUrl || null,
+        apple_video_url: appleVideoUrl || null,
+        banana_cues: submission.appleRole.cues || [],
+        apple_cues: submission.bananaRole.cues || [],
+        ai_student_feedback: submission.aiStudentFeedback ?? null,
+        ai_teacher_report: submission.aiTeacherReport ?? null,
+        ai_chat_analysis: submission.aiChatAnalysis ?? null,
+        status: submission.status,
+        created_at: submission.createdAt,
+        claim_token: token ?? null,
+      });
+      if (insErr) {
+        if (String(insErr.message || "").includes("PAIR_CLAIMED")) {
+          return { bananaVideoUrl, appleVideoUrl, blocked: true };
+        }
+        console.error("[CloudBackup] Supabase DB metadata insert error:", insErr);
+      } else {
+        console.log(`[CloudBackup] Inserted submission ${submission.id} to Supabase ✓`);
+      }
     }
   } catch (e) {
     console.warn("[CloudBackup] Supabase DB metadata sync note:", e);
@@ -124,6 +176,7 @@ function mapRowToSubmission(row: any): PairSubmissionRecord {
     teacherFeedback: row.teacher_feedback || undefined,
     teacherStar: row.teacher_star || false,
     createdAt: row.created_at || new Date().toISOString(),
+    claimToken: row.claim_token || undefined,
   };
 }
 
@@ -236,6 +289,7 @@ export interface PairCheckInRow {
   pair_photo?: string | null;
   needs_help: boolean;
   checked_in_at: string;
+  claim_token?: string | null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -251,10 +305,30 @@ export async function upsertPairCheckIn(params: {
   teacherId?: string;
   pairPhoto?: string;
   needsHelp?: boolean;
-}): Promise<void> {
-  const { lessonId, pairNumber, skillName, teacherId, pairPhoto, needsHelp } = params;
+  claimToken?: string;
+}): Promise<{ blocked: boolean }> {
+  const { lessonId, pairNumber, skillName, teacherId, pairPhoto, needsHelp, claimToken } = params;
+  const id = `${lessonId}-p${pairNumber}`;
+
+  // Collision guard: if this pair number is already claimed by another group, block.
+  if (claimToken) {
+    try {
+      const { data: existing } = await supabase
+        .from("pair_sessions")
+        .select("claim_token")
+        .eq("id", id)
+        .maybeSingle();
+      if (existing?.claim_token && existing.claim_token !== claimToken) {
+        console.warn(`[CloudSync] Pair ${pairNumber} already claimed by another group — check-in blocked`);
+        return { blocked: true };
+      }
+    } catch (e) {
+      console.warn("[CloudSync] upsertPairCheckIn claim pre-check failed (continuing):", e);
+    }
+  }
+
   const payload: Record<string, any> = {
-    id: `${lessonId}-p${pairNumber}`,
+    id,
     lesson_id: lessonId,
     pair_number: pairNumber,
     skill_name: skillName ?? null,
@@ -263,15 +337,49 @@ export async function upsertPairCheckIn(params: {
     updated_at: new Date().toISOString(),
   };
   if (pairPhoto) payload.pair_photo = pairPhoto;
+  if (claimToken) payload.claim_token = claimToken;
 
   try {
     const { error } = await supabase
       .from("pair_sessions")
       .upsert(payload, { onConflict: "id" });
-    if (error) console.error("[CloudSync] upsertPairCheckIn error:", error);
+    if (error) {
+      if (String(error.message || "").includes("PAIR_CLAIMED")) return { blocked: true };
+      console.error("[CloudSync] upsertPairCheckIn error:", error);
+    }
   } catch (e) {
     console.error("[CloudSync] upsertPairCheckIn unexpected error:", e);
   }
+  return { blocked: false };
+}
+
+/**
+ * Clear a pair's classroom check-in (teacher control — "✕" on the check-in grid).
+ * Removes only the pair_sessions row; any practice submission is deleted separately
+ * from the Review Tray.
+ */
+export async function deletePairCheckIn(lessonId: string, pairNumber: number): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("pair_sessions")
+      .delete()
+      .eq("id", `${lessonId}-p${pairNumber}`);
+    if (error) console.error("[CloudSync] deletePairCheckIn error:", error);
+  } catch (e) {
+    console.error("[CloudSync] deletePairCheckIn unexpected error:", e);
+  }
+}
+
+/**
+ * Pair numbers already checked in for a lesson — used to grey out taken numbers
+ * in the student's PairCheckInModal.
+ */
+export async function fetchClaimedPairNumbers(
+  teacherId?: string,
+  lessonId?: string,
+): Promise<Set<number>> {
+  const rows = await fetchPairCheckIns(teacherId, lessonId);
+  return new Set(rows.map((r) => r.pair_number));
 }
 
 /**

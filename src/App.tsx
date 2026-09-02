@@ -23,8 +23,8 @@ import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal'
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, AiChatAnalysisEntry, queuePairSubmission, getDB } from './services/offline/offlineStorage';
-import { backupSubmissionToSupabase, upsertPairCheckIn } from './services/cloudSyncService';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
+import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { OFFICIAL_FMS_PEER_CUES } from './data/peerSyllabusCues';
 
@@ -318,6 +318,8 @@ const App: React.FC = () => {
   });
   const [activePairSession, setActivePairSession] = useState<PairSessionData | null>(null);
   const [activePeerSessionData, setActivePeerSessionData] = useState<CompletedPeerSession | null>(null);
+  const [claimedPairNumbers, setClaimedPairNumbers] = useState<Set<number>>(new Set());
+  const [checkInModalKey, setCheckInModalKey] = useState(0);
   const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
   const lastSeenTeacherFeedbackRef = useRef<string | null>(null);
   // Set once we confirm the active pair has already submitted a recording — enables the
@@ -427,7 +429,7 @@ const App: React.FC = () => {
           };
           await db.put('submissions', existing);
           // Push the enriched record to Supabase so the teacher's board (another device) sees the AI report
-          backupSubmissionToSupabase(existing, activePairSession?.teacherId).catch(console.warn);
+          backupSubmissionToSupabase(existing, activePairSession?.teacherId, getOrCreatePairClaimToken(data.lessonId)).catch(console.warn);
         }
       } catch (e) {
         console.warn('Could not save AI report to submission:', e);
@@ -607,7 +609,7 @@ const App: React.FC = () => {
       [performer === 'Apple' ? 'apple' : 'banana']: entry,
     };
     await queuePairSubmission(record);
-    await backupSubmissionToSupabase(record, ctx.teacherId);
+    await backupSubmissionToSupabase(record, ctx.teacherId, getOrCreatePairClaimToken(ctx.lessonId));
     setTeacherFeedbackBanner(null);
     lastSeenTeacherFeedbackRef.current = null; // so the teacher's reply re-triggers the banner
   };
@@ -638,6 +640,17 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePairSession?.pairNumber, activePairSession?.lessonId, activePeerSessionData, appMode]);
+
+  // When the check-in modal opens, load which pair numbers are already taken so the
+  // student can't pick one another group is using.
+  useEffect(() => {
+    if (!isPairCheckInOpen) return;
+    let cancelled = false;
+    fetchClaimedPairNumbers(scannedLessonData.teacherId, scannedLessonData.lessonId)
+      .then((nums) => { if (!cancelled) setClaimedPairNumbers(nums); })
+      .catch(() => { /* non-fatal — modal just won't grey out taken numbers */ });
+    return () => { cancelled = true; };
+  }, [isPairCheckInOpen, scannedLessonData.teacherId, scannedLessonData.lessonId]);
 
   // Check whether the active (restored) pair already submitted a recording — so the home
   // screen can offer "back to AI Coach chat" instead of only "record again".
@@ -716,23 +729,37 @@ const App: React.FC = () => {
 
   // Shared handler for both PairCheckInModal instances — merges QR context, then
   // syncs the check-in to Supabase so the teacher's board (another device) shows it live.
-  const handleCompleteCheckIn = (pairData: PairSessionData) => {
+  const handleCompleteCheckIn = async (pairData: PairSessionData) => {
     const merged: PairSessionData = {
       ...pairData,
       teacherId: pairData.teacherId ?? scannedLessonData.teacherId,
       skillName: pairData.skillName ?? scannedLessonData.skillName,
     };
-    setActivePairSession(merged);
-    setIsPairCheckInOpen(false);
-    setAppMode('peer_coaching');
-    upsertPairCheckIn({
+    const claimToken = getOrCreatePairClaimToken(merged.lessonId);
+
+    const { blocked } = await upsertPairCheckIn({
       lessonId: merged.lessonId,
       pairNumber: merged.pairNumber,
       skillName: merged.skillName,
       teacherId: merged.teacherId,
       pairPhoto: merged.pairPhoto,
       needsHelp: merged.needsHelp,
-    }).catch(console.warn);
+      claimToken,
+    }).catch((e) => { console.warn(e); return { blocked: false }; });
+
+    if (blocked) {
+      // Another group already owns this pair number — bounce back to pick another.
+      await clearActivePairSession().catch(() => { /* ignore */ });
+      try { window.alert(`Pair ${merged.pairNumber} is already in use by another group. Please choose a different pair number.`); } catch { /* ignore */ }
+      const nums = await fetchClaimedPairNumbers(merged.teacherId, merged.lessonId).catch(() => new Set<number>());
+      setClaimedPairNumbers(nums);
+      setCheckInModalKey((k) => k + 1); // remount the modal → back to SELECT_PAIR
+      return;
+    }
+
+    setActivePairSession(merged);
+    setIsPairCheckInOpen(false);
+    setAppMode('peer_coaching');
   };
 
   const handleSignalPairNeedsHelp = () => {
@@ -745,6 +772,7 @@ const App: React.FC = () => {
       teacherId: pair.teacherId,
       pairPhoto: pair.pairPhoto,
       needsHelp: true,
+      claimToken: getOrCreatePairClaimToken(pair.lessonId),
     }).catch(console.warn);
   };
 
@@ -1798,10 +1826,12 @@ const App: React.FC = () => {
           }}
         />
         <PairCheckInModal
+          key={checkInModalKey}
           isOpen={isPairCheckInOpen}
           lessonId={scannedLessonData.lessonId}
           lessonTitle={scannedLessonData.title}
           skillName={scannedLessonData.skillName || 'Overhand Throw'}
+          claimedPairNumbers={claimedPairNumbers}
           onCompleteCheckIn={handleCompleteCheckIn}
           onCancel={() => setIsPairCheckInOpen(false)}
         />
@@ -2302,10 +2332,12 @@ const App: React.FC = () => {
       />
 
       <PairCheckInModal
+        key={checkInModalKey}
         isOpen={isPairCheckInOpen}
         lessonId={scannedLessonData.lessonId}
         lessonTitle={scannedLessonData.title}
         skillName={scannedLessonData.skillName}
+        claimedPairNumbers={claimedPairNumbers}
         onCompleteCheckIn={handleCompleteCheckIn}
         onCancel={() => setIsPairCheckInOpen(false)}
       />

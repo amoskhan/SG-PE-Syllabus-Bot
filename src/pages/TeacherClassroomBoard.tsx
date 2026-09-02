@@ -13,6 +13,7 @@ import {
   deleteCloudSubmission,
   backupSubmissionToSupabase,
   fetchPairCheckIns,
+  deletePairCheckIn,
   PairCheckInRow,
 } from '../services/cloudSyncService';
 import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
@@ -84,6 +85,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   // Live pair check-ins, synced from Supabase (students check in on a different device)
   const [checkIns, setCheckIns] = useState<PairCheckInRow[]>([]);
+  // Pair numbers the teacher cleared — keyed to checked_in_at so a genuine re-check-in reappears
+  const dismissedCheckInsRef = useRef<Map<number, string>>(new Map());
 
   // Generate QR code whenever lessonId, selectedSkill, or teacherId changes
   useEffect(() => {
@@ -140,9 +143,28 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     );
     setSubmissions(merged);
 
-    // Live pair check-ins for the Projector grid
+    // Live pair check-ins for the Projector grid.
+    // Drop any the teacher just cleared — unless a genuinely newer check-in arrived
+    // for that pair number (different checked_in_at), in which case the pair is back.
     const rows = await fetchPairCheckIns(teacherId);
-    setCheckIns(rows);
+    const dismissed = dismissedCheckInsRef.current;
+    const visibleRows = rows.filter((r) => {
+      const clearedAt = dismissed.get(r.pair_number);
+      if (clearedAt === undefined) return true;
+      if (r.checked_in_at !== clearedAt) {
+        dismissed.delete(r.pair_number); // a new check-in — stop hiding it
+        return true;
+      }
+      return false;
+    });
+    setCheckIns(visibleRows);
+  };
+
+  const handleClearCheckIn = async (row: PairCheckInRow) => {
+    if (!confirm(`Clear Pair #${row.pair_number}'s check-in? They can check in again if needed.`)) return;
+    dismissedCheckInsRef.current.set(row.pair_number, row.checked_in_at);
+    setCheckIns((prev) => prev.filter((c) => c.pair_number !== row.pair_number));
+    await deletePairCheckIn(row.lesson_id || lessonId, row.pair_number);
   };
 
 
@@ -180,7 +202,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     loadSubmissions();
   };
 
-  const unapprovedCount = submissions.filter((s) => s.status === 'pending_sync').length;
+  const unapprovedCount = submissions.filter((s) => s.status === 'pending_sync' || s.status === 'resubmitted').length;
 
   const handleDelete = async (sub: PairSubmissionRecord) => {
     if (!confirm(`Delete Pair #${sub.pairNumber} — ${sub.skillName}? This cannot be undone.`)) return;
@@ -384,6 +406,16 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           ✓ sent
                         </span>
                       )}
+                      {isChecked && ci && (
+                        <button
+                          type="button"
+                          onClick={() => handleClearCheckIn(ci)}
+                          title={`Clear Pair ${num}'s check-in`}
+                          className="absolute top-1 left-1 w-5 h-5 rounded-full bg-white/90 dark:bg-zinc-900/90 border border-slate-300 dark:border-zinc-600 text-slate-500 hover:text-red-600 hover:border-red-400 text-xs font-black leading-none flex items-center justify-center shadow-xs cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      )}
                       {/* Pair Badge / Photo */}
                       <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-200 dark:bg-zinc-700 flex items-center justify-center mb-1.5 shadow-inner">
                         {ci?.pair_photo ? (
@@ -493,9 +525,15 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                       sub.status === 'approved'
                         ? 'bg-emerald-100 text-emerald-700'
+                        : sub.status === 'resubmitted'
+                        ? 'bg-orange-100 text-orange-800'
                         : 'bg-amber-100 text-amber-800'
                     }`}>
-                      {sub.status === 'approved' ? '✓ Approved' : '⏳ Pending'}
+                      {sub.status === 'approved'
+                        ? '✓ Approved'
+                        : sub.status === 'resubmitted'
+                        ? '🔁 Resubmitted'
+                        : '⏳ Pending'}
                     </span>
                   </div>
 

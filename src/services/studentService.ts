@@ -98,6 +98,7 @@ export const uploadGuestVideo = async (
     performer: 'apple' | 'banana',
     skillName: string,
     pairPhoto?: string,
+    claimToken?: string,
 ): Promise<string | null> => {
     const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const path = `${teacherId}/pair_submissions/${lessonId}/pair_${pairNumber}/${performer}_${safeName}_${Date.now()}.mp4`;
@@ -110,26 +111,44 @@ export const uploadGuestVideo = async (
     const publicUrl = data.publicUrl ?? null;
 
     if (publicUrl) {
-      // Upsert record to pair_submissions so teacher Review Tray on any device shows the clip live
+      // Sync to pair_submissions so the teacher Review Tray shows the clip live.
+      // Insert if new, else update only this performer's video column — never a
+      // blind upsert (that would null teacher_feedback / teacher_star / ai_*).
       try {
         const safeSkill = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         const subId = `sub-${lessonId}-p${pairNumber}-${safeSkill}`;
-        const updateData: Record<string, any> = {
-          id: subId,
-          lesson_id: lessonId,
-          pair_number: pairNumber,
-          skill_name: skillName,
-          teacher_id: teacherId,
-          status: 'pending_sync',
-          created_at: new Date().toISOString(),
-        };
-        if (pairPhoto) updateData.pair_photo = pairPhoto;
-        if (performer === 'banana') {
-          updateData.banana_video_url = publicUrl;
+        const videoCol = performer === 'banana' ? 'banana_video_url' : 'apple_video_url';
+
+        const { data: existing } = await supabase
+          .from('pair_submissions')
+          .select('id, claim_token')
+          .eq('id', subId)
+          .maybeSingle();
+
+        if (existing) {
+          if (existing.claim_token && claimToken && existing.claim_token !== claimToken) {
+            console.warn('[GuestUpload] row owned by another group — DB sync skipped');
+          } else {
+            const upd: Record<string, any> = { [videoCol]: publicUrl, status: 'pending_sync', updated_at: new Date().toISOString() };
+            if (pairPhoto) upd.pair_photo = pairPhoto;
+            if (claimToken) upd.claim_token = claimToken;
+            await supabase.from('pair_submissions').update(upd).eq('id', subId);
+          }
         } else {
-          updateData.apple_video_url = publicUrl;
+          const ins: Record<string, any> = {
+            id: subId,
+            lesson_id: lessonId,
+            pair_number: pairNumber,
+            skill_name: skillName,
+            teacher_id: teacherId,
+            status: 'pending_sync',
+            created_at: new Date().toISOString(),
+            claim_token: claimToken ?? null,
+            [videoCol]: publicUrl,
+          };
+          if (pairPhoto) ins.pair_photo = pairPhoto;
+          await supabase.from('pair_submissions').insert(ins);
         }
-        await supabase.from('pair_submissions').upsert(updateData, { onConflict: 'id' });
       } catch (e) {
         console.warn('[GuestUpload] DB record sync note:', e);
       }
@@ -157,8 +176,9 @@ export const uploadPeerSessionToTeacher = async (params: {
   appleBlob?: Blob;    // Video of Apple PERFORMING (recorded by Banana)
   bananaCues?: any[];
   appleCues?: any[];
-}): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean }> => {
-  const { teacherId, lessonId, pairNumber, skillName, pairPhoto, bananaBlob, appleBlob, bananaCues, appleCues } = params;
+  claimToken?: string; // identifies the group that owns this pair
+}): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean; blocked?: boolean }> => {
+  const { teacherId, lessonId, pairNumber, skillName, pairPhoto, bananaBlob, appleBlob, bananaCues, appleCues, claimToken } = params;
   const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   const subId = `sub-${lessonId}-p${pairNumber}-${safeName}`;
   const ts = Date.now();
@@ -198,33 +218,76 @@ export const uploadPeerSessionToTeacher = async (params: {
     }
   }
 
-  // ── Single upsert with all data ────────────────────────────────────────────
-  const upsertPayload: Record<string, any> = {
-    id: subId,
-    lesson_id: lessonId,
-    pair_number: pairNumber,
-    skill_name: skillName,
-    teacher_id: teacherId,
-    status: 'pending_sync',
-    created_at: new Date().toISOString(),
-  };
-  if (pairPhoto) upsertPayload.pair_photo = pairPhoto;
-  if (bananaVideoUrl) upsertPayload.banana_video_url = bananaVideoUrl;
-  if (appleVideoUrl) upsertPayload.apple_video_url = appleVideoUrl;
-  if (bananaCues) upsertPayload.banana_cues = bananaCues;
-  if (appleCues) upsertPayload.apple_cues = appleCues;
-
-  console.log('[Upload] Upserting pair_submissions row:', subId, upsertPayload);
-  const { error: dbError } = await supabase
+  // ── Insert if new, else update ONLY student-owned columns ──────────────────
+  // A blind upsert would null out teacher_feedback / teacher_star / ai_* (omitted
+  // columns are set to null by supabase-js), which is how teacher feedback used to
+  // vanish when a pair re-uploaded. The DB trigger protect_teacher_columns is the
+  // server-side backstop; this is the client half.
+  const { data: existing, error: readErr } = await supabase
     .from('pair_submissions')
-    .upsert(upsertPayload, { onConflict: 'id' });
+    .select('id, claim_token')
+    .eq('id', subId)
+    .maybeSingle();
+  if (readErr) console.warn('[Upload] existing-row read failed (continuing):', readErr.message);
 
-  if (dbError) {
-    console.error('[Upload] pair_submissions upsert FAILED:', dbError.message, dbError);
-    return { bananaVideoUrl, appleVideoUrl, success: false };
+  if (existing) {
+    if (existing.claim_token && claimToken && existing.claim_token !== claimToken) {
+      console.warn('[Upload] pair_submissions row owned by another group — blocked');
+      return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
+    }
+    const updatePayload: Record<string, any> = {
+      skill_name: skillName,
+      status: 'pending_sync', // trigger maps to 'resubmitted' if already reviewed
+      updated_at: new Date().toISOString(),
+    };
+    if (pairPhoto) updatePayload.pair_photo = pairPhoto;
+    if (bananaVideoUrl) updatePayload.banana_video_url = bananaVideoUrl;
+    if (appleVideoUrl) updatePayload.apple_video_url = appleVideoUrl;
+    if (bananaCues) updatePayload.banana_cues = bananaCues;
+    if (appleCues) updatePayload.apple_cues = appleCues;
+    if (claimToken) updatePayload.claim_token = claimToken;
+
+    console.log('[Upload] Updating pair_submissions row (student columns only):', subId);
+    const { error: dbError } = await supabase
+      .from('pair_submissions')
+      .update(updatePayload)
+      .eq('id', subId);
+    if (dbError) {
+      if (String(dbError.message || '').includes('PAIR_CLAIMED')) {
+        return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
+      }
+      console.error('[Upload] pair_submissions update FAILED:', dbError.message, dbError);
+      return { bananaVideoUrl, appleVideoUrl, success: false };
+    }
+  } else {
+    const insertPayload: Record<string, any> = {
+      id: subId,
+      lesson_id: lessonId,
+      pair_number: pairNumber,
+      skill_name: skillName,
+      teacher_id: teacherId,
+      status: 'pending_sync',
+      created_at: new Date().toISOString(),
+      claim_token: claimToken ?? null,
+    };
+    if (pairPhoto) insertPayload.pair_photo = pairPhoto;
+    if (bananaVideoUrl) insertPayload.banana_video_url = bananaVideoUrl;
+    if (appleVideoUrl) insertPayload.apple_video_url = appleVideoUrl;
+    if (bananaCues) insertPayload.banana_cues = bananaCues;
+    if (appleCues) insertPayload.apple_cues = appleCues;
+
+    console.log('[Upload] Inserting pair_submissions row:', subId);
+    const { error: dbError } = await supabase.from('pair_submissions').insert(insertPayload);
+    if (dbError) {
+      if (String(dbError.message || '').includes('PAIR_CLAIMED')) {
+        return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
+      }
+      console.error('[Upload] pair_submissions insert FAILED:', dbError.message, dbError);
+      return { bananaVideoUrl, appleVideoUrl, success: false };
+    }
   }
 
-  console.log('[Upload] pair_submissions upserted successfully ✓');
+  console.log('[Upload] pair_submissions written successfully ✓');
   return { bananaVideoUrl, appleVideoUrl, success: true };
 };
 
