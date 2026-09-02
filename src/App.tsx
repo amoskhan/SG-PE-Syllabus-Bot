@@ -23,8 +23,13 @@ import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal'
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, getDB } from './services/offline/offlineStorage';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, queuePairSubmission, getDB } from './services/offline/offlineStorage';
+import { backupSubmissionToSupabase, upsertPairCheckIn } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
+
+/** Canonical id for a pair's submission row — must match studentService.uploadPeerSessionToTeacher. */
+const canonicalSubmissionId = (lessonId: string, pairNumber: number, skillName: string) =>
+  `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
 
 const base64ToFile = (base64String: string, filename: string): File => {
   const arr = base64String.split(',');
@@ -229,7 +234,7 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter' | 'deepseek'>('openrouter');
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter' | 'deepseek'>('gemini');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
@@ -249,6 +254,8 @@ const App: React.FC = () => {
   });
   const [activePairSession, setActivePairSession] = useState<PairSessionData | null>(null);
   const [activePeerSessionData, setActivePeerSessionData] = useState<CompletedPeerSession | null>(null);
+  const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
+  const lastSeenTeacherFeedbackRef = useRef<string | null>(null);
 
   const handlePeerSessionToChat = async (data: CompletedPeerSession) => {
     setActivePeerSessionData(data);
@@ -330,7 +337,7 @@ const App: React.FC = () => {
       ));
 
       // Save AI results to IndexedDB on the pair's submission record
-      const submissionId = `pair-${data.pairNumber}-${data.lessonId}`;
+      const submissionId = canonicalSubmissionId(data.lessonId, data.pairNumber, data.skillName);
       try {
         const db = await getDB();
         const existing = await db.get('submissions', submissionId);
@@ -352,6 +359,8 @@ const App: React.FC = () => {
             modelUsed: 'gemini-2.5-flash',
           };
           await db.put('submissions', existing);
+          // Push the enriched record to Supabase so the teacher's board (another device) sees the AI report
+          backupSubmissionToSupabase(existing, activePairSession?.teacherId).catch(console.warn);
         }
       } catch (e) {
         console.warn('Could not save AI report to submission:', e);
@@ -393,6 +402,101 @@ const App: React.FC = () => {
       skillName: activePeerSessionData.skillName,
       isVerified: true,
     });
+  };
+
+  // Student submits an AI "Performance Analysis / Checklist Assessment" chat message
+  // to the teacher's review board, attached to their pair's submission row.
+  const handleSubmitChecklistToTeacher = async (message: Message) => {
+    const pair = activePairSession;
+    if (!pair) {
+      setTeacherFeedbackBanner('Join a pair station (scan the class QR) before sending work to your teacher.');
+      return;
+    }
+    const skillName = pair.skillName || activePeerSessionData?.skillName || scannedLessonData.skillName || 'Overhand Throw';
+    const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
+
+    const db = await getDB();
+    let record = await db.get('submissions', subId) as PairSubmissionRecord | undefined;
+    if (!record) {
+      record = {
+        id: subId,
+        lessonId: pair.lessonId,
+        pairNumber: pair.pairNumber,
+        skillName,
+        pairPhoto: pair.pairPhoto || '',
+        appleRole: { studentPerformer: 'Banana', evaluator: 'Apple', cues: [] },
+        bananaRole: { studentPerformer: 'Apple', evaluator: 'Banana', cues: [] },
+        status: 'pending_sync',
+        createdAt: new Date().toISOString(),
+      };
+    }
+    record.aiChatAnalysis = {
+      analysisText: message.text,
+      skillName,
+      studentLabel: 'Pair',
+      submittedAt: new Date().toISOString(),
+    };
+    await queuePairSubmission(record);
+    await backupSubmissionToSupabase(record, pair.teacherId);
+  };
+
+  // While in a Practice Station, poll the pair's submission row for a teacher comment.
+  useEffect(() => {
+    const pair = activePairSession;
+    if (!pair || (!activePeerSessionData && appMode !== 'chat')) return;
+    const skillName = pair.skillName || activePeerSessionData?.skillName || scannedLessonData.skillName || 'Overhand Throw';
+    const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
+
+    const poll = async () => {
+      const { data } = await supabase
+        .from('pair_submissions')
+        .select('teacher_feedback')
+        .eq('id', subId)
+        .maybeSingle();
+      const fb = data?.teacher_feedback?.trim();
+      if (fb && fb !== lastSeenTeacherFeedbackRef.current) {
+        lastSeenTeacherFeedbackRef.current = fb;
+        setTeacherFeedbackBanner(fb);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 10000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePairSession?.pairNumber, activePairSession?.lessonId, activePeerSessionData, appMode]);
+
+  // Shared handler for both PairCheckInModal instances — merges QR context, then
+  // syncs the check-in to Supabase so the teacher's board (another device) shows it live.
+  const handleCompleteCheckIn = (pairData: PairSessionData) => {
+    const merged: PairSessionData = {
+      ...pairData,
+      teacherId: pairData.teacherId ?? scannedLessonData.teacherId,
+      skillName: pairData.skillName ?? scannedLessonData.skillName,
+    };
+    setActivePairSession(merged);
+    setIsPairCheckInOpen(false);
+    setAppMode('peer_coaching');
+    upsertPairCheckIn({
+      lessonId: merged.lessonId,
+      pairNumber: merged.pairNumber,
+      skillName: merged.skillName,
+      teacherId: merged.teacherId,
+      pairPhoto: merged.pairPhoto,
+      needsHelp: merged.needsHelp,
+    }).catch(console.warn);
+  };
+
+  const handleSignalPairNeedsHelp = () => {
+    const pair = activePairSession;
+    if (!pair) return;
+    upsertPairCheckIn({
+      lessonId: pair.lessonId,
+      pairNumber: pair.pairNumber,
+      skillName: pair.skillName,
+      teacherId: pair.teacherId,
+      pairPhoto: pair.pairPhoto,
+      needsHelp: true,
+    }).catch(console.warn);
   };
 
   // Restore active pair session from IndexedDB if iPad reloads
@@ -1426,16 +1530,7 @@ const App: React.FC = () => {
           lessonId={scannedLessonData.lessonId}
           lessonTitle={scannedLessonData.title}
           skillName={scannedLessonData.skillName || 'Overhand Throw'}
-          onCompleteCheckIn={(pairData) => {
-            // Carry teacherId + skillName from the QR into the saved session
-            setActivePairSession({
-              ...pairData,
-              teacherId: scannedLessonData.teacherId,
-              skillName: scannedLessonData.skillName,
-            });
-            setIsPairCheckInOpen(false);
-            setAppMode('peer_coaching');
-          }}
+          onCompleteCheckIn={handleCompleteCheckIn}
           onCancel={() => setIsPairCheckInOpen(false)}
         />
       </div>
@@ -1479,7 +1574,7 @@ const App: React.FC = () => {
             setAppMode('home_screen');
           }}
         />
-        <TeacherHelpBeacon pairNumber={activePairSession.pairNumber} />
+        <TeacherHelpBeacon pairNumber={activePairSession.pairNumber} onSignalHelp={handleSignalPairNeedsHelp} />
       </div>
     );
   }
@@ -1516,39 +1611,85 @@ const App: React.FC = () => {
       <div className="relative flex-1 flex flex-col h-full bg-white/75 dark:bg-slate-950/80 backdrop-blur-xl border-l border-white/60 dark:border-white/5 shadow-[0_0_80px_rgba(15,23,42,0.08)]">
         
         {/* Dedicated Student Station Header when in Pair Practice Mode */}
-        {activePeerSessionData && (
-          <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 border-b border-indigo-500/40 px-4 py-2.5 flex items-center justify-between shadow-lg shrink-0 z-40">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🍎🍌</span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 bg-indigo-500/30 text-indigo-300 font-black text-xs rounded-full border border-indigo-400/40 shadow-xs">
-                    Pair #{activePeerSessionData.pairNumber}
-                  </span>
-                  <p className="text-sm font-black text-white">
-                    {activePeerSessionData.skillName} Practice Station
-                  </p>
+        {activePeerSessionData && (() => {
+          const appleCues = activePeerSessionData.appleCues || {};
+          const bananaCues = activePeerSessionData.bananaCues || {};
+          const appleMet = Object.values(appleCues).filter(Boolean).length;
+          const appleTotal = Object.keys(appleCues).length;
+          const bananaMet = Object.values(bananaCues).filter(Boolean).length;
+          const bananaTotal = Object.keys(bananaCues).length;
+          return (
+          <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 border-b border-indigo-500/40 px-3 md:px-5 py-3 shrink-0 z-40 shadow-lg">
+            <div className="max-w-5xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              {/* Left: identity + AI pill + peer cue scores */}
+              <div className="flex items-start gap-3 min-w-0">
+                <span className="text-2xl shrink-0">🍎🍌</span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-0.5 bg-indigo-500/30 text-indigo-200 font-black text-xs rounded-full border border-indigo-400/40">
+                      Pair #{activePeerSessionData.pairNumber}
+                    </span>
+                    <p className="text-sm font-black text-white truncate">
+                      {activePeerSessionData.skillName} Practice Station
+                    </p>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[11px] font-bold border border-emerald-400/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      AI Coach active
+                    </span>
+                    {appleTotal > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[11px] font-bold">
+                        🍎 {appleMet}/{appleTotal} cues
+                      </span>
+                    )}
+                    {bananaTotal > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[11px] font-bold">
+                        🍌 {bananaMet}/{bananaTotal} cues
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[11px] text-slate-400">
-                  AI Coach Bot is active. Ask for movement feedback or power tips!
-                </p>
+              </div>
+
+              {/* Right: primary actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setAppMode('peer_coaching')}
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>🎥 Record New Attempt</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAppMode('teacher_board')}
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  🏫 Teacher Board
+                </button>
               </div>
             </div>
+          </div>
+          );
+        })()}
 
-            <div className="flex items-center gap-2">
+        {/* Teacher feedback banner (student sees the teacher's comment on their submitted analysis) */}
+        {teacherFeedbackBanner && (
+          <div className="shrink-0 z-40 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-300 dark:border-amber-800/70 px-4 py-2.5">
+            <div className="max-w-5xl mx-auto flex items-start gap-3">
+              <span className="text-lg shrink-0">📩</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] uppercase font-extrabold tracking-wider text-amber-700 dark:text-amber-300">Teacher Feedback</p>
+                <p className="text-sm text-amber-900 dark:text-amber-100 leading-snug">{teacherFeedbackBanner}</p>
+              </div>
               <button
                 type="button"
-                onClick={() => setAppMode('peer_coaching')}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                onClick={() => setTeacherFeedbackBanner(null)}
+                className="shrink-0 w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-bold text-xs cursor-pointer"
+                aria-label="Dismiss"
               >
-                <span>🎥 Record New Attempt</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAppMode('teacher_board')}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
-              >
-                Teacher Board
+                ✕
               </button>
             </div>
           </div>
@@ -1669,10 +1810,10 @@ const App: React.FC = () => {
                   <div className="fixed inset-0 z-10" onClick={() => setIsModelDropdownOpen(false)} />
                   <div className="absolute top-full right-0 mt-2.5 w-52 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/60 dark:border-zinc-800/80 overflow-hidden z-20 flex flex-col p-1.5 animate-scale-in">
                     {[
-                      { id: 'openrouter', name: 'OpenRouter (Free)', icon: 'qwen.png', desc: 'Fast general questions' },
-                      { id: 'deepseek', name: 'DeepSeek V4 Flash', icon: 'deepseek.png', desc: 'Accurate text chat' },
-                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png', desc: 'Strong visual analysis' },
-                      { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png', desc: 'Detailed skill feedback' },
+                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png', desc: 'Recommended · best for video' },
+                      { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png', desc: 'Most detailed skill feedback' },
+                      { id: 'deepseek', name: 'DeepSeek V4 Flash', icon: 'deepseek.png', desc: 'Free · text chat only' },
+                      { id: 'openrouter', name: 'OpenRouter (Free)', icon: 'qwen.png', desc: 'Free · may rate-limit' },
                     ].map((model) => (
                       <button
                         key={model.id}
@@ -1781,6 +1922,7 @@ const App: React.FC = () => {
                 onSelectSkill={handleSelectSkill}
                 onSelectMultipleSkills={handleSelectMultipleSkills}
                 onShowAllSkills={() => setIsSkillSelectorOpen(true)}
+                onSubmitChecklistToTeacher={activePairSession ? handleSubmitChecklistToTeacher : undefined}
                 disabled={isLoading || isProcessing}
                 skillMode={skillMode}
               />
@@ -1939,11 +2081,7 @@ const App: React.FC = () => {
         lessonId={scannedLessonData.lessonId}
         lessonTitle={scannedLessonData.title}
         skillName={scannedLessonData.skillName}
-        onCompleteCheckIn={(sessionData) => {
-          setIsPairCheckInOpen(false);
-          setActivePairSession(sessionData);
-          setAppMode('peer_coaching');
-        }}
+        onCompleteCheckIn={handleCompleteCheckIn}
         onCancel={() => setIsPairCheckInOpen(false)}
       />
 

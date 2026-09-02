@@ -34,11 +34,13 @@ interface ChatMessageProps {
   onSelectSkill?: (skillName: string) => void;
   onSelectMultipleSkills?: (skillNames: string[]) => void;
   onShowAllSkills?: () => void;
+  onSubmitChecklistToTeacher?: (message: Message) => Promise<void>;
   disabled?: boolean;
   skillMode?: SkillMode;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, disabled = false, skillMode = 'fms' }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms' }) => {
+  const [checklistSubmitState, setChecklistSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle');
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showAllSkillsGrid, setShowAllSkillsGrid] = useState(false);
@@ -166,6 +168,38 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                 <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/3\.\s+\*?\*?Best\s+Model\s+Tip\*?\*?:[^\n]+(\n|$)/gi, '')} />
               ) : (
                 <p className="whitespace-pre-wrap text-sm md:text-[15px] leading-relaxed">{message.text}</p>
+              )}
+
+              {/* Submit an AI Performance Analysis / Checklist to the teacher's review board */}
+              {isBot && onSubmitChecklistToTeacher &&
+                /performance analysis/i.test(message.text) &&
+                /checklist assessment/i.test(message.text) &&
+                /\b(Beginning|Developing|Competent|Excellent)\b/i.test(message.text) && (
+                <button
+                  onClick={async () => {
+                    if (checklistSubmitState !== 'idle') return;
+                    setChecklistSubmitState('submitting');
+                    try {
+                      await onSubmitChecklistToTeacher(message);
+                      setChecklistSubmitState('done');
+                    } catch (e) {
+                      console.error('Submit checklist to teacher failed:', e);
+                      setChecklistSubmitState('idle');
+                    }
+                  }}
+                  disabled={checklistSubmitState !== 'idle'}
+                  className={`mt-3 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-white ${
+                    checklistSubmitState === 'done'
+                      ? 'bg-emerald-600 cursor-default'
+                      : checklistSubmitState === 'submitting'
+                      ? 'bg-indigo-400 cursor-default'
+                      : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+                  }`}
+                >
+                  {checklistSubmitState === 'idle' && <><span>📤</span><span>Submit to Teacher for Review</span></>}
+                  {checklistSubmitState === 'submitting' && <span>Sending…</span>}
+                  {checklistSubmitState === 'done' && <><span>✓</span><span>Sent to teacher</span></>}
+                </button>
               )}
 
               {/* Interactive Choice Chips (General Navigation or Skill Selection) */}

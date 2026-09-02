@@ -82,6 +82,7 @@ export async function backupSubmissionToSupabase(
       apple_cues: submission.bananaRole.cues || [],
       ai_student_feedback: submission.aiStudentFeedback ?? null,
       ai_teacher_report: submission.aiTeacherReport ?? null,
+      ai_chat_analysis: submission.aiChatAnalysis ?? null,
       status: submission.status,
       created_at: submission.createdAt,
     });
@@ -118,6 +119,7 @@ function mapRowToSubmission(row: any): PairSubmissionRecord {
     },
     aiStudentFeedback: row.ai_student_feedback || undefined,
     aiTeacherReport: row.ai_teacher_report || undefined,
+    aiChatAnalysis: row.ai_chat_analysis || undefined,
     status: row.status || 'pending_sync',
     teacherFeedback: row.teacher_feedback || undefined,
     teacherStar: row.teacher_star || false,
@@ -198,6 +200,118 @@ export async function updateCloudSubmissionStatus(
     }
   } catch (e) {
     console.error("[CloudSync] updateCloudSubmissionStatus unexpected error:", e);
+  }
+}
+
+/**
+ * Write ONLY the teacher's comment to a submission — no status transition.
+ * Used by the "Send Feedback" button that ties to the student's submitted AI chat analysis.
+ */
+export async function updateCloudSubmissionFeedback(
+  id: string,
+  feedback: string,
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("pair_submissions")
+      .update({ teacher_feedback: feedback, updated_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (error) {
+      console.error("[CloudSync] updateCloudSubmissionFeedback error:", error);
+    }
+  } catch (e) {
+    console.error("[CloudSync] updateCloudSubmissionFeedback unexpected error:", e);
+  }
+}
+
+// ─── Pair Check-In Sessions (Live Pair Check-In Grid) ─────────────────────────
+
+export interface PairCheckInRow {
+  id: string;
+  lesson_id: string;
+  pair_number: number;
+  skill_name?: string;
+  teacher_id?: string | null;
+  pair_photo?: string | null;
+  needs_help: boolean;
+  checked_in_at: string;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Upsert a pair's classroom check-in (pre-lineup selfie step) to Supabase so the
+ * teacher's Command Board — running on a different device — can show it live.
+ */
+export async function upsertPairCheckIn(params: {
+  lessonId: string;
+  pairNumber: number;
+  skillName?: string;
+  teacherId?: string;
+  pairPhoto?: string;
+  needsHelp?: boolean;
+}): Promise<void> {
+  const { lessonId, pairNumber, skillName, teacherId, pairPhoto, needsHelp } = params;
+  const payload: Record<string, any> = {
+    id: `${lessonId}-p${pairNumber}`,
+    lesson_id: lessonId,
+    pair_number: pairNumber,
+    skill_name: skillName ?? null,
+    teacher_id: teacherId && UUID_RE.test(teacherId) ? teacherId : null,
+    needs_help: needsHelp ?? false,
+    updated_at: new Date().toISOString(),
+  };
+  if (pairPhoto) payload.pair_photo = pairPhoto;
+
+  try {
+    const { error } = await supabase
+      .from("pair_sessions")
+      .upsert(payload, { onConflict: "id" });
+    if (error) console.error("[CloudSync] upsertPairCheckIn error:", error);
+  } catch (e) {
+    console.error("[CloudSync] upsertPairCheckIn unexpected error:", e);
+  }
+}
+
+/**
+ * Fetch pair check-ins for the teacher's board. Mirrors fetchTeacherSubmissions:
+ * scoped to the teacher (plus null teacher_id) when a valid UUID is given, with an
+ * unconditional-fetch fallback if the filtered query errors.
+ */
+export async function fetchPairCheckIns(
+  teacherId?: string,
+  lessonId?: string,
+): Promise<PairCheckInRow[]> {
+  try {
+    const isValidUUID = teacherId && UUID_RE.test(teacherId);
+
+    let query = supabase
+      .from("pair_sessions")
+      .select("*")
+      .order("checked_in_at", { ascending: false });
+
+    if (isValidUUID) query = query.or(`teacher_id.eq.${teacherId},teacher_id.is.null`);
+    if (lessonId) query = query.eq("lesson_id", lessonId);
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn("[CloudSync] fetchPairCheckIns filtered query error, trying unconditional fetch:", error);
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from("pair_sessions")
+        .select("*")
+        .order("checked_in_at", { ascending: false });
+      if (fallbackError) {
+        console.error("[CloudSync] fetchPairCheckIns fallback error:", fallbackError);
+        return [];
+      }
+      return (fallbackData || []) as PairCheckInRow[];
+    }
+
+    return (data || []) as PairCheckInRow[];
+  } catch (e) {
+    console.error("[CloudSync] fetchPairCheckIns unexpected error:", e);
+    return [];
   }
 }
 

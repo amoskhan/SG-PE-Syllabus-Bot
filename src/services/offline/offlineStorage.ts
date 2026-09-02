@@ -57,6 +57,14 @@ export interface PairSubmissionRecord {
     generatedAt: string;
     modelUsed: string;
   };
+  // AI "Performance Analysis / Checklist Assessment" chat response the student
+  // submitted from the Practice Station for the teacher to review + comment on.
+  aiChatAnalysis?: {
+    analysisText: string;
+    skillName: string;
+    studentLabel: string; // 'Apple' | 'Banana' | 'Pair'
+    submittedAt: string;
+  };
   status: 'pending_sync' | 'synced' | 'approved' | 'needs_redo';
   teacherFeedback?: string;
   teacherStar?: boolean;

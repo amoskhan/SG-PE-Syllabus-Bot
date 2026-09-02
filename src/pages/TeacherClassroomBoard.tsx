@@ -9,8 +9,11 @@ import {
 import {
   fetchTeacherSubmissions,
   updateCloudSubmissionStatus,
+  updateCloudSubmissionFeedback,
   deleteCloudSubmission,
   backupSubmissionToSupabase,
+  fetchPairCheckIns,
+  PairCheckInRow,
 } from '../services/cloudSyncService';
 import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
 
@@ -79,17 +82,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   // Track IDs optimistically deleted so the 3s polling loop doesn't re-add them
   const deletedIdsRef = useRef<Set<string>>(new Set());
 
-  // Mock live check-in statuses for pairs (1 to 15)
-  const [pairStatuses, setPairStatuses] = useState<
-    Record<number, { checkedIn: boolean; photo?: string; needsHelp?: boolean }>
-  >({
-    1: { checkedIn: true, photo: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=150&h=150&fit=crop&crop=faces' },
-    2: { checkedIn: true, photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=faces' },
-    3: { checkedIn: false, needsHelp: true },
-    4: { checkedIn: true, photo: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&h=150&fit=crop&crop=faces' },
-    5: { checkedIn: false },
-    6: { checkedIn: false },
-  });
+  // Live pair check-ins, synced from Supabase (students check in on a different device)
+  const [checkIns, setCheckIns] = useState<PairCheckInRow[]>([]);
 
   // Generate QR code whenever lessonId, selectedSkill, or teacherId changes
   useEffect(() => {
@@ -145,8 +139,26 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     setSubmissions(merged);
+
+    // Live pair check-ins for the Projector grid
+    const rows = await fetchPairCheckIns(teacherId);
+    setCheckIns(rows);
   };
 
+
+  const [feedbackSent, setFeedbackSent] = useState(false);
+
+  // Send just the teacher's comment back to the pair — no status change, no modal close.
+  const handleSendFeedback = async (sub: PairSubmissionRecord) => {
+    const text = teacherFeedbackText.trim();
+    if (!text) return;
+    await updateSubmissionStatus(sub.id, sub.status, text);
+    if (teacherId) await updateCloudSubmissionFeedback(sub.id, text);
+    setFeedbackSent(true);
+    setActiveReviewSub({ ...sub, teacherFeedback: text });
+    setTimeout(() => setFeedbackSent(false), 2500);
+    loadSubmissions();
+  };
 
   const handleApprove = async (sub: PairSubmissionRecord, star: boolean = true) => {
     await updateSubmissionStatus(sub.id, 'approved', teacherFeedbackText || 'Well done pair!', star);
@@ -341,21 +353,22 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   </p>
                 </div>
                 <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold rounded-full text-xs">
-                  {Object.values(pairStatuses).filter((p) => p.checkedIn).length} / 15 Checked In
+                  {checkIns.length} / 15 Checked In
                 </span>
               </div>
 
               {/* 15-Pair Grid */}
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
                 {Array.from({ length: 15 }, (_, i) => i + 1).map((num) => {
-                  const status = pairStatuses[num];
-                  const isChecked = status?.checkedIn;
-                  const needsHelp = status?.needsHelp;
+                  const ci = checkIns.find((c) => c.pair_number === num);
+                  const isChecked = !!ci;
+                  const needsHelp = ci?.needs_help;
+                  const hasPractised = submissions.some((s) => s.pairNumber === num);
 
                   return (
                     <div
                       key={num}
-                      className={`p-3 rounded-2xl border-2 flex flex-col items-center text-center transition-all ${
+                      className={`relative p-3 rounded-2xl border-2 flex flex-col items-center text-center transition-all ${
                         needsHelp
                           ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 animate-pulse'
                           : isChecked
@@ -363,10 +376,18 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           : 'border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/40 opacity-60'
                       }`}
                     >
+                      {hasPractised && (
+                        <span
+                          className="absolute top-1.5 right-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-indigo-600 text-white"
+                          title="Practice video submitted"
+                        >
+                          ✓ sent
+                        </span>
+                      )}
                       {/* Pair Badge / Photo */}
                       <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-200 dark:bg-zinc-700 flex items-center justify-center mb-1.5 shadow-inner">
-                        {status?.photo ? (
-                          <img src={status.photo} alt={`Pair ${num}`} className="w-full h-full object-cover" />
+                        {ci?.pair_photo ? (
+                          <img src={ci.pair_photo} alt={`Pair ${num}`} className="w-full h-full object-cover" />
                         ) : (
                           <span className="text-lg">{needsHelp ? '🆘' : isChecked ? '📸' : '⏳'}</span>
                         )}
@@ -375,7 +396,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                       <span className="font-black text-xs text-slate-800 dark:text-white">
                         Pair {num}
                       </span>
-                      
+
                       <span className={`text-[10px] font-bold mt-0.5 ${
                         needsHelp
                           ? 'text-amber-700 dark:text-amber-300'
@@ -461,6 +482,11 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           Pair #{sub.pairNumber}
                         </h4>
                         <span className="text-[10px] text-slate-400">{sub.skillName}</span>
+                        {sub.aiChatAnalysis && (
+                          <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                            🤖 AI analysis
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -684,18 +710,49 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               </div>
             )}
 
+            {/* AI Chat Analysis submitted by the student from the Practice Station */}
+            {activeReviewSub.aiChatAnalysis && (
+              <div className="mt-4 border border-emerald-500/40 rounded-2xl overflow-hidden">
+                <div className="bg-emerald-950/80 dark:bg-emerald-950 px-4 py-2.5 flex items-center gap-2">
+                  <span className="text-lg">🤖</span>
+                  <span className="font-black text-white text-sm">AI Chat Analysis (from Student)</span>
+                  <span className="ml-auto text-[10px] text-emerald-300">
+                    {new Date(activeReviewSub.aiChatAnalysis.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="p-4 bg-slate-50 dark:bg-zinc-900/60">
+                  <p className="text-[11px] font-bold text-slate-400 mb-1.5">
+                    {activeReviewSub.aiChatAnalysis.studentLabel} · {activeReviewSub.aiChatAnalysis.skillName}
+                  </p>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
+                    {activeReviewSub.aiChatAnalysis.analysisText}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Teacher Feedback Note */}
             <div className="my-4">
               <label className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-1.5 block">
                 Teacher Cue / Praise (Sent to Pair iPad):
               </label>
-              <input
-                type="text"
-                value={teacherFeedbackText}
-                onChange={(e) => setTeacherFeedbackText(e.target.value)}
-                placeholder="e.g. Great follow through Apple! Banana, remember to keep your knees bent."
-                className="w-full px-4 py-2.5 text-xs bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl outline-none"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={teacherFeedbackText}
+                  onChange={(e) => setTeacherFeedbackText(e.target.value)}
+                  placeholder="e.g. Great follow through Apple! Banana, remember to keep your knees bent."
+                  className="flex-1 px-4 py-2.5 text-xs bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSendFeedback(activeReviewSub)}
+                  disabled={!teacherFeedbackText.trim()}
+                  className="shrink-0 px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {feedbackSent ? '✓ Sent' : '💬 Send Feedback'}
+                </button>
+              </div>
             </div>
 
             {/* Actions */}
