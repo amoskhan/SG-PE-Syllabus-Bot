@@ -41,6 +41,7 @@ interface ChatMessageProps {
 
 const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms' }) => {
   const [checklistSubmitState, setChecklistSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle');
+  const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showAllSkillsGrid, setShowAllSkillsGrid] = useState(false);
@@ -170,36 +171,71 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                 <p className="whitespace-pre-wrap text-sm md:text-[15px] leading-relaxed">{message.text}</p>
               )}
 
-              {/* Submit an AI Performance Analysis / Checklist to the teacher's review board */}
+              {/* Send a graded AI analysis to the teacher for final grading + feedback */}
               {isBot && onSubmitChecklistToTeacher &&
-                /performance analysis/i.test(message.text) &&
-                /checklist assessment/i.test(message.text) &&
-                /\b(Beginning|Developing|Competent|Excellent)\b/i.test(message.text) && (
-                <button
-                  onClick={async () => {
-                    if (checklistSubmitState !== 'idle') return;
-                    setChecklistSubmitState('submitting');
-                    try {
-                      await onSubmitChecklistToTeacher(message);
-                      setChecklistSubmitState('done');
-                    } catch (e) {
-                      console.error('Submit checklist to teacher failed:', e);
-                      setChecklistSubmitState('idle');
-                    }
-                  }}
-                  disabled={checklistSubmitState !== 'idle'}
-                  className={`mt-3 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-white ${
-                    checklistSubmitState === 'done'
-                      ? 'bg-emerald-600 cursor-default'
-                      : checklistSubmitState === 'submitting'
-                      ? 'bg-indigo-400 cursor-default'
-                      : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
-                  }`}
-                >
-                  {checklistSubmitState === 'idle' && <><span>📤</span><span>Submit to Teacher for Review</span></>}
-                  {checklistSubmitState === 'submitting' && <span>Sending…</span>}
-                  {checklistSubmitState === 'done' && <><span>✓</span><span>Sent to teacher</span></>}
-                </button>
+                /\b(Beginning|Developing|Competent|Excellent|Accomplished)\b/.test(message.text) &&
+                (/proficiency\s*(verdict|level|rating)?\s*[:\-—]/i.test(message.text) ||
+                  /performance analysis|checklist assessment|criteria met/i.test(message.text)) && (
+                <>
+                  <button
+                    onClick={() => checklistSubmitState === 'idle' && setChecklistModalOpen(true)}
+                    disabled={checklistSubmitState !== 'idle'}
+                    className={`mt-3 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-white ${
+                      checklistSubmitState === 'done'
+                        ? 'bg-emerald-600 cursor-default'
+                        : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+                    }`}
+                  >
+                    {checklistSubmitState === 'done'
+                      ? <><span>✓</span><span>Sent to teacher — waiting for feedback</span></>
+                      : <><span>📤</span><span>Send to Teacher for Grading</span></>}
+                  </button>
+
+                  {checklistModalOpen && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in" onClick={() => checklistSubmitState !== 'submitting' && setChecklistModalOpen(false)}>
+                      <div className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 dark:border-zinc-800 flex flex-col max-h-[85vh] animate-scale-in" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-5 border-b border-slate-100 dark:border-zinc-800">
+                          <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+                            <span>📤</span> Send to your teacher for grading
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Your teacher will see this AI analysis on their board, grade it against the syllabus, and send feedback back to you here.
+                          </p>
+                        </div>
+                        <div className="p-4 overflow-y-auto text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-zinc-950/40">
+                          {message.text.slice(0, 900)}{message.text.length > 900 ? '…' : ''}
+                        </div>
+                        <div className="p-4 flex gap-2 border-t border-slate-100 dark:border-zinc-800">
+                          <button
+                            onClick={() => setChecklistModalOpen(false)}
+                            disabled={checklistSubmitState === 'submitting'}
+                            className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (checklistSubmitState !== 'idle') return;
+                              setChecklistSubmitState('submitting');
+                              try {
+                                await onSubmitChecklistToTeacher(message);
+                                setChecklistSubmitState('done');
+                                setTimeout(() => setChecklistModalOpen(false), 1400);
+                              } catch (e) {
+                                console.error('Submit checklist to teacher failed:', e);
+                                setChecklistSubmitState('idle');
+                              }
+                            }}
+                            disabled={checklistSubmitState !== 'idle'}
+                            className="flex-[1.4] py-2.5 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer disabled:bg-indigo-400"
+                          >
+                            {checklistSubmitState === 'submitting' ? 'Sending…' : checklistSubmitState === 'done' ? '✓ Sent!' : '📤 Send to Teacher'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Interactive Choice Chips (General Navigation or Skill Selection) */}

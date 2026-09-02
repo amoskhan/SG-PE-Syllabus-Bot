@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       proxy: {},
     },
     plugins: [
-      basicSsl(),
+      ...(process.env.DISABLE_HTTPS ? [] : [basicSsl()]),
       react(),
       {
         name: 'claude-dev-proxy',

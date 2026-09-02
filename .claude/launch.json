@@ -7,6 +7,12 @@
       "runtimeArgs": ["dev"],
       "port": 5173,
       "url": "https://localhost:5173"
+    },
+    {
+      "name": "dev-http",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/dev-http.mjs"],
+      "port": 5174
     }
   ]
 }

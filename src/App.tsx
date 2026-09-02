@@ -506,11 +506,13 @@ const App: React.FC = () => {
     let files: File[] | undefined;
     if (blob && blob.size > 0) {
       files = [new File([blob], `${performer.toLowerCase()}_attempt.mp4`, { type: 'video/mp4' })];
+      console.log(`[PeerAnalyze] ${performer}: using full video clip (${Math.round(blob.size / 1024)} KB) → 12-frame grading`);
     } else {
       const frames = performer === 'Banana' ? activePeerSessionData.bananaPoseFrames : activePeerSessionData.applePoseFrames;
       if (frames && frames.length > 0) {
         files = frames.map((frame, idx) => base64ToFile(frame, `${performer.toLowerCase()}_frame_${idx + 1}.jpg`));
       }
+      console.warn(`[PeerAnalyze] ${performer}: no video clip available (memory wiped + cloud fetch failed) — falling back to ${files?.length ?? 0} pose frames`);
     }
 
     // Peer flow has no individual student context — don't let a stale ref mis-save the analysis
@@ -523,13 +525,31 @@ const App: React.FC = () => {
   // Student sends a full AI rubric analysis from the Practice Station to the teacher's
   // board — one slot per performer so Apple's and Banana's don't overwrite each other.
   const handleSubmitChecklistToTeacher = async (message: Message) => {
-    const pair = activePairSession;
-    if (!pair) {
+    // Identifiers come from the active pair session, or fall back to the completed
+    // peer-session data (which carries pairNumber/lessonId/skill but no teacherId).
+    const ctx = activePairSession
+      ? {
+          lessonId: activePairSession.lessonId,
+          pairNumber: activePairSession.pairNumber,
+          skillName: activePairSession.skillName || activePeerSessionData?.skillName || scannedLessonData.skillName || 'Overhand Throw',
+          pairPhoto: activePairSession.pairPhoto || activePeerSessionData?.pairPhoto || '',
+          teacherId: activePairSession.teacherId,
+        }
+      : activePeerSessionData
+        ? {
+            lessonId: activePeerSessionData.lessonId,
+            pairNumber: activePeerSessionData.pairNumber,
+            skillName: activePeerSessionData.skillName,
+            pairPhoto: activePeerSessionData.pairPhoto || '',
+            teacherId: scannedLessonData.teacherId as string | undefined,
+          }
+        : null;
+    if (!ctx) {
       setTeacherFeedbackBanner('Join a pair station (scan the class QR) before sending work to your teacher.');
       return;
     }
-    const skillName = pair.skillName || activePeerSessionData?.skillName || scannedLessonData.skillName || 'Overhand Throw';
-    const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
+    const skillName = ctx.skillName;
+    const subId = canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, skillName);
 
     // Which performer is this analysis about? Read the user prompt just above it.
     let performer: 'Apple' | 'Banana' = 'Apple';
@@ -547,10 +567,10 @@ const App: React.FC = () => {
     if (!record) {
       record = {
         id: subId,
-        lessonId: pair.lessonId,
-        pairNumber: pair.pairNumber,
+        lessonId: ctx.lessonId,
+        pairNumber: ctx.pairNumber,
         skillName,
-        pairPhoto: pair.pairPhoto || '',
+        pairPhoto: ctx.pairPhoto,
         appleRole: { studentPerformer: 'Banana', evaluator: 'Apple', cues: [] },
         bananaRole: { studentPerformer: 'Apple', evaluator: 'Banana', cues: [] },
         status: 'pending_sync',
@@ -569,15 +589,19 @@ const App: React.FC = () => {
       [performer === 'Apple' ? 'apple' : 'banana']: entry,
     };
     await queuePairSubmission(record);
-    await backupSubmissionToSupabase(record, pair.teacherId);
+    await backupSubmissionToSupabase(record, ctx.teacherId);
+    setTeacherFeedbackBanner(null);
+    lastSeenTeacherFeedbackRef.current = null; // so the teacher's reply re-triggers the banner
   };
 
   // While in a Practice Station, poll the pair's submission row for a teacher comment.
   useEffect(() => {
-    const pair = activePairSession;
-    if (!pair || (!activePeerSessionData && appMode !== 'chat')) return;
-    const skillName = pair.skillName || activePeerSessionData?.skillName || scannedLessonData.skillName || 'Overhand Throw';
-    const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
+    const src = activePairSession ?? (activePeerSessionData
+      ? { lessonId: activePeerSessionData.lessonId, pairNumber: activePeerSessionData.pairNumber, skillName: activePeerSessionData.skillName }
+      : null);
+    if (!src) return;
+    const skillName = src.skillName || scannedLessonData.skillName || 'Overhand Throw';
+    const subId = canonicalSubmissionId(src.lessonId, src.pairNumber, skillName);
 
     const poll = async () => {
       const { data } = await supabase
@@ -1785,21 +1809,23 @@ const App: React.FC = () => {
               </div>
 
               {/* Right: model choice for AI analysis + primary actions */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                 <ModelPicker selectedModel={selectedModel} onSelect={setSelectedModel} align="right" variant="dark" />
                 <button
                   type="button"
                   onClick={() => setAppMode('peer_coaching')}
-                  className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex-1 sm:flex-none px-3 sm:px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
-                  <span>🎥 Record New Attempt</span>
+                  <span className="sm:hidden">🎥 Record</span>
+                  <span className="hidden sm:inline">🎥 Record New Attempt</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setAppMode('teacher_board')}
-                  className="flex-1 sm:flex-none px-3.5 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  className="flex-1 sm:flex-none px-3 sm:px-3.5 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
                 >
-                  🏫 Teacher Board
+                  <span className="sm:hidden">🏫 Board</span>
+                  <span className="hidden sm:inline">🏫 Teacher Board</span>
                 </button>
               </div>
             </div>
@@ -1829,9 +1855,9 @@ const App: React.FC = () => {
         )}
 
         {/* Minimalist Floating Top Bar */}
-        <div className={`absolute top-0 left-0 right-0 z-30 p-3 md:p-4 flex items-center justify-between pointer-events-none ${activePeerSessionData ? 'hidden' : ''}`}>
+        <div className={`absolute top-0 left-0 right-0 z-30 p-3 md:p-4 flex items-center justify-between gap-2 pointer-events-none ${activePeerSessionData ? 'hidden' : ''}`}>
           {/* Left: Mobile Sidebar Toggle + Home Back */}
-          <div className="pointer-events-auto flex items-center gap-2">
+          <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="md:hidden p-2.5 text-slate-700 dark:text-slate-200 bg-white/90 dark:bg-zinc-900/80 backdrop-blur-md rounded-xl border border-slate-200/40 dark:border-zinc-800/80 shadow-md transition-all hover:scale-105 active:scale-95"
@@ -1854,7 +1880,7 @@ const App: React.FC = () => {
           </div>
 
           {/* Right: Actions Cluster */}
-          <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto min-w-0">
             {/* Class Partner Mode (Apple & Banana) */}
             <button
               onClick={() => {
@@ -1864,11 +1890,11 @@ const App: React.FC = () => {
                   setIsQrScannerOpen(true);
                 }
               }}
-              className="px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs font-black flex items-center gap-1.5 hover:bg-amber-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+              className="px-2.5 sm:px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs font-black flex items-center gap-1.5 hover:bg-amber-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer shrink-0"
               title="Classroom Partner Coaching (Apple & Banana)"
             >
               <span>🍎🍌</span>
-              <span>Partner Mode</span>
+              <span className="hidden sm:inline">Partner Mode</span>
             </button>
 
             {/* Teacher Board & Review Tray */}
@@ -1880,7 +1906,7 @@ const App: React.FC = () => {
                   signInWithGoogle();
                 }
               }}
-              className="px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+              className="px-2.5 sm:px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer shrink-0"
               title={user ? "Teacher Whiteboard QR & Review Tray" : "Sign In to Open Teacher Board"}
             >
               <span>🏫</span>
@@ -1890,34 +1916,36 @@ const App: React.FC = () => {
             {user && (
               <button
                 onClick={() => setShowDashboard(true)}
-                className="px-3.5 py-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm cursor-pointer"
+                className="hidden sm:flex px-3.5 py-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-slate-700 dark:text-slate-300 text-xs font-semibold items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm cursor-pointer"
                 title="Student Dashboard"
               >
                 <svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span className="hidden sm:inline">Dashboard</span>
+                <span>Dashboard</span>
               </button>
             )}
             <button
               onClick={() => setIsPdfModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm cursor-pointer"
+              className="hidden sm:flex px-3.5 py-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-slate-700 dark:text-slate-300 text-xs font-semibold items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm cursor-pointer"
               title="Add Syllabus PDF"
             >
               <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              <span className="hidden sm:inline">Add PDF</span>
+              <span>Add PDF</span>
             </button>
 
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer text-xs"
+              className="hidden sm:block p-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] transition-all text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer text-xs"
             >
               {isDarkMode ? '☀️' : '🌙'}
             </button>
 
-            <ModelPicker selectedModel={selectedModel} onSelect={setSelectedModel} align="right" />
+            <div className="shrink-0">
+              <ModelPicker selectedModel={selectedModel} onSelect={setSelectedModel} align="right" />
+            </div>
           </div>
         </div>
 
@@ -2003,7 +2031,7 @@ const App: React.FC = () => {
                 onSelectSkill={handleSelectSkill}
                 onSelectMultipleSkills={handleSelectMultipleSkills}
                 onShowAllSkills={() => setIsSkillSelectorOpen(true)}
-                onSubmitChecklistToTeacher={activePairSession ? handleSubmitChecklistToTeacher : undefined}
+                onSubmitChecklistToTeacher={(activePairSession || activePeerSessionData) ? handleSubmitChecklistToTeacher : undefined}
                 disabled={isLoading || isProcessing}
                 skillMode={skillMode}
               />
