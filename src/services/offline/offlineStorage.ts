@@ -6,6 +6,14 @@ export interface PeerCueResult {
   isObserved: boolean;
 }
 
+export interface AiChatAnalysisEntry {
+  analysisText: string;   // verbatim AI response the student sent
+  skillName: string;
+  studentLabel: 'Apple' | 'Banana';
+  modelUsed: string;      // 'gemini' | 'claude' | ...
+  submittedAt: string;
+}
+
 export interface PairSubmissionRecord {
   id: string;
   lessonId: string;
@@ -57,13 +65,11 @@ export interface PairSubmissionRecord {
     generatedAt: string;
     modelUsed: string;
   };
-  // AI "Performance Analysis / Checklist Assessment" chat response the student
-  // submitted from the Practice Station for the teacher to review + comment on.
+  // Full AI rubric analysis the student ran in the Practice Station and sent to the
+  // teacher — one slot per performer so Apple's and Banana's don't overwrite each other.
   aiChatAnalysis?: {
-    analysisText: string;
-    skillName: string;
-    studentLabel: string; // 'Apple' | 'Banana' | 'Pair'
-    submittedAt: string;
+    apple?: AiChatAnalysisEntry;
+    banana?: AiChatAnalysisEntry;
   };
   status: 'pending_sync' | 'synced' | 'approved' | 'needs_redo';
   teacherFeedback?: string;

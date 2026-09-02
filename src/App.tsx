@@ -23,9 +23,74 @@ import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal'
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, queuePairSubmission, getDB } from './services/offline/offlineStorage';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, AiChatAnalysisEntry, queuePairSubmission, getDB } from './services/offline/offlineStorage';
 import { backupSubmissionToSupabase, upsertPairCheckIn } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
+import { OFFICIAL_FMS_PEER_CUES } from './data/peerSyllabusCues';
+
+type ModelId = 'gemini' | 'claude' | 'openrouter' | 'deepseek';
+
+const MODEL_OPTIONS: { id: ModelId; name: string; icon: string; desc: string }[] = [
+  { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png', desc: 'Recommended · best for video' },
+  { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png', desc: 'Most detailed skill feedback' },
+  { id: 'deepseek', name: 'DeepSeek V4 Flash', icon: 'deepseek.png', desc: 'Free · text chat only' },
+  { id: 'openrouter', name: 'OpenRouter (Free)', icon: 'qwen.png', desc: 'Free · may rate-limit' },
+];
+const MODEL_LABEL: Record<ModelId, string> = {
+  gemini: 'Gemini 3 Flash', claude: 'Claude Sonnet', deepseek: 'DeepSeek V4 Flash', openrouter: 'OpenRouter (Free)',
+};
+const modelIconFile = (m: ModelId) => (m === 'deepseek' ? 'deepseek' : m === 'openrouter' ? 'qwen' : m);
+
+const ModelPicker: React.FC<{
+  selectedModel: ModelId;
+  onSelect: (m: ModelId) => void;
+  align?: 'left' | 'right';
+  variant?: 'light' | 'dark';
+}> = ({ selectedModel, onSelect, align = 'right', variant = 'light' }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={`px-3 py-2 rounded-xl border text-xs font-bold shadow-sm flex items-center gap-2 transition-all cursor-pointer ${
+          variant === 'dark'
+            ? 'border-white/15 bg-white/10 text-slate-100 hover:bg-white/20'
+            : 'border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-zinc-800'
+        }`}
+      >
+        <img src={`/assets/model-icons/${modelIconFile(selectedModel)}.png`} alt={selectedModel} className="w-4 h-4 object-contain" />
+        <span className="hidden sm:inline">{MODEL_LABEL[selectedModel]}</span>
+        <svg className={`w-3 h-3 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-2.5 w-52 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/60 dark:border-zinc-800/80 overflow-hidden z-20 flex flex-col p-1.5 animate-scale-in`}>
+            {MODEL_OPTIONS.map((model) => (
+              <button
+                key={model.id}
+                onClick={() => { onSelect(model.id); setOpen(false); }}
+                className={`w-full px-3 py-2 rounded-xl text-left transition-colors flex items-center gap-3 cursor-pointer ${
+                  selectedModel === model.id
+                    ? 'bg-indigo-50/80 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-semibold'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                }`}
+              >
+                <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-5 h-5 object-contain" />
+                <div className="flex flex-col">
+                  <span className="text-xs leading-tight font-medium">{model.name}</span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-normal">{model.desc}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 /** Canonical id for a pair's submission row — must match studentService.uploadPeerSessionToTeacher. */
 const canonicalSubmissionId = (lessonId: string, pairNumber: number, skillName: string) =>
@@ -234,9 +299,8 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'gemini' | 'claude' | 'openrouter' | 'deepseek'>('gemini');
+  const [selectedModel, setSelectedModel] = useState<ModelId>('gemini');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isSkillSelectorOpen, setIsSkillSelectorOpen] = useState(false);
   const [isRubricBuilderOpen, setIsRubricBuilderOpen] = useState(false);
@@ -384,28 +448,80 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAnalyzePeerPerformer = async (performer: 'Banana' | 'Apple') => {
-    if (!activePeerSessionData) return;
-    const frames = performer === 'Banana'
-      ? activePeerSessionData.bananaPoseFrames
-      : activePeerSessionData.applePoseFrames;
-
-    let files: File[] = [];
-    if (frames && frames.length > 0) {
-      files = frames.map((frame, idx) =>
-        base64ToFile(frame, `${performer.toLowerCase()}_frame_${idx + 1}.jpg`)
-      );
-    }
-
-    const text = `Coach, please analyze ${performer}'s ${activePeerSessionData.skillName} movement frames against the 2024 MOE PE Syllabus. Tell us what was done well and give us 1 tip to improve!`;
-    await handleSendMessage(text, files.length > 0 ? files : undefined, {
-      skillName: activePeerSessionData.skillName,
-      isVerified: true,
-    });
+  // "🤝 Peer Assessment Checklist" bot card shown just before the AI grading.
+  const buildPeerChecklistMessage = (performer: 'Apple' | 'Banana', skillName: string): Message => {
+    const cues = OFFICIAL_FMS_PEER_CUES[skillName] || [];
+    const rated = (performer === 'Apple' ? activePeerSessionData?.appleCues : activePeerSessionData?.bananaCues) || {};
+    const lines = cues.length > 0
+      ? cues.map(c => `- ${rated[c.id] ? '✅' : '❌'} ${c.itemNumber}. ${c.syllabusCriterion}`).join('\n')
+      : '_No peer cues were recorded for this skill._';
+    const met = cues.filter(c => rated[c.id]).length;
+    return {
+      id: `peer-checklist-${performer}-${Date.now()}`,
+      sender: Sender.BOT,
+      timestamp: new Date(),
+      text: `## 🤝 Peer Assessment Checklist — ${performer}\n\n**Partner scored ${met}/${cues.length} cues**\n\n${lines}\n\n---\n*Below: 🤖 **AI Assessment Checklist** — graded against the full 2024 MOE PE Syllabus rubric.*`,
+      hasMedia: false,
+    };
   };
 
-  // Student submits an AI "Performance Analysis / Checklist Assessment" chat message
-  // to the teacher's review board, attached to their pair's submission row.
+  // Full performer clip: in-memory if fresh, otherwise re-downloaded from the clip the
+  // pair uploaded to Supabase on Submit (memory is wiped on a page refresh).
+  const fetchPerformerVideoBlob = async (performer: 'Apple' | 'Banana'): Promise<Blob | null> => {
+    const inMemory = performer === 'Apple' ? activePeerSessionData?.appleVideoBlob : activePeerSessionData?.bananaVideoBlob;
+    if (inMemory && inMemory.size > 0) return inMemory;
+
+    const pair = activePairSession;
+    if (!pair) return null;
+    const skillName = activePeerSessionData?.skillName || pair.skillName || scannedLessonData.skillName || 'Overhand Throw';
+    const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
+    const col = performer === 'Apple' ? 'apple_video_url' : 'banana_video_url';
+    try {
+      const { data } = await supabase.from('pair_submissions').select(col).eq('id', subId).maybeSingle();
+      const url = (data as Record<string, string> | null)?.[col];
+      if (!url) return null;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return await res.blob();
+    } catch {
+      return null;
+    }
+  };
+
+  const handleAnalyzePeerPerformer = async (performer: 'Banana' | 'Apple') => {
+    if (!activePeerSessionData) return;
+    const skillName = activePeerSessionData.skillName;
+
+    // 1. Peer assessment checklist card
+    const peerMsg = buildPeerChecklistMessage(performer, skillName);
+    updateSessionAndSync(currentSessionIdRef.current, session => ({
+      ...session,
+      messages: [...session.messages, peerMsg],
+      updatedAt: new Date(),
+    }));
+
+    // 2. Full recorded clip → 12-frame extraction + rubric grading (same pipeline as the
+    //    main chatbot video flow). Falls back to the 3 tracked pose frames if the clip is gone.
+    const blob = await fetchPerformerVideoBlob(performer);
+    let files: File[] | undefined;
+    if (blob && blob.size > 0) {
+      files = [new File([blob], `${performer.toLowerCase()}_attempt.mp4`, { type: 'video/mp4' })];
+    } else {
+      const frames = performer === 'Banana' ? activePeerSessionData.bananaPoseFrames : activePeerSessionData.applePoseFrames;
+      if (frames && frames.length > 0) {
+        files = frames.map((frame, idx) => base64ToFile(frame, `${performer.toLowerCase()}_frame_${idx + 1}.jpg`));
+      }
+    }
+
+    // Peer flow has no individual student context — don't let a stale ref mis-save the analysis
+    activeStudentContextRef.current = null;
+
+    const text = `Coach, grade ${performer}'s ${skillName} against the full 2024 MOE PE Syllabus checklist. Assess every performance criterion with frame evidence, then state the proficiency level.`;
+    await handleSendMessage(text, files, { skillName, isVerified: true });
+  };
+
+  // Student sends a full AI rubric analysis from the Practice Station to the teacher's
+  // board — one slot per performer so Apple's and Banana's don't overwrite each other.
   const handleSubmitChecklistToTeacher = async (message: Message) => {
     const pair = activePairSession;
     if (!pair) {
@@ -414,6 +530,17 @@ const App: React.FC = () => {
     }
     const skillName = pair.skillName || activePeerSessionData?.skillName || scannedLessonData.skillName || 'Overhand Throw';
     const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
+
+    // Which performer is this analysis about? Read the user prompt just above it.
+    let performer: 'Apple' | 'Banana' = 'Apple';
+    const sess = sessionsRef.current.find(s => s.id === currentSessionIdRef.current);
+    if (sess) {
+      const idx = sess.messages.findIndex(m => m.id === message.id);
+      const priorUser = [...sess.messages.slice(0, idx < 0 ? sess.messages.length : idx)]
+        .reverse()
+        .find(m => m.sender === Sender.USER);
+      if (priorUser && /\bbanana\b/i.test(priorUser.text)) performer = 'Banana';
+    }
 
     const db = await getDB();
     let record = await db.get('submissions', subId) as PairSubmissionRecord | undefined;
@@ -430,11 +557,16 @@ const App: React.FC = () => {
         createdAt: new Date().toISOString(),
       };
     }
-    record.aiChatAnalysis = {
+    const entry: AiChatAnalysisEntry = {
       analysisText: message.text,
       skillName,
-      studentLabel: 'Pair',
+      studentLabel: performer,
+      modelUsed: selectedModel,
       submittedAt: new Date().toISOString(),
+    };
+    record.aiChatAnalysis = {
+      ...(record.aiChatAnalysis || {}),
+      [performer === 'Apple' ? 'apple' : 'banana']: entry,
     };
     await queuePairSubmission(record);
     await backupSubmissionToSupabase(record, pair.teacherId);
@@ -1652,8 +1784,9 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right: primary actions */}
+              {/* Right: model choice for AI analysis + primary actions */}
               <div className="flex items-center gap-2 shrink-0">
+                <ModelPicker selectedModel={selectedModel} onSelect={setSelectedModel} align="right" variant="dark" />
                 <button
                   type="button"
                   onClick={() => setAppMode('peer_coaching')}
@@ -1784,59 +1917,7 @@ const App: React.FC = () => {
               {isDarkMode ? '☀️' : '🌙'}
             </button>
 
-            <div className="relative">
-              <button
-                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                className="px-3.5 py-2 rounded-xl border border-slate-200/50 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md text-xs font-bold text-slate-700 dark:text-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-all cursor-pointer"
-              >
-                <img
-                  src={`/assets/model-icons/${selectedModel === 'deepseek' ? 'deepseek' : selectedModel === 'openrouter' ? 'qwen' : selectedModel}.png`}
-                  alt={selectedModel}
-                  className="w-4 h-4 object-contain"
-                />
-                <span className="hidden sm:inline">
-                  {selectedModel === 'gemini' ? 'Gemini 3 Flash' :
-                    selectedModel === 'openrouter' ? 'OpenRouter (Free)' :
-                    selectedModel === 'deepseek' ? 'DeepSeek V4 Flash' :
-                      'Claude Sonnet'}
-                </span>
-                <svg className={`w-3 h-3 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {isModelDropdownOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setIsModelDropdownOpen(false)} />
-                  <div className="absolute top-full right-0 mt-2.5 w-52 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/60 dark:border-zinc-800/80 overflow-hidden z-20 flex flex-col p-1.5 animate-scale-in">
-                    {[
-                      { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png', desc: 'Recommended · best for video' },
-                      { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png', desc: 'Most detailed skill feedback' },
-                      { id: 'deepseek', name: 'DeepSeek V4 Flash', icon: 'deepseek.png', desc: 'Free · text chat only' },
-                      { id: 'openrouter', name: 'OpenRouter (Free)', icon: 'qwen.png', desc: 'Free · may rate-limit' },
-                    ].map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => {
-                          setSelectedModel(model.id as any);
-                          setIsModelDropdownOpen(false);
-                        }}
-                        className={`w-full px-3 py-2 rounded-xl text-left transition-colors flex items-center gap-3 cursor-pointer ${selectedModel === model.id
-                          ? 'bg-indigo-50/80 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-semibold'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
-                          }`}
-                      >
-                        <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-5 h-5 object-contain" />
-                        <div className="flex flex-col">
-                          <span className="text-xs leading-tight font-medium">{model.name}</span>
-                          <span className="text-[9px] text-slate-400 dark:text-slate-500 font-normal">{model.desc}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            <ModelPicker selectedModel={selectedModel} onSelect={setSelectedModel} align="right" />
           </div>
         </div>
 

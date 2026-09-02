@@ -482,7 +482,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           Pair #{sub.pairNumber}
                         </h4>
                         <span className="text-[10px] text-slate-400">{sub.skillName}</span>
-                        {sub.aiChatAnalysis && (
+                        {(sub.aiChatAnalysis?.apple || sub.aiChatAnalysis?.banana) && (
                           <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                             🤖 AI analysis
                           </span>
@@ -586,8 +586,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             </div>
 
             {/* Dual Turn Breakdown */}
+            <p className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-2 mb-1">🤝 Peer Assessment Checklist</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-2">
-              
+
               {/* Turn 1: Banana Performed */}
               <div className="p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-2xl border border-slate-200 dark:border-zinc-700">
                 <div className="flex items-center justify-between mb-2">
@@ -710,24 +711,32 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               </div>
             )}
 
-            {/* AI Chat Analysis submitted by the student from the Practice Station */}
-            {activeReviewSub.aiChatAnalysis && (
-              <div className="mt-4 border border-emerald-500/40 rounded-2xl overflow-hidden">
-                <div className="bg-emerald-950/80 dark:bg-emerald-950 px-4 py-2.5 flex items-center gap-2">
-                  <span className="text-lg">🤖</span>
-                  <span className="font-black text-white text-sm">AI Chat Analysis (from Student)</span>
-                  <span className="ml-auto text-[10px] text-emerald-300">
-                    {new Date(activeReviewSub.aiChatAnalysis.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <div className="p-4 bg-slate-50 dark:bg-zinc-900/60">
-                  <p className="text-[11px] font-bold text-slate-400 mb-1.5">
-                    {activeReviewSub.aiChatAnalysis.studentLabel} · {activeReviewSub.aiChatAnalysis.skillName}
-                  </p>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
-                    {activeReviewSub.aiChatAnalysis.analysisText}
-                  </p>
-                </div>
+            {/* AI Assessment Checklists the students sent from the Practice Station */}
+            {(activeReviewSub.aiChatAnalysis?.apple || activeReviewSub.aiChatAnalysis?.banana) && (
+              <div className="mt-4 space-y-3">
+                {(['apple', 'banana'] as const).map((who) => {
+                  const entry = activeReviewSub.aiChatAnalysis?.[who];
+                  if (!entry) return null;
+                  return (
+                    <div key={who} className="border border-emerald-500/40 rounded-2xl overflow-hidden">
+                      <div className="bg-emerald-950/80 dark:bg-emerald-950 px-4 py-2.5 flex items-center gap-2">
+                        <span className="text-lg">{who === 'apple' ? '🍎' : '🍌'}</span>
+                        <span className="font-black text-white text-sm">
+                          AI Assessment Checklist — {entry.studentLabel}
+                        </span>
+                        <span className="ml-auto text-[10px] text-emerald-300">
+                          {entry.modelUsed} · {new Date(entry.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className="p-4 bg-slate-50 dark:bg-zinc-900/60">
+                        <p className="text-[11px] font-bold text-slate-400 mb-1.5">{entry.skillName}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
+                          {entry.analysisText}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
