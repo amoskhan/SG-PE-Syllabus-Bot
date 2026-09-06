@@ -92,7 +92,7 @@ So a *smaller Y number = higher position on the body*. This is opposite to how w
 ### 4. Stepping Foot *(lead foot)*
 > *"Which foot is planted forward, toward the target?"*
 
-**How it works:** First it works out which way the throw travels on screen — from the ball's path if the ball was tracked, otherwise the direction the throwing hand swings, otherwise which way the body faces. Then, in a few frames around the release, it takes whichever ankle is furthest *toward* that direction — that's the lead (front) foot.
+**How it works:** First it works out which way the throw travels on screen — from where the ball ends up relative to the body, then the ball's path, then the direction the throwing hand swings, then which way the body faces. It only looks at the part of the clip from setup up to the release — anything after (the student straightening up, turning around, walking off) is ignored, because that tail used to flip the answer. Then, in a few frames around the release, it takes whichever ankle is furthest *toward* the throw direction — that's the lead (front) foot.
 
 **In PE terms:** For a step-and-throw, the lead foot is the one that ends up planted ahead of the body, pointing at the target. The back foot pushes off behind it.
 

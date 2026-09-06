@@ -74,6 +74,11 @@ const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0
 /**
  * Resolve throw/step orientation from a sequence of pose frames without trusting
  * MediaPipe's anatomical left/right labels for a side-on subject.
+ *
+ * All direction/facing maths is confined to the ACTIVE THROW WINDOW (setup → release).
+ * Clips routinely keep rolling while the student straightens up and turns around
+ * afterwards; folding that tail into "net displacement" or "last N frames" flips the
+ * answer, so it is excluded here.
  */
 export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation {
     const notes: string[] = [];
@@ -88,10 +93,37 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
 
     if (frames.length < 2) return fallback('insufficient pose frames');
 
-    // --- 1. Throwing wrist: whichever wrist accumulates more travel (visibility-gated) ---
+    const hipMidX = (f: PoseData) => (f.landmarks[23].x + f.landmarks[24].x) / 2;
+    const shoulderMidX = (f: PoseData) => (f.landmarks[11].x + f.landmarks[12].x) / 2;
+    const ballFrames = frames.filter(f => f.ball && f.ball.isValid);
+
+    // --- 1. Release frame + active window (setup → release; excludes any turn-around tail) ---
+    let releaseIdx: number;
+    if (ballFrames.length > 0) {
+        // Last frame the ball was still tracked near the thrower.
+        releaseIdx = frames.lastIndexOf(ballFrames[ballFrames.length - 1]);
+    } else {
+        // No ball: use the frame (within the first 80%) where the more-active wrist is
+        // horizontally furthest from the shoulder line — the extended release/​follow-through.
+        let best = 0, bestSpread = -1;
+        const scan = Math.max(2, Math.floor(frames.length * 0.8));
+        for (let i = 0; i < scan; i++) {
+            const f = frames[i];
+            const s15 = lmVis(f.landmarks[15]) > 0.5 ? Math.abs(f.landmarks[15].x - shoulderMidX(f)) : 0;
+            const s16 = lmVis(f.landmarks[16]) > 0.5 ? Math.abs(f.landmarks[16].x - shoulderMidX(f)) : 0;
+            const spread = Math.max(s15, s16);
+            if (spread > bestSpread) { bestSpread = spread; best = i; }
+        }
+        releaseIdx = best;
+    }
+    releaseIdx = Math.min(Math.max(releaseIdx, 1), frames.length - 1);
+    const active = frames.slice(0, releaseIdx + 1);
+    notes.push(`release@${releaseIdx}/${frames.length - 1} active=${active.length}`);
+
+    // --- 2. Throwing wrist: more travel across the ACTIVE window (visibility-gated) ---
     let move15 = 0, move16 = 0;
-    for (let i = 1; i < frames.length; i++) {
-        const a = frames[i - 1].landmarks, b = frames[i].landmarks;
+    for (let i = 1; i < active.length; i++) {
+        const a = active[i - 1].landmarks, b = active[i].landmarks;
         if (lmVis(a[15]) > 0.5 && lmVis(b[15]) > 0.5) move15 += Math.hypot(b[15].x - a[15].x, b[15].y - a[15].y);
         if (lmVis(a[16]) > 0.5 && lmVis(b[16]) > 0.5) move16 += Math.hypot(b[16].x - a[16].x, b[16].y - a[16].y);
     }
@@ -99,29 +131,45 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
     const throwingAnkleIndex: 27 | 28 = throwingWristIndex === 16 ? 28 : 27;
     const wristRatio = Math.max(move15, move16) / (Math.min(move15, move16) + 1e-6);
 
-    // --- 2. Throw direction in screen space (ball > forward hand-swing > body facing) ---
+    // --- 3. Throw direction in screen space (all within the active window) ---
+    // 3a. Ball downrange of the body at the last sighting — a single frame is enough.
     let ballDir: ScreenSide = 'unknown';
-    const ballFrames = frames.filter(f => f.ball && f.ball.isValid);
-    if (ballFrames.length >= 2) {
-        const bx = (f: PoseData) => f.ball!.centerNormalized?.x ?? f.ball!.center.x;
-        const dx = bx(ballFrames[ballFrames.length - 1]) - bx(ballFrames[0]);
-        const thresh = Math.abs(dx) > 1 ? 12 : 0.03; // pixels vs normalized
-        if (Math.abs(dx) > thresh) ballDir = dx > 0 ? 'right' : 'left';
+    if (ballFrames.length > 0) {
+        const lb = ballFrames[ballFrames.length - 1];
+        const bx = lb.ball!.centerNormalized?.x;
+        if (typeof bx === 'number') {
+            const off = bx - hipMidX(lb);
+            if (Math.abs(off) > 0.04) ballDir = off > 0 ? 'right' : 'left';
+        }
     }
-    const wrist0 = frames[0].landmarks[throwingWristIndex].x;
-    const wristN = frames[frames.length - 1].landmarks[throwingWristIndex].x;
-    const wristDir: ScreenSide = Math.abs(wristN - wrist0) > 0.06 ? (wristN - wrist0 > 0 ? 'right' : 'left') : 'unknown';
-    const tail = frames.slice(Math.floor(frames.length * 0.6));
-    const faceOffset = mean(tail.map(f => f.landmarks[0].x - (f.landmarks[23].x + f.landmarks[24].x) / 2));
+    // 3b. Ball travel between first and last sighting.
+    let ballTravelDir: ScreenSide = 'unknown';
+    if (ballFrames.length >= 2) {
+        const x0 = ballFrames[0].ball!.centerNormalized?.x;
+        const x1 = ballFrames[ballFrames.length - 1].ball!.centerNormalized?.x;
+        if (typeof x0 === 'number' && typeof x1 === 'number' && Math.abs(x1 - x0) > 0.04) {
+            ballTravelDir = x1 - x0 > 0 ? 'right' : 'left';
+        }
+    }
+    // 3c. Throwing wrist: mean x over the first third vs the last third of the active window.
+    const seg = Math.max(1, Math.floor(active.length / 3));
+    const earlyX = mean(active.slice(0, seg).map(f => f.landmarks[throwingWristIndex].x));
+    const lateX = mean(active.slice(-seg).map(f => f.landmarks[throwingWristIndex].x));
+    const wristDir: ScreenSide = Math.abs(lateX - earlyX) > 0.05 ? (lateX - earlyX > 0 ? 'right' : 'left') : 'unknown';
+    // 3d. Body facing over the active window (nose vs hip centre).
+    const faceOffset = mean(active.map(f => f.landmarks[0].x - hipMidX(f)));
     const faceDir: ScreenSide = Math.abs(faceOffset) > 0.03 ? (faceOffset > 0 ? 'right' : 'left') : 'unknown';
 
-    let throwDirection: ScreenSide = ballDir !== 'unknown' ? ballDir : wristDir !== 'unknown' ? wristDir : faceDir;
-    notes.push(`dir ball=${ballDir} wrist=${wristDir} face=${faceDir}`);
+    const throwDirection: ScreenSide =
+        ballDir !== 'unknown' ? ballDir
+        : ballTravelDir !== 'unknown' ? ballTravelDir
+        : wristDir !== 'unknown' ? wristDir
+        : faceDir;
+    notes.push(`dir ball=${ballDir} ballTravel=${ballTravelDir} wrist=${wristDir} face=${faceDir} -> ${throwDirection}`);
 
-    // --- 3. Lead / trailing ankle in a window around release ---
-    let relIdx = frames.length - 1;
-    for (let i = frames.length - 1; i >= 0; i--) { if (frames[i].ball?.isValid) { relIdx = i; break; } }
-    const relWin = frames.slice(Math.max(0, relIdx - 2), Math.min(frames.length, relIdx + 3));
+    // --- 4. Lead / trailing ankle in a window around release (clamped to the active window) ---
+    const relWin = active.slice(Math.max(0, releaseIdx - 2), releaseIdx + 1)
+        .concat(frames.slice(releaseIdx + 1, Math.min(frames.length, releaseIdx + 2)));
     const ankle27x = mean(relWin.map(f => f.landmarks[27].x));
     const ankle28x = mean(relWin.map(f => f.landmarks[28].x));
 
@@ -136,22 +184,22 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
         notes.push('feet not clearly staggered or direction unknown');
     }
 
-    // --- 4. Is the torso side-on? (governs whether L/R labels are trustworthy) ---
-    const shoulderSpan = mean(frames.map(f => Math.abs(f.landmarks[11].x - f.landmarks[12].x)));
-    const torsoH = mean(frames.map(f => Math.abs(
+    // --- 5. Is the torso side-on? (governs whether L/R labels are trustworthy) ---
+    const shoulderSpan = mean(active.map(f => Math.abs(f.landmarks[11].x - f.landmarks[12].x)));
+    const torsoH = mean(active.map(f => Math.abs(
         (f.landmarks[11].y + f.landmarks[12].y) / 2 - (f.landmarks[23].y + f.landmarks[24].y) / 2)));
     const shoulderRatio = torsoH > 1e-6 ? shoulderSpan / torsoH : 1;
-    const visLeft = mean(frames.flatMap(f => [lmVis(f.landmarks[11]), lmVis(f.landmarks[23]), lmVis(f.landmarks[25]), lmVis(f.landmarks[27])]));
-    const visRight = mean(frames.flatMap(f => [lmVis(f.landmarks[12]), lmVis(f.landmarks[24]), lmVis(f.landmarks[26]), lmVis(f.landmarks[28])]));
+    const visLeft = mean(active.flatMap(f => [lmVis(f.landmarks[11]), lmVis(f.landmarks[23]), lmVis(f.landmarks[25]), lmVis(f.landmarks[27])]));
+    const visRight = mean(active.flatMap(f => [lmVis(f.landmarks[12]), lmVis(f.landmarks[24]), lmVis(f.landmarks[26]), lmVis(f.landmarks[28])]));
     const visAsym = Math.max(visLeft, visRight) / (Math.min(visLeft, visRight) + 1e-6);
     const sideOn = shoulderRatio < 0.35 || visAsym > 1.4;
     const anatomicalReliable = !sideOn;
     notes.push(`shoulderRatio=${shoulderRatio.toFixed(2)} visAsym=${visAsym.toFixed(2)} sideOn=${sideOn}`);
 
-    // --- 5. Coordination (swap-invariant: wrist & ankle indices flip together) ---
+    // --- 6. Coordination (swap-invariant: wrist & ankle indices flip together) ---
     const ipsilateralStep = leadAnkleIndex === null ? null : leadAnkleIndex === throwingAnkleIndex;
 
-    // --- 6. Labels ---
+    // --- 7. Labels ---
     // MediaPipe convention: 27 = left ankle, 28 = right ankle (only trustworthy when !sideOn).
     const anatom = (idx: 27 | 28 | null) => (idx === null ? 'Undetermined' : idx === 27 ? 'Left' : 'Right');
     let leadFootLabel: string;
