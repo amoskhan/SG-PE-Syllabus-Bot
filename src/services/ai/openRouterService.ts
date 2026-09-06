@@ -253,7 +253,7 @@ export const sendMessageToOpenRouter = async (
 
 
         if (poseData && poseData.length > 0 && isFirstMessage) {
-            const { poseDetectionService } = await import('../vision/poseDetectionService');
+            const { poseDetectionService, resolveThrowOrientation } = await import('../vision/poseDetectionService');
             const analyses = poseData.map(pose => poseDetectionService.analyzePoseGeometry(pose));
 
             // Calculate frame-to-frame changes for movement pattern detection
@@ -372,21 +372,35 @@ export const sendMessageToOpenRouter = async (
 
                 // Generate Biomechanics Report with Citation Evidence
                 // "Force Generation" on Orange lines = Right Handed
-                const dominantHand = totalRightHandMove > totalLeftHandMove ? 'Right' : 'Left';
                 const handRatio = Math.max(totalRightHandMove, totalLeftHandMove) / Math.min(totalRightHandMove, totalLeftHandMove);
                 const confidence = handRatio > 1.2 ? '(High Confidence)' : '(Low Confidence)';
 
-                // Stepping foot 
+                // Screen-space orientation — does NOT trust MediaPipe's L/R labels for a side-on subject.
+                const orient = resolveThrowOrientation(poseData);
+                const isThrowRight = orient.throwingWristIndex === 16;
+                // `dominantHand` still selects which wrist's Y-track feeds the arm-trajectory / wind-up
+                // checks — key that off the more-active wrist rather than a raw index compare.
+                const dominantHand: 'Right' | 'Left' = isThrowRight ? 'Right' : 'Left';
+                const throwingHandLabel = orient.anatomicalReliable
+                    ? `${dominantHand} hand ${confidence}`
+                    : `The more-active arm ${confidence} — anatomical left/right not reliable (subject filmed side-on); confirm from frames`;
+
+                // Stepping foot
                 const strideExpansion = maxAnkleDist / (initialAnkleDist + 0.001); // Avoid div/0
                 const stepDetected = strideExpansion > 1.2;
-                const steppingFoot = maxRightFootVel > maxLeftFootVel * 1.2 ? 'Right' : (maxLeftFootVel > maxRightFootVel * 1.2 ? 'Left' : 'None/Both');
+                const steppingFoot = orient.leadFootLabel;
 
                 const stanceIssue = narrowStanceCount > (poseData.length * 0.6) ? '⚠️ Feet too narrow (Narrower than shoulders)' : '✅ Stance width looks okay';
 
-                // Coordination Check
-                let coordinationCheck = '✅ Coordination looks okay';
-                if (dominantHand === 'Right' && steppingFoot === 'Right') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Right Foot while throwing with Right Hand (Should be Left Foot)';
-                if (dominantHand === 'Left' && steppingFoot === 'Left') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Left Foot while throwing with Left Hand (Should be Right Foot)';
+                // Coordination Check — swap-invariant (throwing wrist & lead ankle indices flip together)
+                let coordinationCheck: string;
+                if (orient.ipsilateralStep === true) {
+                    coordinationCheck = '❌ IPSILATERAL ERROR: the stepping (forward) foot and the throwing arm are on the SAME side of the body. Correct technique steps with the OPPOSITE foot to allow trunk rotation.';
+                } else if (orient.ipsilateralStep === false) {
+                    coordinationCheck = '✅ Coordination looks okay (contralateral step — opposite foot to throwing arm)';
+                } else {
+                    coordinationCheck = '⚠️ Could not determine step/throw coordination from pose data — verify visually.';
+                }
 
                 // Y increases downwards. Smaller Y = Higher position on screen.
                 const highPoint = dominantHand === 'Right' ? maxRightHandHighY : maxLeftHandHighY;
@@ -432,8 +446,12 @@ export const sendMessageToOpenRouter = async (
 
                 // Step Check Report
                 const stepNote = stepDetected
-                    ? `✅ DISTINCT STEP DETECTED (Stride widened by ${(strideExpansion * 100 - 100).toFixed(0)}%). Stepping foot: ${steppingFoot}.`
+                    ? `✅ DISTINCT STEP DETECTED (Stride widened by ${(strideExpansion * 100 - 100).toFixed(0)}%). Lead foot: ${steppingFoot}.`
                     : `⚠️ No significant step detected (Stride expansion only ${(strideExpansion * 100 - 100).toFixed(0)}%).`;
+
+                const orientationNote = orient.anatomicalReliable
+                    ? `Torso is square enough to camera — MediaPipe left/right labels are trustworthy.`
+                    : `⚠️ Subject is filmed side-on: the per-frame "Left/Right" joint labels (and any absolute foot/hand side) may be MIRROR-FLIPPED by MediaPipe. Trust the visual frames and the lead-foot-relative-to-target framing over any raw "Left"/"Right".`;
 
                 const gymnasticsNote = isGymnastics
                     ? `\n                **NOTE (Gymnastics Locomotor Skills)**: Arm trajectory direction does NOT classify the skill type for gymnastics. Instead focus on: (1) flight phase — are both feet off the ground where required? (2) landing mechanics — knee bend to absorb force; (3) body rhythm and coordination.`
@@ -441,10 +459,11 @@ export const sendMessageToOpenRouter = async (
 
                 biomechanicsReport = `\n
                 **BIOMECHANICS AUTO-ANALYSIS:**
-                1. **Dominant Hand**: ${dominantHand} ${confidence}
+                0. **Camera orientation**: ${orientationNote} (throw travels toward screen-${orient.throwDirection}; orientation confidence: ${orient.confidence})
+                1. **Throwing Arm**: ${throwingHandLabel}
                 2. **Arm Trajectory (Skill Classifier)**: ${armTrajectory}
                 3. **Wind-up**: ${windUpCheck}
-                4. **Stepping Foot**: ${steppingFoot}
+                4. **Stepping Foot (lead foot)**: ${steppingFoot}
                 5. **Coordination**: ${coordinationCheck}
                 6. **Stance**: ${stanceIssue}
                 7. **Arm Height (Skill-Specific)**: ${highSwingCheck}

@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Commands
 
@@ -32,7 +32,7 @@ React (src/) → POST /api/upload-pdf → pdf-parse → Gemini embeddings → Su
 | Endpoint | Model | Purpose |
 |---|---|---|
 | `/api/gemini.ts` | Gemini 2.5 Flash | Primary Q&A + motion analysis |
-| `/api/bedrock.ts` | Claude 3.5 Sonnet (AWS) | Alternative LLM |
+| `/api/bedrock.ts` | Codex 3.5 Sonnet (AWS) | Alternative LLM |
 | `/api/openrouter.ts` | qwen/qwen3.6-plus:free (text) / gemini-2.5-flash (video) | Alternative LLM |
 | `/api/rag-search.ts` | Gemini embeddings + Supabase PGVector | Semantic search |
 | `/api/upload-pdf.ts` | pdf-parse + Gemini embeddings | PDF ingestion pipeline |
@@ -107,17 +107,14 @@ Computed in `src/services/ai/openRouterService.ts` → `sendMessageToOpenRouter`
 
 | Field | How it's computed | What it signals |
 |---|---|---|
-| Camera orientation | `resolveThrowOrientation()` — torso side-on test (shoulder span ÷ torso height, plus left/right landmark visibility asymmetry) | If side-on, MediaPipe's per-frame **Left/Right joint labels may be mirror-flipped**; the report tells the LLM to trust the frames + lead-foot-vs-target framing over any raw "Left"/"Right" |
-| Throwing Arm | Whichever wrist (landmark 15 / 16) has higher total distance moved (visibility-gated). Reported as a side only when orientation is reliable, else "the more-active arm" | Which arm is throwing/passing — swap-invariant |
-| Arm Trajectory | Highest point of throwing wrist vs nose Y (landmark 0) and hip Y (landmark 23/24) | **Primary skill classifier**: OVERHEAD → overhand family; LOW SWING → underhand family; MID-LEVEL → passes/dribble |
-| Wind-up | Did throwing wrist drop below hip Y at any frame | Confirms underhand backswing (low) vs overhand backswing (high) |
-| Stepping Foot (lead foot) | `resolveThrowOrientation()` — throw direction (ball → forward hand-swing → body facing) then the ankle furthest toward that direction in a window around release. Reported as "Left/Right foot forward" only when orientation is reliable, else "lead foot points toward screen-\<dir\>" | Which foot is planted forward toward the target |
-| Coordination | Throwing-wrist index vs lead-ankle index (27 pairs 15, 28 pairs 16). Same index → ipsilateral error ❌. **Swap-invariant**: both flip together, so this is correct even when the absolute side isn't | Common beginner mistake (removes trunk rotation) |
+| Dominant Hand | Whichever wrist (landmark 15 = left, 16 = right) has higher total distance moved across all frames | Which hand is throwing/passing |
+| Arm Trajectory | Highest point of dominant wrist vs nose Y (landmark 0) and hip Y (landmark 23/24) | **Primary skill classifier**: OVERHEAD → overhand family; LOW SWING → underhand family; MID-LEVEL → passes/dribble |
+| Wind-up | Did dominant wrist drop below hip Y at any frame | Confirms underhand backswing (low) vs overhand backswing (high) |
+| Stepping Foot | Whichever ankle (27 = left, 28 = right) moved more on X-axis | Detects coordination errors |
+| Coordination | If dominant hand and stepping foot are on the same side → ipsilateral error ❌ | Common beginner mistake |
 | Stance | Ankle gap vs shoulder width (landmarks 11/12 = shoulders, 27/28 = ankles) | Checks "feet shoulder-width apart" criterion |
 | Knee Bend | Minimum knee angle across all frames, cited with frame number | Checks "knees slightly bent" criterion |
 | Step Detection | Stride expansion ratio = maxAnkleDist / initialAnkleDist > 1.2 | Checks "step toward target" criterion |
-
-> **Why "lead foot" not "Left/Right":** MediaPipe Pose infers body facing to assign anatomical left/right landmark indices. Filmed close to side-on it often gets front-vs-back backwards and swaps *every* left/right landmark at once (11↔12, 15↔16, 23↔24, 25↔26, 27↔28), so any absolute "Stepping Foot: Left" comes out mirrored. `resolveThrowOrientation()` in `poseDetectionService.ts` works in screen space to stay correct regardless, and downgrades absolute-side claims to "confirm from the frames" when the shot is side-on.
 
 #### MediaPipe Landmark Index Reference
 
@@ -154,7 +151,7 @@ Y-axis convention: **0 = top of frame, 1 = bottom**. So a smaller Y value = high
 | `src/services/ai/aiServiceRegistry.ts` | Factory — selects which LLM service to call based on `selectedModel` |
 | `src/services/ai/geminiService.ts` | Gemini 2.5 Flash integration — handles both text Q&A and motion analysis |
 | `src/services/ai/openRouterService.ts` | OpenRouter integration — biomechanics report generation + Phase 1/2 prompt assembly |
-| `src/services/ai/bedrockService.ts` | AWS Bedrock (Claude 3.5 Sonnet) integration |
+| `src/services/ai/bedrockService.ts` | AWS Bedrock (Codex 3.5 Sonnet) integration |
 | `src/services/vision/poseDetectionService.ts` | MediaPipe wrapper — landmark extraction, pose geometry analysis, ball detection |
 | `src/components/video/VideoAnalysisPlayer.tsx` | Video player with canvas overlay — draws skeleton + ball trajectory comet tail |
 | `src/components/video/VideoFrameSelector.tsx` | Trim UI — lets user select start/end timestamps before submitting video |

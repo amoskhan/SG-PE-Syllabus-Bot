@@ -30,16 +30,29 @@ So a *smaller Y number = higher position on the body*. This is opposite to how w
 
 ---
 
-## The 8 Biomechanics Fields
+## The Biomechanics Fields
 
-### 1. Dominant Hand
-> *"Which hand did they use?"*
+### 0. Camera Orientation *(gate on everything below)*
+> *"Is the student square to the camera, or filmed from the side?"*
 
-**How it works:** Watches both wrists across every frame. Whichever wrist travelled more total distance = dominant hand.
+**How it works:** Checks how wide the shoulders look relative to the torso's height, plus whether the left-side body points are much more visible than the right-side ones (or vice versa). Either sign → the student is **side-on** to the camera.
 
-**In PE terms:** A student who throws with their right hand will have a right wrist that sweeps a large arc. The left wrist barely moves by comparison.
+**Why it matters:** MediaPipe decides which points are "left" and which are "right" by guessing which way the body faces. Filmed close to side-on it often guesses front-vs-back backwards and **swaps every left/right point at once**. When that happens, "Stepping Foot: Left" really means right, "Dominant Hand: Left" really means right, and so on — the *maths* is fine, the *labels* are mirrored.
 
-**Known limitation:** A large body rotation (e.g. full follow-through) can cause the non-dominant wrist to also travel far, potentially confusing the reading.
+**What the system does about it:** When the shot is side-on, the report stops asserting "Left" or "Right" for the foot and hand. Instead it says which foot is **forward toward the target** ("lead foot") and tells the AI to confirm sides from the actual video frames. The coordination check (field 5) still works because it compares the arm and foot to *each other*, and both get swapped together.
+
+---
+
+### 1. Throwing Arm
+> *"Which arm did they throw with?"*
+
+**How it works:** Watches both wrists across every frame (ignoring frames where a wrist is hidden). Whichever wrist travelled more total distance = the throwing arm.
+
+**In PE terms:** A student who throws with their right hand will have a right wrist that sweeps a large arc. The other wrist barely moves by comparison.
+
+**Reported as a side ("Right hand") only when the student is square to the camera.** Side-on, it's reported as "the more-active arm" because left/right can't be trusted (see field 0). Either way, every check that needs "the throwing arm" uses *this* wrist, so a mirror-swap doesn't break them.
+
+**Known limitation:** A large body rotation (e.g. full follow-through) can cause the other wrist to also travel far, potentially confusing the reading.
 
 ---
 
@@ -76,25 +89,27 @@ So a *smaller Y number = higher position on the body*. This is opposite to how w
 
 ---
 
-### 4. Stepping Foot
-> *"Which foot stepped forward?"*
+### 4. Stepping Foot *(lead foot)*
+> *"Which foot is planted forward, toward the target?"*
 
-**How it works:** Watches both ankles on the left–right axis. Whichever ankle moved more sideways = the stepping foot.
+**How it works:** First it works out which way the throw travels on screen — from the ball's path if the ball was tracked, otherwise the direction the throwing hand swings, otherwise which way the body faces. Then, in a few frames around the release, it takes whichever ankle is furthest *toward* that direction — that's the lead (front) foot.
 
-**In PE terms:** When a student steps forward to throw, the stepping foot's ankle shifts significantly in the X direction. The planted foot barely moves.
+**In PE terms:** For a step-and-throw, the lead foot is the one that ends up planted ahead of the body, pointing at the target. The back foot pushes off behind it.
 
-**Known limitation:** Doesn't detect the direction of the step — only which foot moved more. A student who shuffles sideways would still trigger this.
+**Reported as "Left/Right foot forward" only when the student is square to the camera.** Side-on, it reads "lead foot points toward screen-left/right — confirm from the frames", because MediaPipe's left/right can be mirrored (field 0).
+
+**Known limitation:** If the feet stay close together (no real step) or the throw direction can't be worked out, it reports "Undetermined" rather than guessing.
 
 ---
 
 ### 5. Coordination
 > *"Did they step with the correct foot?"*
 
-**How it works:** Cross-checks fields 1 and 4. If the dominant hand and the stepping foot are on the **same side** → ipsilateral error flagged.
+**How it works:** Checks whether the throwing arm and the lead foot are on the **same side of the body**. Same side → ipsilateral error. It does this by pairing the arm and foot tracking points (the throwing wrist pairs with the ankle on its side), so it stays correct **even if MediaPipe has mirrored every left/right label** — because the arm and the foot both get mirrored together.
 
-**In PE terms:** Correct coordination = opposite foot to throwing hand (right hand → left foot forward). This is one of the most common beginner errors — stepping with the same-side foot removes trunk rotation and reduces power.
+**In PE terms:** Correct coordination = opposite foot to throwing hand (right hand → left foot forward). Stepping with the same-side foot is one of the most common beginner errors — it removes trunk rotation and kills power.
 
-**Known limitation:** If the student barely steps at all (feet stay close together throughout), neither ankle moves much and the check may not trigger, even if they have poor coordination.
+**Known limitation:** If the student barely steps at all (feet stay close together), the lead foot can't be identified and this reports "could not determine — verify visually" rather than flagging an error.
 
 ---
 

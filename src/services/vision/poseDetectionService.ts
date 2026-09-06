@@ -26,6 +26,154 @@ export interface BallData {
     status?: string;   // Reason for validity (e.g., "Proximity Match", "Static Ignored", "Too Far")
 }
 
+// =====================================================================================
+// Throw-orientation resolver — screen-space, robust to MediaPipe left/right label swap
+// =====================================================================================
+// MediaPipe Pose assigns anatomical "left"/"right" landmark indices by inferring which
+// way the body faces. Filmed close to side-on it frequently gets front-vs-back backwards
+// and swaps EVERY left/right landmark at once (11<->12, 15<->16, 23<->24, 25<->26,
+// 27<->28). Any downstream field that names a side ("Stepping Foot: Left") then comes
+// out mirrored, even though the biomechanics maths is correct.
+//
+// This resolver sidesteps the problem by reasoning in screen space:
+//   throwingWristIndex  – whichever wrist accumulates more travel (swap-invariant)
+//   throwDirection      – where the ball / forward hand-swing / body facing points
+//   leadAnkleIndex      – the ankle furthest toward throwDirection near release
+// It also reports whether MediaPipe's anatomical labels look trustworthy (from how
+// side-on the torso is), so callers can fall back to "lead / trailing foot" language
+// instead of asserting a left/right that may be mirror-flipped.
+
+export type ScreenSide = 'left' | 'right' | 'unknown';
+
+export interface ThrowOrientation {
+    /** Screen-space direction the throw/roll travels. */
+    throwDirection: ScreenSide;
+    /** MediaPipe wrist index (15=left, 16=right) of the more active arm. */
+    throwingWristIndex: 15 | 16;
+    /** MediaPipe ankle index on the same body side as the throwing wrist (27 pairs 15, 28 pairs 16). */
+    throwingAnkleIndex: 27 | 28;
+    /** MediaPipe ankle index of the forward (toward-target) foot at release, or null if indeterminate. */
+    leadAnkleIndex: 27 | 28 | null;
+    trailAnkleIndex: 27 | 28 | null;
+    /** Human-readable, mirror-safe description of the lead foot. */
+    leadFootLabel: string;
+    /** True when the torso is square enough to the camera to trust MediaPipe's L/R naming. */
+    anatomicalReliable: boolean;
+    /** Throwing arm and lead foot on the same body side (a coordination error). null = indeterminate. */
+    ipsilateralStep: boolean | null;
+    confidence: 'high' | 'low';
+    /** Diagnostic breadcrumb (kept out of the graded report). */
+    notes: string;
+}
+
+const lmVis = (lm?: NormalizedLandmark): number =>
+    lm && typeof lm.visibility === 'number' ? lm.visibility : 1;
+
+const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+
+/**
+ * Resolve throw/step orientation from a sequence of pose frames without trusting
+ * MediaPipe's anatomical left/right labels for a side-on subject.
+ */
+export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation {
+    const notes: string[] = [];
+    const frames = (poseData || []).filter(p => p.landmarks && p.landmarks.length >= 33);
+
+    const fallback = (reason: string): ThrowOrientation => ({
+        throwDirection: 'unknown', throwingWristIndex: 16, throwingAnkleIndex: 28,
+        leadAnkleIndex: null, trailAnkleIndex: null,
+        leadFootLabel: `Undetermined (${reason})`, anatomicalReliable: false,
+        ipsilateralStep: null, confidence: 'low', notes: reason,
+    });
+
+    if (frames.length < 2) return fallback('insufficient pose frames');
+
+    // --- 1. Throwing wrist: whichever wrist accumulates more travel (visibility-gated) ---
+    let move15 = 0, move16 = 0;
+    for (let i = 1; i < frames.length; i++) {
+        const a = frames[i - 1].landmarks, b = frames[i].landmarks;
+        if (lmVis(a[15]) > 0.5 && lmVis(b[15]) > 0.5) move15 += Math.hypot(b[15].x - a[15].x, b[15].y - a[15].y);
+        if (lmVis(a[16]) > 0.5 && lmVis(b[16]) > 0.5) move16 += Math.hypot(b[16].x - a[16].x, b[16].y - a[16].y);
+    }
+    const throwingWristIndex: 15 | 16 = move16 >= move15 ? 16 : 15;
+    const throwingAnkleIndex: 27 | 28 = throwingWristIndex === 16 ? 28 : 27;
+    const wristRatio = Math.max(move15, move16) / (Math.min(move15, move16) + 1e-6);
+
+    // --- 2. Throw direction in screen space (ball > forward hand-swing > body facing) ---
+    let ballDir: ScreenSide = 'unknown';
+    const ballFrames = frames.filter(f => f.ball && f.ball.isValid);
+    if (ballFrames.length >= 2) {
+        const bx = (f: PoseData) => f.ball!.centerNormalized?.x ?? f.ball!.center.x;
+        const dx = bx(ballFrames[ballFrames.length - 1]) - bx(ballFrames[0]);
+        const thresh = Math.abs(dx) > 1 ? 12 : 0.03; // pixels vs normalized
+        if (Math.abs(dx) > thresh) ballDir = dx > 0 ? 'right' : 'left';
+    }
+    const wrist0 = frames[0].landmarks[throwingWristIndex].x;
+    const wristN = frames[frames.length - 1].landmarks[throwingWristIndex].x;
+    const wristDir: ScreenSide = Math.abs(wristN - wrist0) > 0.06 ? (wristN - wrist0 > 0 ? 'right' : 'left') : 'unknown';
+    const tail = frames.slice(Math.floor(frames.length * 0.6));
+    const faceOffset = mean(tail.map(f => f.landmarks[0].x - (f.landmarks[23].x + f.landmarks[24].x) / 2));
+    const faceDir: ScreenSide = Math.abs(faceOffset) > 0.03 ? (faceOffset > 0 ? 'right' : 'left') : 'unknown';
+
+    let throwDirection: ScreenSide = ballDir !== 'unknown' ? ballDir : wristDir !== 'unknown' ? wristDir : faceDir;
+    notes.push(`dir ball=${ballDir} wrist=${wristDir} face=${faceDir}`);
+
+    // --- 3. Lead / trailing ankle in a window around release ---
+    let relIdx = frames.length - 1;
+    for (let i = frames.length - 1; i >= 0; i--) { if (frames[i].ball?.isValid) { relIdx = i; break; } }
+    const relWin = frames.slice(Math.max(0, relIdx - 2), Math.min(frames.length, relIdx + 3));
+    const ankle27x = mean(relWin.map(f => f.landmarks[27].x));
+    const ankle28x = mean(relWin.map(f => f.landmarks[28].x));
+
+    let leadAnkleIndex: 27 | 28 | null = null;
+    let trailAnkleIndex: 27 | 28 | null = null;
+    if (throwDirection !== 'unknown' && Math.abs(ankle27x - ankle28x) > 0.02) {
+        const largerX: 27 | 28 = ankle28x > ankle27x ? 28 : 27;
+        const smallerX: 27 | 28 = largerX === 28 ? 27 : 28;
+        leadAnkleIndex = throwDirection === 'right' ? largerX : smallerX;
+        trailAnkleIndex = leadAnkleIndex === 28 ? 27 : 28;
+    } else {
+        notes.push('feet not clearly staggered or direction unknown');
+    }
+
+    // --- 4. Is the torso side-on? (governs whether L/R labels are trustworthy) ---
+    const shoulderSpan = mean(frames.map(f => Math.abs(f.landmarks[11].x - f.landmarks[12].x)));
+    const torsoH = mean(frames.map(f => Math.abs(
+        (f.landmarks[11].y + f.landmarks[12].y) / 2 - (f.landmarks[23].y + f.landmarks[24].y) / 2)));
+    const shoulderRatio = torsoH > 1e-6 ? shoulderSpan / torsoH : 1;
+    const visLeft = mean(frames.flatMap(f => [lmVis(f.landmarks[11]), lmVis(f.landmarks[23]), lmVis(f.landmarks[25]), lmVis(f.landmarks[27])]));
+    const visRight = mean(frames.flatMap(f => [lmVis(f.landmarks[12]), lmVis(f.landmarks[24]), lmVis(f.landmarks[26]), lmVis(f.landmarks[28])]));
+    const visAsym = Math.max(visLeft, visRight) / (Math.min(visLeft, visRight) + 1e-6);
+    const sideOn = shoulderRatio < 0.35 || visAsym > 1.4;
+    const anatomicalReliable = !sideOn;
+    notes.push(`shoulderRatio=${shoulderRatio.toFixed(2)} visAsym=${visAsym.toFixed(2)} sideOn=${sideOn}`);
+
+    // --- 5. Coordination (swap-invariant: wrist & ankle indices flip together) ---
+    const ipsilateralStep = leadAnkleIndex === null ? null : leadAnkleIndex === throwingAnkleIndex;
+
+    // --- 6. Labels ---
+    // MediaPipe convention: 27 = left ankle, 28 = right ankle (only trustworthy when !sideOn).
+    const anatom = (idx: 27 | 28 | null) => (idx === null ? 'Undetermined' : idx === 27 ? 'Left' : 'Right');
+    let leadFootLabel: string;
+    if (leadAnkleIndex === null) {
+        leadFootLabel = 'Undetermined (feet not clearly staggered, or throw direction unclear)';
+    } else if (anatomicalReliable) {
+        leadFootLabel = `${anatom(leadAnkleIndex)} foot forward (toward screen-${throwDirection})`;
+    } else {
+        leadFootLabel = `Lead foot points toward screen-${throwDirection}; anatomical left/right NOT reliable (subject filmed side-on) — confirm from the video frames`;
+    }
+
+    const confidence: 'high' | 'low' =
+        throwDirection !== 'unknown' && leadAnkleIndex !== null && (ballFrames.length >= 2 || wristRatio > 1.15)
+            ? 'high' : 'low';
+
+    return {
+        throwDirection, throwingWristIndex, throwingAnkleIndex,
+        leadAnkleIndex, trailAnkleIndex, leadFootLabel,
+        anatomicalReliable, ipsilateralStep, confidence, notes: notes.join(' | '),
+    };
+}
+
 class PoseDetectionService {
     private imageLandmarker: PoseLandmarker | null = null;
     private videoLandmarker: PoseLandmarker | null = null;

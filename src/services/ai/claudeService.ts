@@ -236,7 +236,7 @@ export const sendMessageToClaudeAPI = async (
 
         // ── Pose data analysis (identical to geminiService.ts) ──────────────
         if (poseData && poseData.length > 0) {
-            const { poseDetectionService } = await import('../vision/poseDetectionService');
+            const { poseDetectionService, resolveThrowOrientation } = await import('../vision/poseDetectionService');
             const analyses = poseData.map(pose => poseDetectionService.analyzePoseGeometry(pose));
 
             if (poseData.length > 1) {
@@ -337,19 +337,33 @@ export const sendMessageToClaudeAPI = async (
                     }
                 }
 
-                const dominantHand = totalRightHandMove > totalLeftHandMove ? 'Right' : 'Left';
                 const handRatio = Math.max(totalRightHandMove, totalLeftHandMove) / Math.min(totalRightHandMove, totalLeftHandMove);
                 const confidence = handRatio > 1.2 ? '(High Confidence)' : '(Low Confidence)';
 
+                // Screen-space orientation — does NOT trust MediaPipe's L/R labels for a side-on subject.
+                const orient = resolveThrowOrientation(poseData);
+                const isThrowRight = orient.throwingWristIndex === 16;
+                // `dominantHand` is still used to pick which wrist's Y-track to read for wind-up /
+                // backswing checks — drive that off the more-active wrist, not the raw index compare.
+                const dominantHand: 'Right' | 'Left' = isThrowRight ? 'Right' : 'Left';
+                const throwingHandLabel = orient.anatomicalReliable
+                    ? `${dominantHand} hand ${confidence}`
+                    : `The more-active arm ${confidence} — anatomical left/right not reliable (subject filmed side-on); confirm from frames`;
+
                 const strideExpansion = maxAnkleDist / (initialAnkleDist + 0.001);
                 const stepDetected = strideExpansion > 1.2;
-                const steppingFoot = maxRightFootVel > maxLeftFootVel * 1.2 ? 'Right' : (maxLeftFootVel > maxRightFootVel * 1.2 ? 'Left' : 'None/Both');
+                const steppingFoot = orient.leadFootLabel;
 
                 const stanceIssue = narrowStanceCount > (poseData.length * 0.6) ? '⚠️ Feet too narrow (Narrower than shoulders)' : '✅ Stance width looks okay';
 
-                let coordinationCheck = '✅ Coordination looks okay';
-                if (dominantHand === 'Right' && steppingFoot === 'Right') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Right Foot while throwing with Right Hand (Should be Left Foot)';
-                if (dominantHand === 'Left' && steppingFoot === 'Left') coordinationCheck = '❌ IPSILATERAL ERROR: Stepped with Left Foot while throwing with Left Hand (Should be Right Foot)';
+                let coordinationCheck: string;
+                if (orient.ipsilateralStep === true) {
+                    coordinationCheck = '❌ IPSILATERAL ERROR: the stepping (forward) foot and the throwing arm are on the SAME side of the body. Correct technique steps with the OPPOSITE foot to allow trunk rotation.';
+                } else if (orient.ipsilateralStep === false) {
+                    coordinationCheck = '✅ Coordination looks okay (contralateral step — opposite foot to throwing arm)';
+                } else {
+                    coordinationCheck = '⚠️ Could not determine step/throw coordination from pose data — verify visually.';
+                }
 
                 let windUpCheck = 'N/A (Not required for this skill)';
                 const requiresWindUp = ['Underhand Throw', 'Underhand Roll', 'Overhand Throw', 'Kick'].some(s => skillName?.includes(s));
@@ -444,13 +458,18 @@ export const sendMessageToClaudeAPI = async (
                 }
 
                 const stepNote = stepDetected
-                    ? `✅ DISTINCT STEP DETECTED (Stride widened by ${(strideExpansion * 100 - 100).toFixed(0)}%). Stepping foot: ${steppingFoot}.`
+                    ? `✅ DISTINCT STEP DETECTED (Stride widened by ${(strideExpansion * 100 - 100).toFixed(0)}%). Lead foot: ${steppingFoot}.`
                     : `⚠️ No significant step detected (Stride expansion only ${(strideExpansion * 100 - 100).toFixed(0)}%).`;
+
+                const orientationNote = orient.anatomicalReliable
+                    ? `Torso is square enough to camera — MediaPipe left/right labels are trustworthy.`
+                    : `⚠️ Subject is filmed side-on: the per-frame "Left/Right" joint labels below (and any absolute foot/hand side) may be MIRROR-FLIPPED by MediaPipe. Trust the visual frames and the lead-foot-relative-to-target framing over any raw "Left"/"Right".`;
 
                 biomechanicsReport = `\n
 **BIOMECHANICS AUTO-ANALYSIS:**
-1. **Dominant Hand**: ${dominantHand} ${confidence}
-2. **Stepping Foot**: ${steppingFoot}
+0. **Camera orientation**: ${orientationNote} (throw travels toward screen-${orient.throwDirection}; orientation confidence: ${orient.confidence})
+1. **Throwing Arm**: ${throwingHandLabel}
+2. **Stepping Foot (lead foot)**: ${steppingFoot}
 3. **Coordination**: ${coordinationCheck}
 4. **Stance**: ${stanceIssue}
 5. **Wind-up (Depth)**: ${windUpCheck}
