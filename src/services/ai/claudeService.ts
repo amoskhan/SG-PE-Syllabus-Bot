@@ -668,34 +668,62 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
 
         if (poseData && poseData.length > 0) {
             if (!isVerified) {
+                const isGymnastics = skillMode === 'gymnastics';
+
+                const validSkillsForMode = isGymnastics
+                    ? ALL_GYMNASTICS_SKILLS.join(', ')
+                    : validSkillsList;
+
+                // Arm trajectory is the primary FMS classifier, but it is
+                // meaningless for a roll or a gallop — say so explicitly or
+                // the overhead arm in a leap reads as an overhand throw.
+                const gymnasticsBiomechanicsNote = isGymnastics
+                    ? `\nNote: For gymnastics locomotor skills, arm trajectory direction is not used to classify the skill. Focus on flight phase detection (both feet off ground), landing mechanics (knee bend), and rhythm/coordination instead.\n`
+                    : '';
+
+                const phase1Discriminators = isGymnastics
+                    ? `   - **Flight Phase**: Are both feet off the ground at any point? (Required for Galloping, Sliding, Skipping, Jumping, Leaping, Running)
+   - **Same Foot Take-off/Landing**: Does the student push off and land on the same foot? (Hopping)
+   - **Rhythm & Pattern**: Is there a step-hop pattern? (Skipping) A lead-close pattern? (Galloping/Sliding)
+   - **Direction of Travel**: Moving sideways? (Sliding) Forward? (all others)
+   - **Landing Mechanics**: Does the student land on one foot or two feet?`
+                    : `   - **Release Point**: Where is the ball released? (Below knee = Roll, Knee-Waist = Throw, Above waist = Overhand/Catch)
+   - **Arm Trajectory**: Does the arm swing downward (Underhand) or upward/overhead (Overhand)?
+   - **Body Orientation**: Is the user facing the target or sideways (Overhand Throw/Kick often use side stance)?
+   - **Leg Movement**: Is there a step? Which foot steps?`;
+
+                const phase1SkillDiscriminators = isGymnastics
+                    ? `   - **Hopping vs Skipping**: Hopping uses ONE foot take-off and landing; Skipping is step-hop alternating feet
+   - **Galloping vs Sliding**: Galloping moves forward; Sliding moves sideways
+   - **Jumping (vertical) vs Jumping (horizontal)**: Vertical = upward thrust; Horizontal = forward thrust with body lean
+   - **Leaping vs Running**: Leaping has a longer flight phase from a run, landing on opposite foot`
+                    : `   - **Underhand Roll vs Underhand Throw**: Roll releases BELOW KNEE (ball rolls on ground), Throw releases BETWEEN KNEE-WAIST (ball travels in air)
+   - **Overhand Throw vs Chest Pass**: Overhand has arm going overhead and across body, Chest Pass extends straight forward from chest
+   - **Kick**: Non-dominant foot plants beside ball, dominant leg swings through
+   - **Dribble (hands)**: Repeated downward push, ball returns to hand
+   - **Dribble (feet)**: Ball stays on ground, tapped with inside of foot`;
+
                 // Static-only system instruction — dynamic pose data is already in enhancedMessage
                 systemInstruction = `
 You are the Singapore PE Syllabus Assistant.
 
 **YOUR GOAL (VERIFICATION PHASE):**
 You must complete TWO phases before analysis can begin.
-**PHASE 1**: Identify the Top 4 likely FMS Skills.
-**PHASE 2**: Verify the Computer Vision data (Ball detection).
-
-**VALID SKILLS LIST**: ${validSkillsList}
+**PHASE 1**: Identify the Top 4 likely ${isGymnastics ? 'Gymnastics Locomotor Skills' : 'FMS Skills'}.
+**PHASE 2**: Verify the Computer Vision data (${isGymnastics ? 'Flight phase and landing detection' : 'Ball detection'}).
+${gymnasticsBiomechanicsNote}
+**VALID SKILLS LIST**: ${validSkillsForMode}
 
 **INSTRUCTIONS:**
 1. **Observe**: Look at the pose data and the visual input in the user message. Pay special attention to:
-   - **Release Point**: Where is the ball released? (Below knee = Roll, Knee-Waist = Throw, Above waist = Overhand/Catch)
-   - **Arm Trajectory**: Does the arm swing downward (Underhand) or upward/overhead (Overhand)?
-   - **Body Orientation**: Is the user facing the target or sideways (Overhand Throw/Kick often use side stance)?
-   - **Leg Movement**: Is there a step? Which foot steps?
+${phase1Discriminators}
 
 2. **Identify**: Pick the **TOP 4** most likely skills from the VALID SKILLS LIST using these discriminators:
-   - **Underhand Roll vs Underhand Throw**: Roll releases BELOW KNEE (ball rolls on ground), Throw releases BETWEEN KNEE-WAIST (ball travels in air)
-   - **Overhand Throw vs Chest Pass**: Overhand has arm going overhead and across body, Chest Pass extends straight forward from chest
-   - **Kick**: Non-dominant foot plants beside ball, dominant leg swings through
-   - **Dribble (hands)**: Repeated downward push, ball returns to hand
-   - **Dribble (feet)**: Ball stays on ground, tapped with inside of foot
+${phase1SkillDiscriminators}
 
 3. **Format**: Use the following tag at the end of your response:
    '[[SKILL_CHOICES: Skill 1, Skill 2, Skill 3, Skill 4]]'
-   Example: '[[SKILL_CHOICES: Underhand Throw, Overhand Throw, Underhand Roll, Bounce Pass]]'
+   Example: '[[SKILL_CHOICES: ${isGymnastics ? 'Hopping, Skipping, Galloping, Running' : 'Underhand Throw, Overhand Throw, Underhand Roll, Bounce Pass'}]]'
 
 4. **Call to Action**:
    - Ask: "I've detected your movement! Which of these 4 skills is it?"
@@ -703,7 +731,7 @@ You must complete TWO phases before analysis can begin.
 
 **RESTRICTIONS:**
 - **DO NOT GRADE** the performance yet.
-- **DO NOT** output the FMS Rubric or Checklist.
+- **DO NOT** output the ${isGymnastics ? 'Gymnastics' : 'FMS'} Rubric or Checklist.
 - JUST Identify the top 4 choices.
 `;
             } else {
@@ -874,6 +902,10 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         const requestBody = {
             model: useSonnet ? MODEL_SONNET : MODEL_HAIKU,
             max_tokens: 4000,
+            // Grading needs the same throw judged the same way twice. Without
+            // this the Anthropic default (1.0) applies, which is far looser
+            // than the other providers — api/gemini.ts uses 0.3.
+            temperature: 0.3,
             system: [
                 {
                     type: 'text' as const,
