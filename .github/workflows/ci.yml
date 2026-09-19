@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push to a PR cancels the in-flight run for that PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # No VITE_* secrets are needed here: this only proves the bundle
+      # compiles. Runtime keys live in the Vercel project settings.
+      - name: Build frontend
+        run: yarn build
+
+      # Blocking. api/ is clean under strict, so it holds this bar from day one.
+      # Nothing else compiles these files before deploy: tsconfig.json only
+      # covers src/, and vite build never follows fetch('/api/...') calls.
+      - name: Typecheck api/
+        run: yarn typecheck:api
+
+      # Not a gate yet — @types/react and @types/react-dom are missing from
+      # devDependencies, so tsc reports errors that aren't real. Once those
+      # are installed and the real errors are cleared, drop continue-on-error.
+      - name: Typecheck src/ (informational)
+        continue-on-error: true
+        run: yarn typecheck
