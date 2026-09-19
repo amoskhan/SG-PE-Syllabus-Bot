@@ -342,22 +342,3 @@ export const getAnalysisHistory = async (studentId: string): Promise<SkillAnalys
     return (data ?? []).map(mapAnalysis);
 };
 
-/** Returns a cached analysis for deduplication (same video + student + skill). */
-export const lookupByVideoHash = async (
-    videoHash: string,
-    studentId: string,
-    skillName: string
-): Promise<SkillAnalysis | null> => {
-    const { data, error } = await supabase
-        .from('skill_analyses')
-        .select('*')
-        .eq('video_hash', videoHash)
-        .eq('student_id', studentId)
-        .eq('skill_name', skillName)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-    if (error) { console.error('lookupByVideoHash error:', error); return null; }
-    return data ? mapAnalysis(data) : null;
-};

@@ -7,7 +7,7 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, SkillMode } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
-import { getOrCreateStudent, saveAnalysis, lookupByVideoHash, uploadVideoToStorage } from './services/studentService';
+import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
 import { computeVideoHash } from './services/videoAnalysisCache';
 
 import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
@@ -1476,42 +1476,29 @@ const App: React.FC = () => {
         }
       }
 
-      // --- Phase 2 cache hit: skip LLM if same video+skill already analysed for this student ---
-      let isCachedResponse = false;
-      if (isVerifying && studentId && videoHash && skillContext) {
-        try {
-          const cached = await lookupByVideoHash(videoHash, studentId, skillContext);
-          if (cached) {
-            response = { text: cached.analysisText, groundingChunks: undefined, referenceImageURI: undefined, tokenUsage: 0 };
-            isCachedResponse = true;
-          }
-        } catch (e) {
-          console.warn('Cache lookup failed (non-fatal):', e);
-        }
-      }
-
       // --- Student memory: inject prior progress summary into Phase 2 ---
       let studentMemory: string | undefined;
       if (isVerifying && student && skillContext && student.progressSummary?.[skillContext]) {
         studentMemory = student.progressSummary[skillContext];
       }
 
-      if (!isCachedResponse) {
-        const aiService = getAIService(selectedModel);
-        response = await aiService(
-          standardHistory,
-          promptText,
-          contextPoseData,
-          contextAnalysisFrames,
-          skillContext,
-          isVerifying,
-          currentSessionIdRef.current,
-          teacherProfile,
-          studentMemory,
-          user?.id,  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
-          skillMode
-        );
-      }
+      // Every submission runs the model, including a re-upload of a video
+      // already analysed. Results are still written to skill_analyses for
+      // history, but a stored row is never served in place of a fresh run.
+      const aiService = getAIService(selectedModel);
+      response = await aiService(
+        standardHistory,
+        promptText,
+        contextPoseData,
+        contextAnalysisFrames,
+        skillContext,
+        isVerifying,
+        currentSessionIdRef.current,
+        teacherProfile,
+        studentMemory,
+        user?.id,  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
+        skillMode
+      );
 
       // --- Auto-save Phase 2 analysis to Supabase (fire-and-forget) ---
       // Use proficiency level detection — not isVerifying — as the Phase 2 signal.
@@ -1519,7 +1506,7 @@ const App: React.FC = () => {
       // without a chip click), so relying on it causes saves to be silently skipped.
       const proficiencyMatch = response.text.match(/\b(Beginning|Developing|Competent|Excellent)\b/i);
       const proficiencyLevel = proficiencyMatch ? proficiencyMatch[1] : undefined;
-      if (studentId && skillContext && proficiencyLevel && !isCachedResponse) {
+      if (studentId && skillContext && proficiencyLevel) {
         console.log('[Save] Saving analysis for', studentId, skillContext, proficiencyLevel);
         (async () => {
           let videoStoragePath: string | undefined;
@@ -1557,9 +1544,8 @@ const App: React.FC = () => {
         timestamp: new Date(),
         groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined,
         referenceImageURI: response.referenceImageURI,
-        tokenUsage: isCachedResponse ? 0 : response.tokenUsage,
+        tokenUsage: response.tokenUsage,
         modelId: selectedModel,
-        isCached: isCachedResponse,
         studentId,
         // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
         hasMedia: newMessage.hasMedia || !!(contextPoseData && contextPoseData.length > 0)
