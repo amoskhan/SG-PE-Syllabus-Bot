@@ -28,18 +28,16 @@ import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers 
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
 
-type ModelId = 'gemini' | 'claude' | 'openrouter' | 'deepseek';
+type ModelId = 'gemini' | 'claude';
 
 const MODEL_OPTIONS: { id: ModelId; name: string; icon: string; desc: string }[] = [
   { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png', desc: 'Recommended · best for video' },
   { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png', desc: 'Most detailed skill feedback' },
-  { id: 'deepseek', name: 'DeepSeek V4 Flash', icon: 'deepseek.png', desc: 'Free · text chat only' },
-  { id: 'openrouter', name: 'OpenRouter (Free)', icon: 'qwen.png', desc: 'Free · may rate-limit' },
 ];
 const MODEL_LABEL: Record<ModelId, string> = {
-  gemini: 'Gemini 3 Flash', claude: 'Claude Sonnet', deepseek: 'DeepSeek V4 Flash', openrouter: 'OpenRouter (Free)',
+  gemini: 'Gemini 3 Flash', claude: 'Claude Sonnet',
 };
-const modelIconFile = (m: ModelId) => (m === 'deepseek' ? 'deepseek' : m === 'openrouter' ? 'qwen' : m);
+const modelIconFile = (m: ModelId) => m;
 
 const ModelPicker: React.FC<{
   selectedModel: ModelId;
@@ -1575,6 +1573,12 @@ const App: React.FC = () => {
             videoUrl: videoStoragePath,
             proficiencyLevel,
             analysisText: response!.text,
+            // The pose_data column and saveAnalysis both supported this
+            // already; the caller just never passed it. Persisting it makes
+            // each row a self-contained record of what the model actually
+            // saw, which is what an offline eval needs to replay a grading
+            // without re-running MediaPipe.
+            poseData: contextPoseData,
             sessionId: currentSessionIdRef.current,
             modelId: selectedModel,
             tokenUsage: response!.tokenUsage,
@@ -2177,8 +2181,6 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex flex-wrap gap-2.5">
                       {[
-                        { label: 'OpenRouter', desc: 'fast general PE chat', icon: 'qwen.png', color: 'border-cyan-100 bg-cyan-50/50 text-cyan-700 dark:border-cyan-900/30 dark:bg-cyan-950/20 dark:text-cyan-400' },
-                        { label: 'DeepSeek', desc: 'accurate syllabus search', icon: 'deepseek.png', color: 'border-sky-100 bg-sky-50/50 text-sky-700 dark:border-sky-900/30 dark:bg-sky-950/20 dark:text-sky-400' },
                         { label: 'Gemini', desc: 'grounded video grading', icon: 'gemini.png', color: 'border-indigo-100 bg-indigo-50/50 text-indigo-700 dark:border-indigo-900/30 dark:bg-indigo-950/20 dark:text-indigo-400' },
                         { label: 'Claude', desc: 'detailed movement feedback', icon: 'claude.png', color: 'border-violet-100 bg-violet-50/50 text-violet-700 dark:border-violet-900/30 dark:bg-violet-950/20 dark:text-violet-400' }
                       ].map((item) => (

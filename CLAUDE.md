@@ -22,7 +22,7 @@ No test or lint commands are configured in package.json.
 All LLM calls go through Vercel serverless functions (`/api/*.ts`) — these proxy requests to external services using server-side API keys. The frontend never calls LLM APIs directly.
 
 ```
-React (src/) → POST /api/gemini | /api/bedrock | /api/openrouter → LLM response
+React (src/) → POST /api/gemini | /api/claude → LLM response
 React (src/) → POST /api/rag-search → Gemini embeddings + Supabase pgvector
 React (src/) → POST /api/upload-pdf → pdf-parse → Gemini embeddings → Supabase
 ```
@@ -32,14 +32,9 @@ React (src/) → POST /api/upload-pdf → pdf-parse → Gemini embeddings → Su
 | Endpoint | Model | Purpose |
 |---|---|---|
 | `/api/gemini.ts` | Gemini 2.5 Flash | Primary Q&A + motion analysis |
-| `/api/bedrock.ts` | Claude 3.5 Sonnet (AWS) | Alternative LLM |
-| `/api/openrouter.ts` | qwen/qwen3.6-plus:free (text) / gemini-2.5-flash (video) | Alternative LLM |
+| `/api/claude.ts` | Claude Sonnet / Haiku (Anthropic) | Q&A, motion analysis, peer coaching |
 | `/api/rag-search.ts` | Gemini embeddings + Supabase PGVector | Semantic search |
 | `/api/upload-pdf.ts` | pdf-parse + Gemini embeddings | PDF ingestion pipeline |
-
-OpenRouter model selection (`src/services/ai/openRouterService.ts` → `modelMap`):
-- Text-only messages → `qwen/qwen3.6-plus:free`
-- Messages with video/images → `google/gemini-2.5-flash-preview` (vision required)
 
 ### Data Persistence
 
@@ -103,7 +98,7 @@ Two-phase analysis flow:
 
 > For a plain-language explanation of how each field maps to physical movement and known limitations per skill, see [BIOMECHANICS.md](BIOMECHANICS.md).
 
-Computed in `src/services/ai/openRouterService.ts` → `sendMessageToOpenRouter`, injected into the LLM prompt before Phase 1:
+Computed independently in `geminiService.ts` and `claudeService.ts`, injected into the LLM prompt before Phase 1:
 
 | Field | How it's computed | What it signals |
 |---|---|---|
@@ -143,7 +138,7 @@ Y-axis convention: **0 = top of frame, 1 = bottom**. So a smaller Y value = high
 2. Add the skill name string to `ALL_FMS_SKILLS` array in the same file
 3. Add a reference image path to `SKILL_REFERENCE_IMAGES` (image goes in `public/assets/reference_images/`)
 4. Add few-shot grading examples to `src/data/skillExamples.ts` → `getFewShotExamples(skillName)`
-5. The skill whitelist in the Phase 1 system prompt (in `openRouterService.ts` ~line 525 and `geminiService.ts`) must also be updated manually
+5. The skill whitelist in the Phase 1 system prompt (in `geminiService.ts` and `claudeService.ts`) must also be updated manually
 
 ### Key Files
 
@@ -153,8 +148,8 @@ Y-axis convention: **0 = top of frame, 1 = bottom**. So a smaller Y value = high
 | `src/types.ts` | All TypeScript interfaces: `Message`, `ChatSession`, `TeacherProfile`, `MediaAttachment`, etc. |
 | `src/services/ai/aiServiceRegistry.ts` | Factory — selects which LLM service to call based on `selectedModel` |
 | `src/services/ai/geminiService.ts` | Gemini 2.5 Flash integration — handles both text Q&A and motion analysis |
-| `src/services/ai/openRouterService.ts` | OpenRouter integration — biomechanics report generation + Phase 1/2 prompt assembly |
-| `src/services/ai/bedrockService.ts` | AWS Bedrock (Claude 3.5 Sonnet) integration |
+| `src/services/ai/claudeService.ts` | Claude integration — biomechanics report + Phase 1/2 prompt assembly + few-shot examples |
+| `src/services/ai/peerCoachingAI.ts` | Peer coaching analysis (Claude Haiku via `/api/claude`) |
 | `src/services/vision/poseDetectionService.ts` | MediaPipe wrapper — landmark extraction, pose geometry analysis, ball detection |
 | `src/components/video/VideoAnalysisPlayer.tsx` | Video player with canvas overlay — draws skeleton + ball trajectory comet tail |
 | `src/components/video/VideoFrameSelector.tsx` | Trim UI — lets user select start/end timestamps before submitting video |
@@ -180,12 +175,10 @@ Supabase fires `TOKEN_REFRESHED` on `onAuthStateChange` creating a new `user` ob
 
 **Vite (browser-visible, `VITE_` prefix):**
 - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
-- `VITE_GEMINI_API_KEY`, `VITE_OPENROUTER_API_KEY`
-- `VITE_AWS_ACCESS_KEY_ID`, `VITE_AWS_SECRET_ACCESS_KEY`, `VITE_AWS_REGION`, `VITE_AWS_BEDROCK_MODEL`
+- `VITE_GEMINI_API_KEY`
 
 **Serverless functions (Vercel dashboard, no prefix):**
-- `GEMINI_API_KEY`, `OPENROUTER_API_KEY`
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_BEDROCK_MODEL`
+- `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`
 - `ALLOWED_ORIGIN` (CORS, e.g. `https://sg-pe-syllabus.vercel.app`)
 

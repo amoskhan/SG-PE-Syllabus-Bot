@@ -1,10 +1,7 @@
 import { sendMessageToGemini } from './geminiService';
 import { sendMessageToClaudeAPI } from './claudeService';
-import { sendMessageToOpenRouter } from './openRouterService';
-import { sendMessageToDeepSeek } from './deepseekService';
 import { Content } from '@google/genai';
 import { MediaData, ChatResponse } from './geminiService';
-import { Message, Sender } from '../../types';
 
 export type AIServiceFunction = (
     history: any[], // We will normalize this inside the wrapper
@@ -37,26 +34,16 @@ const claudeWrapper: AIServiceFunction = async (history, currentMessage, poseDat
     return sendMessageToClaudeAPI(standardHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode ?? 'fms');
 };
 
-// Wrapper for OpenRouter with dynamic model routing (video → gemini-2.5-flash, text/PDF → qwen)
-const openrouterWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, _studentMemory, _userId, skillMode) => {
-    return sendMessageToOpenRouter(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, 'openrouter', sessionId, teacherProfile, skillMode ?? 'fms');
-};
-
-const deepseekWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode) => {
-    return sendMessageToDeepSeek(history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode ?? 'fms');
-};
-
-// Start with a registry that returns the FUNCTION
-export const getAIService = (modelId: 'gemini' | 'claude' | 'openrouter' | 'deepseek'): AIServiceFunction => {
+// Start with a registry that returns the FUNCTION.
+// `modelId` is widened to string because stored sessions may still carry
+// 'openrouter' or 'deepseek' from before those providers were removed; those
+// fall through to Gemini rather than breaking an old chat.
+export const getAIService = (modelId: string): AIServiceFunction => {
     switch (modelId) {
         case 'gemini':
             return geminiWrapper;
         case 'claude':
             return claudeWrapper;
-        case 'openrouter':
-            return openrouterWrapper;
-        case 'deepseek':
-            return deepseekWrapper;
         default:
             return geminiWrapper;
     }

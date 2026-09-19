@@ -9,7 +9,7 @@ import { Student, SkillMode } from '../../types';
 interface ChatInputProps {
   onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string }) => void;
   isLoading: boolean;
-  selectedModel?: 'gemini' | 'claude' | 'openrouter' | 'deepseek';
+  selectedModel?: 'gemini' | 'claude';
   skillMode?: SkillMode;
   onSkillModeChange?: (mode: SkillMode) => void;
 }
@@ -439,15 +439,12 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
               {/* Model Chip (Minimalist) */}
               <div className="hidden xs:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100/80 dark:bg-zinc-950/60 border border-slate-200/50 dark:border-zinc-850/30 transition-colors backdrop-blur-sm select-none">
                 <img
-                  src={`/assets/model-icons/${selectedModel === 'openrouter' ? 'qwen' : selectedModel === 'claude' ? 'claude' : selectedModel === 'deepseek' ? 'deepseek' : selectedModel}.png`}
+                  src={`/assets/model-icons/${selectedModel}.png`}
                   alt={selectedModel}
                   className="w-3.5 h-3.5 object-contain opacity-80"
                 />
                 <span className="text-[9px] font-extrabold text-slate-500 dark:text-slate-450 uppercase tracking-widest">
-                  {selectedModel === 'gemini' ? 'Gemini' :
-                   selectedModel === 'openrouter' ? 'OpenRouter' :
-                   selectedModel === 'deepseek' ? 'DeepSeek' :
-                   'Claude'}
+                  {selectedModel === 'gemini' ? 'Gemini' : 'Claude'}
                 </span>
               </div>
 

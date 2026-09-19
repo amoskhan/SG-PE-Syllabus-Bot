@@ -11,7 +11,6 @@
     "typecheck:api": "tsc -p api --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1017.0",
     "@google/genai": "^1.30.0",
     "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
     "@supabase/supabase-js": "^2.95.3",

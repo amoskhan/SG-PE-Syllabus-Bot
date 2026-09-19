@@ -1,5 +1,12 @@
-import { GoogleGenAI } from "@google/genai";
 import { OFFICIAL_FMS_PEER_CUES } from "../../data/peerSyllabusCues";
+
+// Matches claudeService.ts. Haiku is enough here: four short, tightly
+// formatted calls over 4 frames each, not a full rubric grading.
+const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+
+type ClaudeBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
 
 export interface PeerCoachingAIResult {
   studentFeedback: {
@@ -69,10 +76,40 @@ async function extractFramesFromBlob(blob: Blob, numFrames: number = 4): Promise
   });
 }
 
-function frameToGeminiPart(dataUrl: string) {
+function frameToClaudeBlock(dataUrl: string): ClaudeBlock | null {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return null;
-  return { inlineData: { mimeType: match[1], data: match[2] } };
+  return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } };
+}
+
+/**
+ * One Claude call through the /api/claude proxy.
+ *
+ * This path used to call Gemini straight from the browser with
+ * VITE_GEMINI_API_KEY, which ships the key in the bundle â€” on the student
+ * flow, which has no login at all. Going through the proxy keeps the key
+ * server-side, the same as every other model path in the app.
+ */
+async function callClaude(blocks: ClaudeBlock[]): Promise<string> {
+  const response = await fetch("/api/claude", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: MODEL_HAIKU,
+      max_tokens: 1024,
+      // Peer feedback should read the same way twice for the same clip.
+      temperature: 0.3,
+      messages: [{ role: "user", content: blocks }],
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(detail.error || `Claude API error (${response.status})`);
+  }
+
+  const data = await response.json() as { text?: string };
+  return data.text || "";
 }
 
 const VALID_PROFICIENCIES = ["Beginning", "Developing", "Competent", "Excellent"];
@@ -93,13 +130,8 @@ const parseTeacherReport = (rawText: string) => {
   }
 };
 
-const extractText = (result: PromiseSettledResult<any>): string => {
-  if (result.status === "rejected") return "";
-  try {
-    const r = result.value;
-    return typeof r.text === "function" ? r.text() : (r.candidates?.[0]?.content?.parts?.[0]?.text || "");
-  } catch { return ""; }
-};
+const extractText = (result: PromiseSettledResult<string>): string =>
+  result.status === "fulfilled" ? result.value : "";
 
 export async function runPeerCoachingAnalysis(
   skillName: string,
@@ -109,10 +141,6 @@ export async function runPeerCoachingAnalysis(
   appleCues: Record<string, boolean>,
   onProgress?: (msg: string) => void
 ): Promise<PeerCoachingAIResult> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) throw new Error("VITE_GEMINI_API_KEY missing");
-  const ai = new GoogleGenAI({ apiKey });
-
   const cues = OFFICIAL_FMS_PEER_CUES[skillName] || [];
   const criteriaList = cues.map(c => `${c.itemNumber}. ${c.syllabusCriterion}`).join("\n");
 
@@ -125,9 +153,10 @@ export async function runPeerCoachingAnalysis(
   const bananaPeerSummary = cues.map(c => `${c.syllabusCriterion}: ${bananaCues[c.id] ? "YES" : "NO"}`).join(", ");
   const applePeerSummary = cues.map(c => `${c.syllabusCriterion}: ${appleCues[c.id] ? "YES" : "NO"}`).join(", ");
 
-  const buildStudentParts = (performer: "Apple" | "Banana", frames: string[], peerSummary: string) => [
-    ...frames.map(frameToGeminiPart).filter(Boolean),
+  const buildStudentParts = (performer: "Apple" | "Banana", frames: string[], peerSummary: string): ClaudeBlock[] => [
+    ...frames.map(frameToClaudeBlock).filter((b): b is ClaudeBlock => b !== null),
     {
+      type: "text",
       text: `You are a super encouraging PE coach for Singapore primary school students (age 8-12).
 Skill: ${skillName}. Peer partner said about ${performer}: ${peerSummary}
 ${frames.length > 0 ? `You can see ${performer}'s movement frames above.` : ""}
@@ -137,12 +166,13 @@ Format: [praise]. [tip] [emoji]`
     }
   ];
 
-  const buildTeacherParts = (performer: "Apple" | "Banana", frames: string[], peerSummary: string) => [
-    ...frames.map(frameToGeminiPart).filter(Boolean),
+  const buildTeacherParts = (performer: "Apple" | "Banana", frames: string[], peerSummary: string): ClaudeBlock[] => [
+    ...frames.map(frameToClaudeBlock).filter((b): b is ClaudeBlock => b !== null),
     {
+      type: "text",
       text: `You are an expert Singapore MOE PE assessor.
 Skill: ${skillName}. Performer: ${performer}. Peer observed: ${peerSummary}
-${frames.length > 0 ? "Movement frames shown above." : "No frames — use peer data only."}
+${frames.length > 0 ? "Movement frames shown above." : "No frames ï¿½ use peer data only."}
 
 MOE 2024 Criteria:
 ${criteriaList || "Standard FMS criteria."}
@@ -157,10 +187,10 @@ Proficiency: Beginning(0-30%), Developing(31-60%), Competent(61-85%), Excellent(
 
   const [bananaStudentResult, appleStudentResult, bananaTeacherResult, appleTeacherResult] =
     await Promise.allSettled([
-      ai.models.generateContent({ model: "gemini-2.5-flash", contents: [{ role: "user", parts: buildStudentParts("Banana", bananaFrames, bananaPeerSummary) as any }] }),
-      ai.models.generateContent({ model: "gemini-2.5-flash", contents: [{ role: "user", parts: buildStudentParts("Apple", appleFrames, applePeerSummary) as any }] }),
-      ai.models.generateContent({ model: "gemini-2.5-flash", contents: [{ role: "user", parts: buildTeacherParts("Banana", bananaFrames, bananaPeerSummary) as any }] }),
-      ai.models.generateContent({ model: "gemini-2.5-flash", contents: [{ role: "user", parts: buildTeacherParts("Apple", appleFrames, applePeerSummary) as any }] }),
+      callClaude(buildStudentParts("Banana", bananaFrames, bananaPeerSummary)),
+      callClaude(buildStudentParts("Apple", appleFrames, applePeerSummary)),
+      callClaude(buildTeacherParts("Banana", bananaFrames, bananaPeerSummary)),
+      callClaude(buildTeacherParts("Apple", appleFrames, applePeerSummary)),
     ]);
 
   onProgress?.("Building your coaching report...");

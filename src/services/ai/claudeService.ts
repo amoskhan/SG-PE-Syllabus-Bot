@@ -5,6 +5,7 @@
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
+import { getFewShotExamples } from '../../data/skillExamples';
 
 const MODEL_HAIKU  = 'claude-haiku-4-5-20251001';
 const MODEL_SONNET = 'claude-sonnet-4-6';
@@ -667,9 +668,9 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
         const validSkillsList = Object.keys(SKILL_REFERENCE_IMAGES).join(', ');
 
         if (poseData && poseData.length > 0) {
-            if (!isVerified) {
-                const isGymnastics = skillMode === 'gymnastics';
+            const isGymnastics = skillMode === 'gymnastics';
 
+            if (!isVerified) {
                 const validSkillsForMode = isGymnastics
                     ? ALL_GYMNASTICS_SKILLS.join(', ')
                     : validSkillsList;
@@ -735,9 +736,16 @@ ${phase1SkillDiscriminators}
 - JUST Identify the top 4 choices.
 `;
             } else {
+                // Worked grading examples for this skill, from skillExamples.ts.
+                // FMS only — there are no gymnastics examples written yet.
+                const fewShotExamples = !isGymnastics && skillName
+                    ? getFewShotExamples(skillName)
+                    : '';
+
                 // Static-only append — dynamic pose data is already in enhancedMessage
                 systemInstruction += `
 ${skillName ? `\n**TARGET SKILL**: ${skillName}` : ''}
+${fewShotExamples}
 
 **Immediate Task:**
 ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. Use the Biomechanics Report's findings as supporting evidence. Only treat a biomechanics field as definitive failure if it is explicitly marked ❌ with **FAILURE** AND that failure is relevant to the confirmed skill.
