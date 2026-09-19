@@ -1111,7 +1111,7 @@ const App: React.FC = () => {
   ): Promise<{ poseData: PoseData[], analysisFrames: MediaData[] }> => {
     setIsProcessing(true);
     try {
-      const processedImages: { img: HTMLImageElement, pose: any, ball: any, timestamp: number }[] = [];
+      const processedImages: { img: HTMLImageElement, pose: any, ball: any, timestamp: number, fromVideo: boolean }[] = [];
       const debugFrames: string[] = [];
       const analysisFrames: MediaData[] = [];
       let rawVideoFrames: string[] = []; // fallback if no pose detected
@@ -1122,21 +1122,30 @@ const App: React.FC = () => {
           const img = await loadImageFromUrl(base64);
           const pose = await poseDetectionService.detectPoseFromImage(img);
           const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
-          if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0 });
+          if (pose) processedImages.push({ img, pose, ball: ball || undefined, timestamp: 0, fromVideo: false });
 
         } else if (file.type.startsWith('video/')) {
-          const frameCount = 12;
-          const frames = await extractVideoFrames(file, frameCount, metadata?.startTime, metadata?.endTime);
-          rawVideoFrames = frames; // keep for fallback
+          // Gymnastics is sampled denser: rolls, hops and flight phases are
+          // over in well under a second, so 1 sample/s misses the skill.
+          const isGymnastics = skillMode === 'gymnastics';
+          const frames = await extractVideoFrames(
+            file,
+            12,                        // floor — short clips keep today's density
+            metadata?.startTime,
+            metadata?.endTime,
+            isGymnastics ? 2 : 1,      // target samples per second
+            isGymnastics ? 30 : 20     // ceiling, to bound the request payload
+          );
+          rawVideoFrames = frames;
           for (let i = 0; i < frames.length; i++) {
             const img = await loadImageFromUrl(frames[i]);
             try {
               const pose = await poseDetectionService.detectPoseFromImage(img);
               const ball = await poseDetectionService.detectBallFromImage(img, pose || undefined);
               if (pose) {
-                processedImages.push({ img, pose, ball: ball || undefined, timestamp: i });
+                processedImages.push({ img, pose, ball: ball || undefined, timestamp: i, fromVideo: true });
               } else {
-                console.warn(`⚠️ No pose detected in frame ${i}`);
+                console.warn(`⚠️ No pose detected in frame ${i} — sending raw still instead`);
               }
             } catch (frameError) {
               console.error(`❌ Error processing frame ${i}:`, frameError);
@@ -1147,23 +1156,48 @@ const App: React.FC = () => {
 
       const poseData = processedImages.map(p => ({ ...p.pose, timestamp: p.timestamp, ball: p.ball }));
 
+      // Render the skeleton overlay for every frame where a pose was found.
+      const overlays: (string | null)[] = [];
       for (let i = 0; i < processedImages.length; i++) {
         const data = processedImages[i];
         const filteredPose = poseData[i];
         const debugFrame = await poseDetectionService.drawPoseToImage(data.img, filteredPose, filteredPose.ball);
-        if (debugFrame) {
-          debugFrames.push(debugFrame);
-          analysisFrames.push({ mimeType: 'image/jpeg', data: debugFrame });
-        }
+        overlays.push(debugFrame || null);
+        if (debugFrame) debugFrames.push(debugFrame);
       }
 
-      // If MediaPipe couldn't detect any pose, fall back to raw frames so
-      // Gemini still receives visual context instead of returning an empty response.
-      if (analysisFrames.length === 0 && rawVideoFrames.length > 0) {
-        console.warn('⚠️ No poses detected — sending raw frames to Gemini as fallback');
-        for (const frame of rawVideoFrames.slice(0, 6)) {
-          analysisFrames.push({ mimeType: 'image/jpeg', data: frame });
+      // Build the visual payload in chronological order, sending EVERY
+      // extracted frame — overlay where MediaPipe found a pose, raw still
+      // where it did not.
+      //
+      // Previously a pose-less frame was dropped from the payload entirely,
+      // and the raw fallback only fired when *all* frames failed. MediaPipe
+      // is trained on upright bodies, so in gymnastics it fails on exactly
+      // the inverted, curled and mid-flight moments that define the skill —
+      // leaving the model only the upright frames either side of it, and
+      // asking it to identify a roll from two stills of someone standing.
+      if (rawVideoFrames.length > 0) {
+        const overlayByFrameIndex = new Map<number, string>();
+        processedImages.forEach((p, i) => {
+          if (p.fromVideo && overlays[i]) overlayByFrameIndex.set(p.timestamp, overlays[i]!);
+        });
+
+        for (let i = 0; i < rawVideoFrames.length; i++) {
+          analysisFrames.push({
+            mimeType: 'image/jpeg',
+            data: overlayByFrameIndex.get(i) ?? rawVideoFrames[i],
+          });
         }
+
+        const rawCount = rawVideoFrames.length - overlayByFrameIndex.size;
+        if (rawCount > 0) {
+          console.warn(`⚠️ ${rawCount}/${rawVideoFrames.length} frames had no pose — sent as raw stills`);
+        }
+      } else {
+        // Still images only: no raw frame sequence to interleave with.
+        overlays.forEach(overlay => {
+          if (overlay) analysisFrames.push({ mimeType: 'image/jpeg', data: overlay });
+        });
       }
 
 
@@ -1186,11 +1220,22 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * Samples evenly spaced stills from a video.
+   *
+   * `numFrames` is a floor, not a fixed count. When `targetFps` is given the
+   * sample count scales with the trimmed duration and is capped at
+   * `maxFrames`, so a 25s clip is no longer sampled as sparsely as a 3s one
+   * (a fixed 12 frames over 25s is one sample every ~2s, which skips straight
+   * over a roll or a hop).
+   */
   const extractVideoFrames = (
     file: File,
     numFrames: number = 12,
     startTime?: number,
-    endTime?: number
+    endTime?: number,
+    targetFps?: number,
+    maxFrames: number = 24
   ): Promise<string[]> => {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
@@ -1222,11 +1267,16 @@ const App: React.FC = () => {
         const start = startTime !== undefined ? startTime : 0;
         const end = endTime !== undefined ? endTime : video.duration;
         const duration = Math.max(0, end - start);
-        const interval = duration / (numFrames + 1);
+
+        const frameTarget = targetFps
+          ? Math.min(maxFrames, Math.max(numFrames, Math.ceil(duration * targetFps)))
+          : numFrames;
+
+        const interval = duration / (frameTarget + 1);
         let currentFrame = 0;
 
         const captureFrame = () => {
-          if (currentFrame >= numFrames) {
+          if (currentFrame >= frameTarget) {
             URL.revokeObjectURL(video.src);
             resolve(frames);
             return;
