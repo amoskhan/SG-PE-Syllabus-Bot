@@ -6,6 +6,7 @@ import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_I
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
 import { getFewShotExamples } from '../../data/skillExamples';
+import { supabase } from '../db/supabaseClient';
 
 const MODEL_HAIKU  = 'claude-haiku-4-5-20251001';
 const MODEL_SONNET = 'claude-sonnet-4-6';
@@ -783,8 +784,12 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         // biomechanics analysis with irrelevant teacher notes.
         if (userId && !(poseData && poseData.length > 0) && !isRoutingResponse) {
             try {
-                const memResponse = await fetch(`/api/get-memory?userId=${encodeURIComponent(userId)}`);
-                if (memResponse.ok) {
+                // The endpoint identifies the teacher from this token, not from a URL param
+                const { data: { session } } = await supabase.auth.getSession();
+                const memResponse = session?.access_token
+                    ? await fetch('/api/get-memory', { headers: { Authorization: `Bearer ${session.access_token}` } })
+                    : null;
+                if (memResponse?.ok) {
                     const memData = await memResponse.json() as { summaries: { summary_date: string; summary_text: string }[] };
                     if (memData.summaries && memData.summaries.length > 0) {
                         const longTermMemory = memData.summaries
