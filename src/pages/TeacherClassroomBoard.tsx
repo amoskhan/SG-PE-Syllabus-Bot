@@ -25,6 +25,68 @@ interface TeacherClassroomBoardProps {
   teacherId?: string; // Signed-in teacher's Supabase UUID — embedded in QR so students upload to their bucket
 }
 
+// ── Lessons ──────────────────────────────────────────────────────────────────
+// Everything a class produces (pair claims, check-ins, submission ids, storage
+// paths) is keyed by lessonId, so each lesson needs its own. The current lesson
+// and a history of names live in localStorage on the board's device.
+interface Lesson {
+  id: string;
+  name: string;
+  startedAt: string;
+}
+
+// Submissions made before lessons existed all share this id
+const LEGACY_LESSON_ID = 'pe-lesson-today';
+
+const lessonStorageKey = (teacherId?: string) => `pe-board-lesson:${teacherId || 'guest'}`;
+const lessonHistoryKey = (teacherId?: string) => `pe-board-lesson-history:${teacherId || 'guest'}`;
+
+const formatLessonDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
+
+const createLesson = (name: string): Lesson => {
+  const now = new Date();
+  const date = now.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return {
+    // Only [a-z0-9-] — the id also becomes a Storage folder name
+    id: [date, slug, suffix].filter(Boolean).join('-'),
+    name: name.trim() || `Lesson ${formatLessonDate(now.toISOString())}`,
+    startedAt: now.toISOString(),
+  };
+};
+
+const readJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJson = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage full or blocked — the lesson still works for this page load
+  }
+};
+
+/** The board's current lesson for this teacher, starting one if there is none yet. */
+const loadCurrentLesson = (teacherId?: string): Lesson => {
+  const saved = readJson<Lesson | null>(lessonStorageKey(teacherId), null);
+  if (saved?.id) return saved;
+  const fresh = createLesson('');
+  writeJson(lessonStorageKey(teacherId), fresh);
+  writeJson(lessonHistoryKey(teacherId), [fresh, ...readJson<Lesson[]>(lessonHistoryKey(teacherId), [])]);
+  return fresh;
+};
+
+/** Used by the "Test iPad Flow" button so the teacher's test joins the lesson on screen. */
+export const getCurrentBoardLesson = (teacherId?: string): Lesson => loadCurrentLesson(teacherId);
+
 const VideoBlobPlayer: React.FC<{ blob?: Blob; videoUrl?: string; performer: string }> = ({
   blob,
   videoUrl,
@@ -73,7 +135,18 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   teacherId,
 }) => {
   const [viewMode, setViewMode] = useState<'PROJECTOR' | 'REVIEW_TRAY'>('PROJECTOR');
-  const [lessonId, setLessonId] = useState('pe-lesson-today');
+  const [lesson, setLesson] = useState<Lesson>(() => loadCurrentLesson(teacherId));
+  const lessonId = lesson.id;
+  const [lessonHistory, setLessonHistory] = useState<Lesson[]>(() => readJson<Lesson[]>(lessonHistoryKey(teacherId), []));
+  // Sign-in can finish after the board mounts — switch to that teacher's lesson
+  useEffect(() => {
+    setLesson(loadCurrentLesson(teacherId));
+    setLessonHistory(readJson<Lesson[]>(lessonHistoryKey(teacherId), []));
+  }, [teacherId]);
+  const [isNamingLesson, setIsNamingLesson] = useState(false);
+  const [newLessonName, setNewLessonName] = useState('');
+  // Review Tray shows every lesson by default so older work can still be marked
+  const [reviewLessonFilter, setReviewLessonFilter] = useState<string>('ALL');
   const [selectedSkill, setSelectedSkill] = useState('Overhand Throw');
   const [cartPin, setCartPin] = useState('1234');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
@@ -92,7 +165,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   useEffect(() => {
     const payload = JSON.stringify({
       lessonId,
-      title: `${selectedSkill} Practice`,
+      title: `${lesson.name} · ${selectedSkill}`,
       skillName: selectedSkill,
       teacherId: teacherId ?? null, // ← Seesaw-style: student device uses this to upload to teacher's bucket
     });
@@ -104,14 +177,27 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     })
       .then(setQrCodeUrl)
       .catch(console.error);
-  }, [lessonId, selectedSkill, teacherId]);
+  }, [lessonId, lesson.name, selectedSkill, teacherId]);
+
+  const handleStartNewLesson = () => {
+    const fresh = createLesson(newLessonName);
+    const history = [fresh, ...lessonHistory.filter((l) => l.id !== fresh.id)].slice(0, 50);
+    writeJson(lessonStorageKey(teacherId), fresh);
+    writeJson(lessonHistoryKey(teacherId), history);
+    setLesson(fresh);
+    setLessonHistory(history);
+    setCheckIns([]);
+    dismissedCheckInsRef.current.clear();
+    setNewLessonName('');
+    setIsNamingLesson(false);
+  };
 
   // Load submissions from Supabase Cloud (multi-device) + local IndexedDB
   useEffect(() => {
     loadSubmissions();
     const interval = setInterval(loadSubmissions, 3000);
     return () => clearInterval(interval);
-  }, [teacherId]);
+  }, [teacherId, lessonId]);
 
   const loadSubmissions = async () => {
     const deleted = deletedIdsRef.current;
@@ -146,7 +232,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     // Live pair check-ins for the Projector grid.
     // Drop any the teacher just cleared — unless a genuinely newer check-in arrived
     // for that pair number (different checked_in_at), in which case the pair is back.
-    const rows = await fetchPairCheckIns(teacherId);
+    // Only this lesson's pairs — earlier lessons' check-ins would hold their numbers
+    const rows = await fetchPairCheckIns(teacherId, lessonId);
     const dismissed = dismissedCheckInsRef.current;
     const visibleRows = rows.filter((r) => {
       const clearedAt = dismissed.get(r.pair_number);
@@ -204,6 +291,18 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   const unapprovedCount = submissions.filter((s) => s.status === 'pending_sync' || s.status === 'resubmitted').length;
 
+  const lessonLabel = (id: string) => {
+    if (id === LEGACY_LESSON_ID) return 'Earlier lessons';
+    const known = lessonHistory.find((l) => l.id === id);
+    return known ? `${known.name} · ${formatLessonDate(known.startedAt)}` : id;
+  };
+
+  const currentLessonSubmissions = submissions.filter((s) => s.lessonId === lessonId);
+  // Current lesson first, then every lesson that has work in it, newest first
+  const reviewLessonIds: string[] = Array.from(new Set<string>([lessonId, ...submissions.map((s) => s.lessonId)]));
+  const reviewSubmissions =
+    reviewLessonFilter === 'ALL' ? submissions : submissions.filter((s) => s.lessonId === reviewLessonFilter);
+
   const handleDelete = async (sub: PairSubmissionRecord) => {
     if (!confirm(`Delete Pair #${sub.pairNumber} — ${sub.skillName}? This cannot be undone.`)) return;
 
@@ -235,7 +334,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             <h1 className="font-extrabold text-base md:text-lg text-slate-800 dark:text-white">
               Teacher Command Board
             </h1>
-            <p className="text-xs text-slate-400">Class 4B · PE Partner Learning Station</p>
+            <p className="text-xs text-slate-400">{lesson.name} · PE Partner Learning Station</p>
           </div>
         </div>
 
@@ -322,9 +421,69 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             {/* Left: Giant QR Code Card (To be projected on whiteboard) */}
             <div className="lg:col-span-5 bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-xl border border-slate-200 dark:border-zinc-800 flex flex-col items-center text-center">
               
+              {/* Current lesson + start a fresh one */}
+              <div className="w-full mb-4 pb-4 border-b border-slate-100 dark:border-zinc-800 text-left">
+                {isNamingLesson ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleStartNewLesson();
+                    }}
+                    className="flex flex-col gap-2"
+                  >
+                    <label className="text-xs font-bold text-slate-500">Name this lesson (e.g. 4B Overhand Throw):</label>
+                    <input
+                      autoFocus
+                      type="text"
+                      maxLength={40}
+                      value={newLessonName}
+                      onChange={(e) => setNewLessonName(e.target.value)}
+                      placeholder={`Lesson ${formatLessonDate(new Date().toISOString())}`}
+                      className="w-full px-3 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-white"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      Makes a new QR code and frees all pair numbers. Earlier lessons stay in the Review Tray.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        className="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                      >
+                        Start lesson
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNamingLesson(false);
+                          setNewLessonName('');
+                        }}
+                        className="px-3 py-2 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">Current lesson</p>
+                      <p className="text-sm font-black text-slate-800 dark:text-white truncate">{lesson.name}</p>
+                      <p className="text-[11px] text-slate-400">Started {formatLessonDate(lesson.startedAt)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsNamingLesson(true)}
+                      className="shrink-0 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                    >
+                      ＋ New lesson
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="mb-4">
                 <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold">
-                  Class 4B Briefing QR
+                  {lesson.name} QR
                 </span>
                 <h2 className="text-xl font-black text-slate-800 dark:text-white mt-2">
                   1. Apple: Grab iPad & Scan!
@@ -385,7 +544,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   const ci = checkIns.find((c) => c.pair_number === num);
                   const isChecked = !!ci;
                   const needsHelp = ci?.needs_help;
-                  const hasPractised = submissions.some((s) => s.pairNumber === num);
+                  const hasPractised = currentLessonSubmissions.some((s) => s.pairNumber === num);
 
                   return (
                     <div
@@ -470,7 +629,21 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 Review peer ratings and AI motion analysis before publishing to class portfolio
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <select
+                value={reviewLessonFilter}
+                onChange={(e) => setReviewLessonFilter(e.target.value)}
+                aria-label="Filter by lesson"
+                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold text-slate-700 dark:text-slate-200 max-w-[14rem]"
+              >
+                <option value="ALL">All lessons</option>
+                {reviewLessonIds.map((id) => (
+                  <option key={id} value={id}>
+                    {lessonLabel(id)}
+                    {id === lessonId ? ' (current)' : ''}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 onClick={loadSubmissions}
@@ -480,12 +653,12 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 <span>Refresh</span>
               </button>
               <span className="px-3.5 py-1.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-full font-black text-xs">
-                {submissions.length} Total Submissions
+                {reviewSubmissions.length} {reviewLessonFilter === 'ALL' ? 'Total' : 'in Lesson'}
               </span>
             </div>
           </div>
 
-          {submissions.length === 0 ? (
+          {reviewSubmissions.length === 0 ? (
             <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 p-8 shadow-xs">
               <span className="text-5xl block mb-3">📭</span>
               <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200">No submissions pending review</h3>
@@ -495,7 +668,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {submissions.map((sub) => (
+              {reviewSubmissions.map((sub) => (
                 <div
                   key={sub.id}
                   className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs hover:shadow-md transition-shadow"
@@ -514,6 +687,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           Pair #{sub.pairNumber}
                         </h4>
                         <span className="text-[10px] text-slate-400">{sub.skillName}</span>
+                        <span className="block text-[10px] text-slate-400 truncate">{lessonLabel(sub.lessonId)}</span>
                         {(sub.aiChatAnalysis?.apple || sub.aiChatAnalysis?.banana) && (
                           <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                             🤖 AI analysis
