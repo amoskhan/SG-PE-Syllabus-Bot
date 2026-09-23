@@ -2,13 +2,11 @@ import React, { useState } from 'react';
 
 interface TeacherHelpBeaconProps {
   pairNumber?: number;
-  cartPinReminder?: string;
   onSignalHelp?: () => void;
 }
 
 export const TeacherHelpBeacon: React.FC<TeacherHelpBeaconProps> = ({
   pairNumber,
-  cartPinReminder = '1234',
   onSignalHelp,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,19 +50,6 @@ export const TeacherHelpBeacon: React.FC<TeacherHelpBeaconProps> = ({
 
             <div className="space-y-3 my-2 text-xs text-slate-600 dark:text-slate-300">
               
-              {/* Locked iPad cart passcode reminder */}
-              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-2xl border border-indigo-150 dark:border-indigo-900/30">
-                <p className="font-bold text-indigo-700 dark:text-indigo-300 mb-1">
-                  🔒 Locked iPad Passcode:
-                </p>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 dark:text-slate-400">Cart Unlock PIN:</span>
-                  <span className="px-2 py-0.5 bg-white dark:bg-zinc-900 rounded-md font-mono font-black text-sm tracking-widest text-indigo-600 dark:text-indigo-400 border border-indigo-200">
-                    {cartPinReminder}
-                  </span>
-                </div>
-              </div>
-
               {/* No internet explanation */}
               <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-900/30">
                 <p className="font-bold text-amber-800 dark:text-amber-300 mb-1">
