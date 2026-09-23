@@ -8,6 +8,7 @@ interface PairCheckInModalProps {
   lessonTitle: string;
   skillName: string;
   claimedPairNumbers?: Set<number>; // pair numbers already checked in by other groups
+  pairCount?: number; // pairs in this lesson, from the class QR (default 15)
   onCompleteCheckIn: (sessionData: PairSessionData) => void;
   onCancel: () => void;
 }
@@ -18,6 +19,7 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
   lessonTitle,
   skillName,
   claimedPairNumbers,
+  pairCount = 15,
   onCompleteCheckIn,
   onCancel,
 }) => {
@@ -233,12 +235,12 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
             <div className="text-center mb-5">
               <h2 className="text-2xl font-black text-slate-800 dark:text-white">Choose Your Pair Number</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Apple, tap your pair number below (Pair 1 to 15):
+                Apple, tap your pair number below (Pair 1 to {pairCount}):
               </p>
             </div>
 
             <div className="grid grid-cols-5 gap-2.5 w-full max-w-md my-2">
-              {Array.from({ length: 15 }, (_, i) => i + 1).map((num) => {
+              {Array.from({ length: pairCount }, (_, i) => i + 1).map((num) => {
                 const taken = claimedPairNumbers?.has(num) && selectedPairNumber !== num;
                 return (
                   <button

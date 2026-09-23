@@ -16,76 +16,38 @@ import {
   deletePairCheckIn,
   PairCheckInRow,
 } from '../services/cloudSyncService';
-import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
+import {
+  Lesson,
+  LessonDraft,
+  fetchLessons,
+  createLesson,
+  deleteLesson,
+  lessonTitle,
+  getCurrentLessonId,
+  setCurrentLessonId,
+  getLocalLessonNames,
+} from '../services/lessonService';
+import { LessonPlanForm, LessonList } from '../components/classroom/LessonPlanner';
 
+/** What a pupil's phone needs to join a lesson — the same data the class QR carries. */
+export interface BoardLessonLink {
+  lessonId: string;
+  title: string;
+  skillName: string;
+  pairCount: number;
+}
 
 interface TeacherClassroomBoardProps {
   onOpenChat: () => void;
-  onOpenStudentSession: () => void;
+  onOpenStudentSession: (lesson: BoardLessonLink) => void;
   teacherId?: string; // Signed-in teacher's Supabase UUID — embedded in QR so students upload to their bucket
-}
-
-// ── Lessons ──────────────────────────────────────────────────────────────────
-// Everything a class produces (pair claims, check-ins, submission ids, storage
-// paths) is keyed by lessonId, so each lesson needs its own. The current lesson
-// and a history of names live in localStorage on the board's device.
-interface Lesson {
-  id: string;
-  name: string;
-  startedAt: string;
 }
 
 // Submissions made before lessons existed all share this id
 const LEGACY_LESSON_ID = 'pe-lesson-today';
 
-const lessonStorageKey = (teacherId?: string) => `pe-board-lesson:${teacherId || 'guest'}`;
-const lessonHistoryKey = (teacherId?: string) => `pe-board-lesson-history:${teacherId || 'guest'}`;
-
-const formatLessonDate = (iso: string) =>
+const formatShortDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
-
-const createLesson = (name: string): Lesson => {
-  const now = new Date();
-  const date = now.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
-  const suffix = Math.random().toString(36).slice(2, 6);
-  return {
-    // Only [a-z0-9-] — the id also becomes a Storage folder name
-    id: [date, slug, suffix].filter(Boolean).join('-'),
-    name: name.trim() || `Lesson ${formatLessonDate(now.toISOString())}`,
-    startedAt: now.toISOString(),
-  };
-};
-
-const readJson = <T,>(key: string, fallback: T): T => {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-};
-
-const writeJson = (key: string, value: unknown) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage full or blocked — the lesson still works for this page load
-  }
-};
-
-/** The board's current lesson for this teacher, starting one if there is none yet. */
-const loadCurrentLesson = (teacherId?: string): Lesson => {
-  const saved = readJson<Lesson | null>(lessonStorageKey(teacherId), null);
-  if (saved?.id) return saved;
-  const fresh = createLesson('');
-  writeJson(lessonStorageKey(teacherId), fresh);
-  writeJson(lessonHistoryKey(teacherId), [fresh, ...readJson<Lesson[]>(lessonHistoryKey(teacherId), [])]);
-  return fresh;
-};
-
-/** Used by the "Test iPad Flow" button so the teacher's test joins the lesson on screen. */
-export const getCurrentBoardLesson = (teacherId?: string): Lesson => loadCurrentLesson(teacherId);
 
 const VideoBlobPlayer: React.FC<{ blob?: Blob; videoUrl?: string; performer: string }> = ({
   blob,
@@ -134,20 +96,38 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   onOpenStudentSession,
   teacherId,
 }) => {
-  const [viewMode, setViewMode] = useState<'PROJECTOR' | 'REVIEW_TRAY'>('PROJECTOR');
-  const [lesson, setLesson] = useState<Lesson>(() => loadCurrentLesson(teacherId));
-  const lessonId = lesson.id;
-  const [lessonHistory, setLessonHistory] = useState<Lesson[]>(() => readJson<Lesson[]>(lessonHistoryKey(teacherId), []));
-  // Sign-in can finish after the board mounts — switch to that teacher's lesson
+  const [viewMode, setViewMode] = useState<'PROJECTOR' | 'REVIEW_TRAY' | 'LESSONS' | 'PLAN_LESSON'>('PROJECTOR');
+
+  // Planned lessons (Supabase) and the one on this device's projector
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [lessonsLoading, setLessonsLoading] = useState(true);
+  const [lessonsError, setLessonsError] = useState<string | null>(null);
+  const [currentLessonId, setCurrentLessonIdState] = useState<string | null>(() => getCurrentLessonId(teacherId));
+  const lesson = lessons.find((l) => l.id === currentLessonId) ?? null;
+  const lessonId = lesson?.id ?? null;
+  const localLessonNames = getLocalLessonNames(teacherId);
+
+  const loadLessons = async () => {
+    setLessonsLoading(true);
+    try {
+      setLessons(await fetchLessons());
+      setLessonsError(null);
+    } catch (e) {
+      setLessonsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLessonsLoading(false);
+    }
+  };
+
+  // Sign-in can finish after the board mounts — load that teacher's lessons
   useEffect(() => {
-    setLesson(loadCurrentLesson(teacherId));
-    setLessonHistory(readJson<Lesson[]>(lessonHistoryKey(teacherId), []));
+    setCurrentLessonIdState(getCurrentLessonId(teacherId));
+    if (teacherId) loadLessons();
+    else setLessonsLoading(false);
   }, [teacherId]);
-  const [isNamingLesson, setIsNamingLesson] = useState(false);
-  const [newLessonName, setNewLessonName] = useState('');
+
   // Review Tray shows every lesson by default so older work can still be marked
   const [reviewLessonFilter, setReviewLessonFilter] = useState<string>('ALL');
-  const [selectedSkill, setSelectedSkill] = useState('Overhand Throw');
   const [cartPin, setCartPin] = useState('1234');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [submissions, setSubmissions] = useState<PairSubmissionRecord[]>([]);
@@ -161,12 +141,21 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   // Pair numbers the teacher cleared — keyed to checked_in_at so a genuine re-check-in reappears
   const dismissedCheckInsRef = useRef<Map<number, string>>(new Map());
 
-  // Generate QR code whenever lessonId, selectedSkill, or teacherId changes
+  const lessonLink: BoardLessonLink | null = lesson && {
+    lessonId: lesson.id,
+    title: `${lessonTitle(lesson)} · ${lesson.skillName}`,
+    skillName: lesson.skillName,
+    pairCount: lesson.pairCount,
+  };
+
+  // Regenerate the class QR whenever the lesson on the projector changes
   useEffect(() => {
+    if (!lessonLink) {
+      setQrCodeUrl('');
+      return;
+    }
     const payload = JSON.stringify({
-      lessonId,
-      title: `${lesson.name} · ${selectedSkill}`,
-      skillName: selectedSkill,
+      ...lessonLink,
       teacherId: teacherId ?? null, // ← Seesaw-style: student device uses this to upload to teacher's bucket
     });
 
@@ -177,19 +166,39 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     })
       .then(setQrCodeUrl)
       .catch(console.error);
-  }, [lessonId, lesson.name, selectedSkill, teacherId]);
+  }, [lessonId, lessonLink?.title, lessonLink?.pairCount, teacherId]);
 
-  const handleStartNewLesson = () => {
-    const fresh = createLesson(newLessonName);
-    const history = [fresh, ...lessonHistory.filter((l) => l.id !== fresh.id)].slice(0, 50);
-    writeJson(lessonStorageKey(teacherId), fresh);
-    writeJson(lessonHistoryKey(teacherId), history);
-    setLesson(fresh);
-    setLessonHistory(history);
+  const showLessonOnProjector = (id: string) => {
+    setCurrentLessonId(teacherId, id);
+    setCurrentLessonIdState(id);
     setCheckIns([]);
     dismissedCheckInsRef.current.clear();
-    setNewLessonName('');
-    setIsNamingLesson(false);
+    setViewMode('PROJECTOR');
+  };
+
+  const handleSaveLesson = async (draft: LessonDraft, showNow: boolean) => {
+    const saved = await createLesson(draft);
+    setLessons((prev) => [saved, ...prev]);
+    if (showNow) showLessonOnProjector(saved.id);
+    else setViewMode('LESSONS');
+  };
+
+  const handleDeleteLesson = async (l: Lesson) => {
+    const hasWork = submissions.some((s) => s.lessonId === l.id);
+    const warning = hasWork
+      ? `Delete ${lessonTitle(l)}? Its pupils' submissions stay in the Review Tray, but they will no longer show the lesson name.`
+      : `Delete ${lessonTitle(l)}?`;
+    if (!confirm(warning)) return;
+    try {
+      await deleteLesson(l.id);
+      setLessons((prev) => prev.filter((x) => x.id !== l.id));
+      if (l.id === currentLessonId) {
+        setCurrentLessonId(teacherId, null);
+        setCurrentLessonIdState(null);
+      }
+    } catch (e) {
+      alert(`Could not delete the lesson: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   // Load submissions from Supabase Cloud (multi-device) + local IndexedDB
@@ -233,7 +242,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     // Drop any the teacher just cleared — unless a genuinely newer check-in arrived
     // for that pair number (different checked_in_at), in which case the pair is back.
     // Only this lesson's pairs — earlier lessons' check-ins would hold their numbers
-    const rows = await fetchPairCheckIns(teacherId, lessonId);
+    const rows = lessonId ? await fetchPairCheckIns(teacherId, lessonId) : [];
     const dismissed = dismissedCheckInsRef.current;
     const visibleRows = rows.filter((r) => {
       const clearedAt = dismissed.get(r.pair_number);
@@ -291,19 +300,19 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   const unapprovedCount = submissions.filter((s) => s.status === 'pending_sync' || s.status === 'resubmitted').length;
 
-  // The teacher's own name for the lesson. The date the lesson was created is
-  // added only to tell apart two lessons given the same name.
+  // "4B · Fri 27 Sep" for planned lessons; older ids fall back to what we know
   const lessonLabel = (id: string) => {
     if (id === LEGACY_LESSON_ID) return 'Older submissions';
-    const known = lessonHistory.find((l) => l.id === id);
-    if (!known) return id;
-    const nameTaken = lessonHistory.some((l) => l.id !== id && l.name === known.name);
-    return nameTaken ? `${known.name} (created ${formatLessonDate(known.startedAt)})` : known.name;
+    const planned = lessons.find((l) => l.id === id);
+    if (planned) return lessonTitle(planned);
+    return localLessonNames[id] ?? id;
   };
 
-  const currentLessonSubmissions = submissions.filter((s) => s.lessonId === lessonId);
+  const currentLessonSubmissions = lessonId ? submissions.filter((s) => s.lessonId === lessonId) : [];
   // Current lesson first, then every lesson that has work in it, newest first
-  const reviewLessonIds: string[] = Array.from(new Set<string>([lessonId, ...submissions.map((s) => s.lessonId)]));
+  const reviewLessonIds: string[] = Array.from(
+    new Set<string>([...(lessonId ? [lessonId] : []), ...submissions.map((s) => s.lessonId)])
+  );
   const reviewSubmissions =
     reviewLessonFilter === 'ALL' ? submissions : submissions.filter((s) => s.lessonId === reviewLessonFilter);
 
@@ -338,7 +347,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             <h1 className="font-extrabold text-base md:text-lg text-slate-800 dark:text-white">
               Teacher Command Board
             </h1>
-            <p className="text-xs text-slate-400">{lesson.name} · PE Partner Learning Station</p>
+            <p className="text-xs text-slate-400">
+              {lesson ? `${lessonTitle(lesson)} · ${lesson.skillName}` : 'No lesson on the projector'}
+            </p>
           </div>
         </div>
 
@@ -353,6 +364,16 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             }`}
           >
             📽️ Projector
+          </button>
+          <button
+            onClick={() => setViewMode('LESSONS')}
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'LESSONS' || viewMode === 'PLAN_LESSON'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+            }`}
+          >
+            📋 Lessons
           </button>
           <button
             onClick={() => setViewMode('REVIEW_TRAY')}
@@ -374,7 +395,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
         {/* Quick Launch Buttons */}
         <div className="flex items-center gap-2">
           <button
-            onClick={onOpenStudentSession}
+            onClick={() => (lessonLink ? onOpenStudentSession(lessonLink) : setViewMode('LESSONS'))}
+            title={lessonLink ? 'Join the lesson on the projector as a pupil' : 'Put a lesson on the projector first'}
             className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1 cursor-pointer"
           >
             <span>📱 Test iPad Flow</span>
@@ -389,8 +411,45 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
       </header>
 
 
-      {/* VIEW 1: WHITEBOARD PROJECTOR (FOR CLASSROOM SETUP) */}
-      {viewMode === 'PROJECTOR' && (
+      {/* VIEW 1a: NO LESSON ON THE PROJECTOR YET */}
+      {viewMode === 'PROJECTOR' && !lesson && (
+        <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-3xl mx-auto w-full">
+          <div className="text-center py-16 px-6 bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-xl">
+            {lessonsLoading && currentLessonId ? (
+              <p className="text-sm text-slate-400">Loading lesson…</p>
+            ) : (
+              <>
+                <span className="text-5xl block mb-3">📋</span>
+                <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">No lesson on the projector</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-6">
+                  Plan a lesson to get its class QR code, or pick one you planned earlier.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('PLAN_LESSON')}
+                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold cursor-pointer"
+                  >
+                    ＋ Plan a lesson
+                  </button>
+                  {lessons.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('LESSONS')}
+                      className="px-4 py-2.5 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
+                    >
+                      Choose from your lessons
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 1b: WHITEBOARD PROJECTOR (FOR CLASSROOM SETUP) */}
+      {viewMode === 'PROJECTOR' && lesson && (
         <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full flex flex-col gap-6">
           
           {/* Top Banner: Locked iPad Passcode Reminder */}
@@ -419,75 +478,46 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             </div>
           </div>
 
+          {lesson.objective && (
+            <div className="bg-white dark:bg-zinc-900 border-2 border-indigo-200 dark:border-indigo-900 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+              <span className="text-3xl">🎯</span>
+              <div>
+                <p className="text-xs uppercase font-extrabold text-indigo-700 dark:text-indigo-300 tracking-wider">
+                  Today's objective
+                </p>
+                <p className="text-lg font-bold text-slate-800 dark:text-white">{lesson.objective}</p>
+              </div>
+            </div>
+          )}
+
           {/* Center Split: QR Code + Live Pair Check-in Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* Left: Giant QR Code Card (To be projected on whiteboard) */}
             <div className="lg:col-span-5 bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-xl border border-slate-200 dark:border-zinc-800 flex flex-col items-center text-center">
               
-              {/* Current lesson + start a fresh one */}
-              <div className="w-full mb-4 pb-4 border-b border-slate-100 dark:border-zinc-800 text-left">
-                {isNamingLesson ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleStartNewLesson();
-                    }}
-                    className="flex flex-col gap-2"
-                  >
-                    <label className="text-xs font-bold text-slate-500">Name this lesson (e.g. 4B Overhand Throw):</label>
-                    <input
-                      autoFocus
-                      type="text"
-                      maxLength={40}
-                      value={newLessonName}
-                      onChange={(e) => setNewLessonName(e.target.value)}
-                      placeholder={`Lesson ${formatLessonDate(new Date().toISOString())}`}
-                      className="w-full px-3 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-white"
-                    />
-                    <p className="text-[11px] text-slate-400">
-                      Makes a new QR code and frees all pair numbers. Earlier lessons stay in the Review Tray.
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        type="submit"
-                        className="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer"
-                      >
-                        Start lesson
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsNamingLesson(false);
-                          setNewLessonName('');
-                        }}
-                        className="px-3 py-2 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">Current lesson</p>
-                      <p className="text-sm font-black text-slate-800 dark:text-white truncate">{lesson.name}</p>
-                      <p className="text-[11px] text-slate-400">Created {formatLessonDate(lesson.startedAt)}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsNamingLesson(true)}
-                      className="shrink-0 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer"
-                    >
-                      ＋ New lesson
-                    </button>
-                  </div>
-                )}
+              {/* The lesson on the projector */}
+              <div className="w-full mb-4 pb-4 border-b border-slate-100 dark:border-zinc-800 text-left flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">Current lesson</p>
+                  <p className="text-sm font-black text-slate-800 dark:text-white truncate">
+                    {lessonTitle(lesson)}
+                    {lesson.level && <span className="ml-1.5 text-xs font-bold text-slate-400">{lesson.level}</span>}
+                  </p>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{lesson.skillName}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('LESSONS')}
+                  className="shrink-0 px-3 py-2 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
+                >
+                  Change lesson
+                </button>
               </div>
 
               <div className="mb-4">
                 <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold">
-                  {lesson.name} QR
+                  {lesson.className} Class QR
                 </span>
                 <h2 className="text-xl font-black text-slate-800 dark:text-white mt-2">
                   1. Apple: Grab iPad & Scan!
@@ -508,21 +538,6 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 )}
               </div>
 
-              {/* Lesson Skill Selector */}
-              <div className="w-full mt-5 pt-4 border-t border-slate-100 dark:border-zinc-800 flex flex-col gap-1.5 text-left">
-                <label className="text-xs font-bold text-slate-500">Today's Syllabus Skill:</label>
-                <select
-                  value={selectedSkill}
-                  onChange={(e) => setSelectedSkill(e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-white"
-                >
-                  {ALL_FMS_SKILLS.map((skill) => (
-                    <option key={skill} value={skill}>
-                      {skill}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             {/* Right: Live Pair Check-in Monitor */}
@@ -538,13 +553,13 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   </p>
                 </div>
                 <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold rounded-full text-xs">
-                  {checkIns.length} / 15 Checked In
+                  {checkIns.length} / {lesson.pairCount} Checked In
                 </span>
               </div>
 
-              {/* 15-Pair Grid */}
+              {/* One tile per pair in this lesson */}
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                {Array.from({ length: 15 }, (_, i) => i + 1).map((num) => {
+                {Array.from({ length: lesson.pairCount }, (_, i) => i + 1).map((num) => {
                   const ci = checkIns.find((c) => c.pair_number === num);
                   const isChecked = !!ci;
                   const needsHelp = ci?.needs_help;
@@ -621,6 +636,32 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
         </div>
       )}
 
+      {/* VIEW: YOUR LESSONS */}
+      {viewMode === 'LESSONS' && (
+        <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-4xl mx-auto w-full">
+          {teacherId ? (
+            <LessonList
+              lessons={lessons}
+              currentLessonId={currentLessonId}
+              loading={lessonsLoading}
+              error={lessonsError}
+              onPlan={() => setViewMode('PLAN_LESSON')}
+              onShow={(l) => showLessonOnProjector(l.id)}
+              onDelete={handleDeleteLesson}
+            />
+          ) : (
+            <p className="text-sm text-slate-500">Sign in to plan and save lessons.</p>
+          )}
+        </div>
+      )}
+
+      {/* VIEW: PLAN A LESSON */}
+      {viewMode === 'PLAN_LESSON' && (
+        <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-3xl mx-auto w-full">
+          <LessonPlanForm onSave={handleSaveLesson} onCancel={() => setViewMode('LESSONS')} />
+        </div>
+      )}
+
       {/* VIEW 2: SEESAW-STYLE TEACHER REVIEW TRAY */}
       {viewMode === 'REVIEW_TRAY' && (
         <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
@@ -693,7 +734,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                         <span className="text-[10px] text-slate-400">{sub.skillName}</span>
                         <span className="block text-[10px] text-slate-400 truncate">
                           {sub.lessonId === LEGACY_LESSON_ID ? '' : `${lessonLabel(sub.lessonId)} · `}
-                          Sent {formatLessonDate(sub.createdAt)}
+                          Sent {formatShortDate(sub.createdAt)}
                         </span>
                         {(sub.aiChatAnalysis?.apple || sub.aiChatAnalysis?.banana) && (
                           <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">

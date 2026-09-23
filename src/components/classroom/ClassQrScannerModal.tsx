@@ -4,7 +4,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 interface ClassQrScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onScanSuccess: (lessonData: { lessonId: string; title: string; skillName: string; teacherId?: string }) => void;
+  onScanSuccess: (lessonData: { lessonId: string; title: string; skillName: string; teacherId?: string; pairCount?: number }) => void;
 }
 
 export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
@@ -117,6 +117,8 @@ export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
             title: parsed.title || 'PE Partner Practice',
             skillName: parsed.skillName || 'Overhand Throw',
             teacherId: parsed.teacherId ?? undefined, // ← forwarded from teacher's QR
+            // Older QR codes carry no pairCount; the check-in modal then shows 15
+            pairCount: Number.isInteger(parsed.pairCount) ? parsed.pairCount : undefined,
           });
           return;
         }
