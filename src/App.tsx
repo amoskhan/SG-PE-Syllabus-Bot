@@ -23,7 +23,7 @@ import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal'
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken, saveLessonPass } from './services/offline/offlineStorage';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
@@ -751,7 +751,7 @@ const App: React.FC = () => {
     };
     const claimToken = getOrCreatePairClaimToken(merged.lessonId);
 
-    const { blocked } = await upsertPairCheckIn({
+    const { blocked, invalidLesson } = await upsertPairCheckIn({
       lessonId: merged.lessonId,
       pairNumber: merged.pairNumber,
       skillName: merged.skillName,
@@ -759,7 +759,14 @@ const App: React.FC = () => {
       pairPhoto: merged.pairPhoto,
       needsHelp: merged.needsHelp,
       claimToken,
-    }).catch((e) => { console.warn(e); return { blocked: false }; });
+    }).catch((e) => { console.warn(e); return { blocked: false, invalidLesson: false }; });
+
+    if (invalidLesson) {
+      await clearActivePairSession().catch(() => { /* ignore */ });
+      try { window.alert("This QR code isn't open for today's lesson. Ask your teacher to show today's QR code, then scan again."); } catch { /* ignore */ }
+      setIsPairCheckInOpen(false);
+      return;
+    }
 
     if (blocked) {
       // Another group already owns this pair number — bounce back to pick another.
@@ -1901,7 +1908,8 @@ const App: React.FC = () => {
       <TeacherClassroomBoard
         onOpenChat={() => setAppMode('home_screen')}
         teacherId={user?.id}
-        onOpenStudentSession={(lesson) => {
+        onOpenStudentSession={({ pass, ...lesson }) => {
+          saveLessonPass(lesson.lessonId, pass);
           setScannedLessonData({ ...lesson, teacherId: user?.id });
           setIsPairCheckInOpen(true);
         }}

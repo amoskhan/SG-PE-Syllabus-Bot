@@ -15,10 +15,11 @@ export interface Lesson {
   skillArea: SkillArea;
   skillName: string;
   pairCount: number;
+  pupilPass: string; // secret carried in the class QR (see supabase_lesson_pass.sql)
   createdAt: string;
 }
 
-export type LessonDraft = Omit<Lesson, "id" | "createdAt">;
+export type LessonDraft = Omit<Lesson, "id" | "createdAt" | "pupilPass">;
 
 export const LEVELS = ["P1", "P2", "P3", "P4", "P5", "P6"];
 export const DEFAULT_PAIR_COUNT = 15;
@@ -33,6 +34,7 @@ interface LessonRow {
   skill_area: SkillArea;
   skill_name: string;
   pair_count: number;
+  pupil_pass: string | null;
   created_at: string;
 }
 
@@ -45,6 +47,7 @@ const fromRow = (r: LessonRow): Lesson => ({
   skillArea: r.skill_area,
   skillName: r.skill_name,
   pairCount: r.pair_count,
+  pupilPass: r.pupil_pass ?? "",
   createdAt: r.created_at,
 });
 

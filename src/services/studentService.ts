@@ -153,7 +153,7 @@ export const uploadPeerSessionToTeacher = async (params: {
   bananaCues?: any[];
   appleCues?: any[];
   claimToken?: string; // identifies the group that owns this pair
-}): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean; blocked?: boolean }> => {
+}): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean; blocked?: boolean; invalidLesson?: boolean }> => {
   const { teacherId, lessonId, pairNumber, skillName, pairPhoto, bananaBlob, appleBlob, bananaCues, appleCues, claimToken } = params;
   const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   const subId = `sub-${lessonId}-p${pairNumber}-${safeName}`;
@@ -215,6 +215,7 @@ export const uploadPeerSessionToTeacher = async (params: {
     console.warn('[Upload] pair_submissions row owned by another group — blocked');
     return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
   }
+  if (result === 'invalid_lesson') return { bananaVideoUrl, appleVideoUrl, success: false, invalidLesson: true };
   if (result === 'error') return { bananaVideoUrl, appleVideoUrl, success: false };
 
   console.log('[Upload] pair_submissions written successfully ✓');
