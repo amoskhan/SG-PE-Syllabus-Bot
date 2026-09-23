@@ -18,7 +18,7 @@ import { ALL_FMS_SKILLS } from './data/fundamentalMovementSkillsData';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './services/db/supabaseClient';
 import Dashboard from './pages/Dashboard';
-import { TeacherClassroomBoard } from './pages/TeacherClassroomBoard';
+import { TeacherClassroomBoard, getCurrentBoardLesson } from './pages/TeacherClassroomBoard';
 import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal';
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
@@ -1911,9 +1911,10 @@ const App: React.FC = () => {
         onOpenChat={() => setAppMode('home_screen')}
         teacherId={user?.id}
         onOpenStudentSession={() => {
+          const lesson = getCurrentBoardLesson(user?.id);
           setScannedLessonData({
-            lessonId: 'pe-lesson-today',
-            title: 'Overhand Throw Practice',
+            lessonId: lesson.id,
+            title: `${lesson.name} · Overhand Throw`,
             skillName: 'Overhand Throw',
             teacherId: user?.id,
           });
