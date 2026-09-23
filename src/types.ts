@@ -40,6 +40,7 @@ export interface Message {
   modelId?: string; // ID of the AI model that generated this message
   hasMedia?: boolean; // Flag if the message/conversation context includes media
   studentId?: string; // Student this analysis belongs to
+  performer?: 'Apple' | 'Banana'; // Practice Station: whose performance this analysis grades
   approvalStatus?: 'draft' | 'approved' | 'rejected';
   approvedBy?: string;
   approvedAt?: string;

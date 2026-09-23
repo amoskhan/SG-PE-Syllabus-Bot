@@ -26,7 +26,7 @@ import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken, saveLessonPass } from './services/offline/offlineStorage';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
-import { setPupilAiRequest, PupilAiPurpose } from './services/ai/aiAccess';
+import { setPupilAiRequest, PupilAiRequest } from './services/ai/aiAccess';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
 
 type ModelId = 'gemini' | 'claude';
@@ -332,7 +332,6 @@ const App: React.FC = () => {
   const effectiveModel: ModelId = isPupilPractice ? 'claude' : user ? selectedModel : 'gemini';
   // Pupil budget bookkeeping: questions count against whoever was analysed last
   const lastAnalysedPerformerRef = useRef<'apple' | 'banana'>('apple');
-  const pendingPupilPurposeRef = useRef<PupilAiPurpose | null>(null);
   const [claimedPairNumbers, setClaimedPairNumbers] = useState<Set<number>>(new Set());
   const [checkInModalKey, setCheckInModalKey] = useState(0);
   const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
@@ -431,7 +430,7 @@ const App: React.FC = () => {
             bananaFeedback: result.studentFeedback.bananaFeedback,
             appleFeedback: result.studentFeedback.appleFeedback,
             generatedAt: new Date().toISOString(),
-            modelUsed: 'gemini-2.5-flash',
+            modelUsed: 'claude-haiku', // peerCoachingAI runs on Claude Haiku
           };
           existing.aiTeacherReport = {
             bananaAnalysis: result.teacherReport.bananaAnalysis,
@@ -441,7 +440,7 @@ const App: React.FC = () => {
             teacherRecommendations: result.teacherReport.teacherRecommendations,
             discrepancies: result.teacherReport.discrepancies,
             generatedAt: new Date().toISOString(),
-            modelUsed: 'gemini-2.5-flash',
+            modelUsed: 'claude-haiku',
           };
           await db.put('submissions', existing);
           // Push the enriched record to Supabase so the teacher's board (another device) sees the AI report
@@ -554,9 +553,7 @@ const App: React.FC = () => {
     activeStudentContextRef.current = null;
 
     const text = `Coach, grade ${performer}'s ${skillName} against the full 2024 MOE PE Syllabus checklist. Assess every performance criterion with frame evidence, then state the proficiency level.`;
-    lastAnalysedPerformerRef.current = performer === 'Apple' ? 'apple' : 'banana';
-    pendingPupilPurposeRef.current = 'analysis';
-    await handleSendMessage(text, files, { skillName, isVerified: true });
+    await handleSendMessage(text, files, { skillName, isVerified: true, performer });
   };
 
   // Student sends a full AI rubric analysis from the Practice Station to the teacher's
@@ -588,15 +585,24 @@ const App: React.FC = () => {
     const skillName = ctx.skillName;
     const subId = canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, skillName);
 
-    // Which performer is this analysis about? Read the user prompt just above it.
-    let performer: 'Apple' | 'Banana' = 'Apple';
-    const sess = sessionsRef.current.find(s => s.id === currentSessionIdRef.current);
-    if (sess) {
-      const idx = sess.messages.findIndex(m => m.id === message.id);
-      const priorUser = [...sess.messages.slice(0, idx < 0 ? sess.messages.length : idx)]
-        .reverse()
-        .find(m => m.sender === Sender.USER);
-      if (priorUser && /\bbanana\b/i.test(priorUser.text)) performer = 'Banana';
+    // Which performer is this analysis about? Analyses are stamped when created.
+    // Older ones fall back to the prompt just above the message, then to the
+    // analysis's own heading. Never guess from a message that isn't found — that
+    // used to file every analysis under Apple, each overwriting the last.
+    let performer: 'Apple' | 'Banana' | undefined = message.performer;
+    if (!performer) {
+      const sess = sessionsRef.current.find(s => s.messages.some(m => m.id === message.id));
+      const idx = sess ? sess.messages.findIndex(m => m.id === message.id) : -1;
+      const priorUser = sess && idx > 0
+        ? [...sess.messages.slice(0, idx)].reverse().find(m => m.sender === Sender.USER)
+        : undefined;
+      const hint = priorUser?.text ?? message.text.slice(0, 300);
+      const named = hint.match(/\b(Apple|Banana)\b/i)?.[1];
+      if (named) performer = named.toLowerCase() === 'banana' ? 'Banana' : 'Apple';
+    }
+    if (!performer) {
+      setTeacherFeedbackBanner("Couldn't tell whether this analysis is Apple's or Banana's. Tap Analyse again for the right pupil, then send that one.");
+      return;
     }
 
     // Peer ratings still held in the live session. The per-clip "Save to Teacher" button
@@ -642,7 +648,7 @@ const App: React.FC = () => {
       analysisText: message.text,
       skillName,
       studentLabel: performer,
-      modelUsed: selectedModel,
+      modelUsed: message.modelId ?? effectiveModel,
       submittedAt: new Date().toISOString(),
     };
     record.aiChatAnalysis = {
@@ -1318,10 +1324,27 @@ const App: React.FC = () => {
   const handleSendMessage = async (
     text: string,
     files?: File[],
-    metadata?: { startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean; studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean }
+    metadata?: {
+      startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean;
+      studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean;
+      performer?: 'Apple' | 'Banana'; // Practice Station "Analyse": whose performance is graded
+    }
   ) => {
     // LOCK TARGET SESSION ID context to heavily prevent "chat-swapping" side effects
     const originatingSessionId = currentSessionIdRef.current;
+
+    // A pupil's request, fixed now before any await: an analysis counts against its
+    // performer, a typed question against whoever was analysed last (pupil budget)
+    const analysedPerformer = metadata?.performer?.toLowerCase() as 'apple' | 'banana' | undefined;
+    if (analysedPerformer) lastAnalysedPerformerRef.current = analysedPerformer;
+    const pupilRequest: PupilAiRequest | null = isPupilPractice && activePeerSessionData
+      ? {
+          lessonId: activePeerSessionData.lessonId,
+          pairNumber: activePeerSessionData.pairNumber,
+          performer: analysedPerformer ?? lastAnalysedPerformerRef.current,
+          purpose: analysedPerformer ? 'analysis' : 'question',
+        }
+      : null;
     
     let isVerifying = metadata?.isVerified;
     let skillContext = metadata?.skillName;
@@ -1551,15 +1574,7 @@ const App: React.FC = () => {
       // already analysed. Results are still written to skill_analyses for
       // history, but a stored row is never served in place of a fresh run.
       const aiService = getAIService(effectiveModel);
-      if (isPupilPractice && activePeerSessionData) {
-        setPupilAiRequest({
-          lessonId: activePeerSessionData.lessonId,
-          pairNumber: activePeerSessionData.pairNumber,
-          performer: lastAnalysedPerformerRef.current,
-          purpose: pendingPupilPurposeRef.current ?? 'question',
-        });
-      }
-      pendingPupilPurposeRef.current = null;
+      setPupilAiRequest(pupilRequest);
       try {
       response = await aiService(
         standardHistory,
@@ -1631,6 +1646,7 @@ const App: React.FC = () => {
         tokenUsage: response.tokenUsage,
         modelId: effectiveModel,
         studentId,
+        performer: metadata?.performer,
         // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
         hasMedia: newMessage.hasMedia || !!(contextPoseData && contextPoseData.length > 0)
       };
