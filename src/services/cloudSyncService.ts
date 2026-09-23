@@ -25,7 +25,7 @@ export async function backupSubmissionToSupabase(
       const path = `${folder}/banana_performer.mp4`;
       const { error } = await supabase.storage
         .from("student-videos")
-        .upload(path, submission.appleRole.videoBlob, { cacheControl: "3600", upsert: true });
+        .upload(path, submission.appleRole.videoBlob, { cacheControl: "3600", upsert: false });
 
       if (!error) {
         const { data } = supabase.storage.from("student-videos").getPublicUrl(path);
@@ -41,7 +41,7 @@ export async function backupSubmissionToSupabase(
       const path = `${folder}/apple_performer.mp4`;
       const { error } = await supabase.storage
         .from("student-videos")
-        .upload(path, submission.bananaRole.videoBlob, { cacheControl: "3600", upsert: true });
+        .upload(path, submission.bananaRole.videoBlob, { cacheControl: "3600", upsert: false });
 
       if (!error) {
         const { data } = supabase.storage.from("student-videos").getPublicUrl(path);
@@ -68,92 +68,33 @@ export async function backupSubmissionToSupabase(
     }
   }
 
-  const validTeacherId = (teacherId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(teacherId)) ? teacherId : null;
-  const token = claimToken ?? submission.claimToken;
-
-  // Never blind-upsert the whole row: an omitted column would be nulled by
-  // supabase-js (defaultToNull), which is how teacher_feedback / teacher_star /
-  // ai_* used to vanish on a student re-upload. Instead: insert if new, else
-  // update ONLY the student-owned columns. The DB trigger (protect_teacher_columns)
-  // is the belt-and-braces guarantee.
-  try {
-    const { data: existing } = await supabase
-      .from("pair_submissions")
-      .select("id, claim_token")
-      .eq("id", submission.id)
-      .maybeSingle();
-
-    if (existing) {
-      if (existing.claim_token && token && existing.claim_token !== token) {
-        console.warn(`[CloudBackup] submission ${submission.id} owned by another group — write blocked`);
-        return { bananaVideoUrl, appleVideoUrl, blocked: true };
-      }
-      const updatePayload: Record<string, any> = {
-        skill_name: submission.skillName,
-        status: submission.status, // trigger maps to 'resubmitted' if already reviewed
-        updated_at: new Date().toISOString(),
-      };
-      // Only write cues when we actually have some. An AI-analysis submit can arrive
-      // with a fabricated blank record (see handleSubmitChecklistToTeacher) — writing
-      // [] here would wipe the pair's peer checklist in the cloud.
-      if (submission.appleRole.cues?.length) updatePayload.banana_cues = submission.appleRole.cues;
-      if (submission.bananaRole.cues?.length) updatePayload.apple_cues = submission.bananaRole.cues;
-      if (submission.pairPhoto) updatePayload.pair_photo = submission.pairPhoto;
-      if (bananaVideoUrl) updatePayload.banana_video_url = bananaVideoUrl;
-      if (appleVideoUrl) updatePayload.apple_video_url = appleVideoUrl;
-      if (submission.aiStudentFeedback) updatePayload.ai_student_feedback = submission.aiStudentFeedback;
-      if (submission.aiTeacherReport) updatePayload.ai_teacher_report = submission.aiTeacherReport;
-      if (submission.aiChatAnalysis) updatePayload.ai_chat_analysis = submission.aiChatAnalysis;
-      if (token) updatePayload.claim_token = token;
-
-      const { error: updErr } = await supabase
-        .from("pair_submissions")
-        .update(updatePayload)
-        .eq("id", submission.id);
-      if (updErr) {
-        if (String(updErr.message || "").includes("PAIR_CLAIMED")) {
-          return { bananaVideoUrl, appleVideoUrl, blocked: true };
-        }
-        console.error("[CloudBackup] Supabase DB metadata update error:", updErr);
-      } else {
-        console.log(`[CloudBackup] Updated submission ${submission.id} (student columns only) ✓`);
-      }
-    } else {
-      const { error: insErr } = await supabase.from("pair_submissions").insert({
-        id: submission.id,
-        lesson_id: submission.lessonId,
-        pair_number: submission.pairNumber,
-        skill_name: submission.skillName,
-        teacher_id: validTeacherId,
-        pair_photo: submission.pairPhoto || null,
-        banana_video_url: bananaVideoUrl || null,
-        apple_video_url: appleVideoUrl || null,
-        banana_cues: submission.appleRole.cues || [],
-        apple_cues: submission.bananaRole.cues || [],
-        ai_student_feedback: submission.aiStudentFeedback ?? null,
-        ai_teacher_report: submission.aiTeacherReport ?? null,
-        ai_chat_analysis: submission.aiChatAnalysis ?? null,
-        status: submission.status,
-        created_at: submission.createdAt,
-        claim_token: token ?? null,
-      });
-      if (insErr) {
-        if (String(insErr.message || "").includes("PAIR_CLAIMED")) {
-          return { bananaVideoUrl, appleVideoUrl, blocked: true };
-        }
-        console.error("[CloudBackup] Supabase DB metadata insert error:", insErr);
-      } else {
-        console.log(`[CloudBackup] Inserted submission ${submission.id} to Supabase ✓`);
-      }
-    }
-  } catch (e) {
-    console.warn("[CloudBackup] Supabase DB metadata sync note:", e);
+  const result = await savePupilSubmission({
+    id: submission.id,
+    lesson_id: submission.lessonId,
+    pair_number: submission.pairNumber,
+    skill_name: submission.skillName,
+    teacher_id: teacherId,
+    status: submission.status, // trigger maps to 'resubmitted' if already reviewed
+    claim_token: claimToken ?? submission.claimToken,
+    pair_photo: submission.pairPhoto,
+    banana_video_url: bananaVideoUrl,
+    apple_video_url: appleVideoUrl,
+    banana_cues: submission.appleRole.cues,
+    apple_cues: submission.bananaRole.cues,
+    ai_student_feedback: submission.aiStudentFeedback,
+    ai_teacher_report: submission.aiTeacherReport,
+    ai_chat_analysis: submission.aiChatAnalysis,
+    created_at: submission.createdAt,
+  });
+  if (result === "claimed") {
+    console.warn(`[CloudBackup] submission ${submission.id} owned by another group — write blocked`);
+    return { bananaVideoUrl, appleVideoUrl, blocked: true };
   }
 
   return { bananaVideoUrl, appleVideoUrl };
 }
 
-function mapRowToSubmission(row: any): PairSubmissionRecord {
+export function mapRowToSubmission(row: any): PairSubmissionRecord {
   return {
     id: row.id,
     lessonId: row.lesson_id || 'pe-lesson-today',
@@ -181,6 +122,71 @@ function mapRowToSubmission(row: any): PairSubmissionRecord {
     createdAt: row.created_at || new Date().toISOString(),
     claimToken: row.claim_token || undefined,
   };
+}
+
+// ─── Pupil-side access (no sign-in) ──────────────────────────────────────────
+// Pupil devices can't read or write the pair tables directly (see
+// supabase_protect_pupil_data.sql). Each of these calls one narrow database
+// function instead.
+
+export type PupilWriteResult = "ok" | "claimed" | "error";
+
+/**
+ * Send a pair's work. Inserts the row, or updates only the student-owned
+ * columns — empty / missing fields keep what is already stored, so this is
+ * safe for partial updates such as one re-uploaded video.
+ */
+export async function savePupilSubmission(fields: {
+  id: string;
+  lesson_id: string;
+  pair_number: number;
+  skill_name: string;
+  teacher_id?: string;
+  status: string;
+  claim_token?: string;
+  pair_photo?: string;
+  banana_video_url?: string;
+  apple_video_url?: string;
+  banana_cues?: unknown[];
+  apple_cues?: unknown[];
+  ai_student_feedback?: unknown;
+  ai_teacher_report?: unknown;
+  ai_chat_analysis?: unknown;
+  created_at?: string;
+}): Promise<PupilWriteResult> {
+  const { data, error } = await supabase.rpc("pupil_save_submission", { p: fields });
+  if (error) {
+    console.error("[CloudSync] pupil_save_submission error:", error);
+    return "error";
+  }
+  return data === "claimed" ? "claimed" : "ok";
+}
+
+/** A pair's own submission, proven by its claim token. Null if none or not theirs. */
+export async function fetchPupilSubmission(id: string, claimToken: string): Promise<PairSubmissionRecord | null> {
+  const { data, error } = await supabase.rpc("pupil_get_submission", { p_id: id, p_claim_token: claimToken });
+  if (error) {
+    console.warn("[CloudSync] pupil_get_submission error:", error);
+    return null;
+  }
+  return data ? mapRowToSubmission(data) : null;
+}
+
+/**
+ * Turn a stored video reference into something a <video> can play. The
+ * student-videos bucket is private, so stored public-style URLs are converted
+ * to a signed URL valid for an hour. Local blob/data URLs pass through.
+ */
+export async function getPlayableVideoUrl(stored: string): Promise<string | null> {
+  if (stored.startsWith("blob:") || stored.startsWith("data:")) return stored;
+  const path = extractStoragePath(stored) ?? (stored.startsWith("http") ? null : stored);
+  if (!path) return stored;
+  const { data, error } = await supabase.storage.from("student-videos").createSignedUrl(path, 3600);
+  if (error) {
+    console.warn("[CloudSync] createSignedUrl error:", error.message);
+    return null;
+  }
+  return data.signedUrl;
 }
 
 /**
@@ -311,47 +317,22 @@ export async function upsertPairCheckIn(params: {
   claimToken?: string;
 }): Promise<{ blocked: boolean }> {
   const { lessonId, pairNumber, skillName, teacherId, pairPhoto, needsHelp, claimToken } = params;
-  const id = `${lessonId}-p${pairNumber}`;
-
-  // Collision guard: if this pair number is already claimed by another group, block.
-  if (claimToken) {
-    try {
-      const { data: existing } = await supabase
-        .from("pair_sessions")
-        .select("claim_token")
-        .eq("id", id)
-        .maybeSingle();
-      if (existing?.claim_token && existing.claim_token !== claimToken) {
-        console.warn(`[CloudSync] Pair ${pairNumber} already claimed by another group — check-in blocked`);
-        return { blocked: true };
-      }
-    } catch (e) {
-      console.warn("[CloudSync] upsertPairCheckIn claim pre-check failed (continuing):", e);
-    }
+  const { data, error } = await supabase.rpc("pupil_check_in", {
+    p_lesson_id: lessonId,
+    p_pair_number: pairNumber,
+    p_skill_name: skillName ?? null,
+    p_teacher_id: teacherId ?? null,
+    p_pair_photo: pairPhoto ?? null,
+    p_needs_help: needsHelp ?? false,
+    p_claim_token: claimToken ?? null,
+  });
+  if (error) {
+    console.error("[CloudSync] pupil_check_in error:", error);
+    return { blocked: false };
   }
-
-  const payload: Record<string, any> = {
-    id,
-    lesson_id: lessonId,
-    pair_number: pairNumber,
-    skill_name: skillName ?? null,
-    teacher_id: teacherId && UUID_RE.test(teacherId) ? teacherId : null,
-    needs_help: needsHelp ?? false,
-    updated_at: new Date().toISOString(),
-  };
-  if (pairPhoto) payload.pair_photo = pairPhoto;
-  if (claimToken) payload.claim_token = claimToken;
-
-  try {
-    const { error } = await supabase
-      .from("pair_sessions")
-      .upsert(payload, { onConflict: "id" });
-    if (error) {
-      if (String(error.message || "").includes("PAIR_CLAIMED")) return { blocked: true };
-      console.error("[CloudSync] upsertPairCheckIn error:", error);
-    }
-  } catch (e) {
-    console.error("[CloudSync] upsertPairCheckIn unexpected error:", e);
+  if (data === "claimed") {
+    console.warn(`[CloudSync] Pair ${pairNumber} already claimed by another group — check-in blocked`);
+    return { blocked: true };
   }
   return { blocked: false };
 }
@@ -378,11 +359,16 @@ export async function deletePairCheckIn(lessonId: string, pairNumber: number): P
  * in the student's PairCheckInModal.
  */
 export async function fetchClaimedPairNumbers(
-  teacherId?: string,
+  _teacherId?: string,
   lessonId?: string,
 ): Promise<Set<number>> {
-  const rows = await fetchPairCheckIns(teacherId, lessonId);
-  return new Set(rows.map((r) => r.pair_number));
+  if (!lessonId) return new Set();
+  const { data, error } = await supabase.rpc("pupil_claimed_pairs", { p_lesson_id: lessonId });
+  if (error) {
+    console.warn("[CloudSync] pupil_claimed_pairs error:", error);
+    return new Set();
+  }
+  return new Set((data as number[] | null) ?? []);
 }
 
 /**

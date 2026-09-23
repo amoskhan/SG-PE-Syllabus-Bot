@@ -15,6 +15,7 @@ import {
   fetchPairCheckIns,
   deletePairCheckIn,
   PairCheckInRow,
+  getPlayableVideoUrl,
 } from '../services/cloudSyncService';
 import {
   Lesson,
@@ -64,7 +65,15 @@ const VideoBlobPlayer: React.FC<{ blob?: Blob; videoUrl?: string; performer: str
         URL.revokeObjectURL(objectUrl);
       };
     } else if (videoUrl) {
-      setUrl(videoUrl);
+      // Uploaded clips are private — swap the stored address for a 1-hour signed link
+      let cancelled = false;
+      setUrl(null);
+      getPlayableVideoUrl(videoUrl).then((playable) => {
+        if (!cancelled) setUrl(playable);
+      });
+      return () => {
+        cancelled = true;
+      };
     } else {
       setUrl(null);
     }

@@ -24,7 +24,7 @@ import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
-import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers } from './services/cloudSyncService';
+import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
 
@@ -470,8 +470,8 @@ const App: React.FC = () => {
     };
   };
 
-  // Full performer clip: in-memory if fresh, otherwise re-downloaded from the clip the
-  // pair uploaded to Supabase on Submit (memory is wiped on a page refresh).
+  // Full performer clip: in-memory if fresh, otherwise the copy saved on this device
+  // (memory is wiped on a page refresh). The uploaded copy is private to the teacher.
   const fetchPerformerVideoBlob = async (performer: 'Apple' | 'Banana'): Promise<Blob | null> => {
     const inMemory = performer === 'Apple' ? activePeerSessionData?.appleVideoBlob : activePeerSessionData?.bananaVideoBlob;
     if (inMemory && inMemory.size > 0) return inMemory;
@@ -480,14 +480,11 @@ const App: React.FC = () => {
     if (!pair) return null;
     const skillName = activePeerSessionData?.skillName || pair.skillName || scannedLessonData.skillName || 'Overhand Throw';
     const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
-    const col = performer === 'Apple' ? 'apple_video_url' : 'banana_video_url';
     try {
-      const { data } = await supabase.from('pair_submissions').select(col).eq('id', subId).maybeSingle();
-      const url = (data as Record<string, string> | null)?.[col];
-      if (!url) return null;
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      return await res.blob();
+      const saved = (await (await getDB()).get('submissions', subId)) as PairSubmissionRecord | undefined;
+      // bananaRole is the turn where Apple performed (see PairSubmissionRecord)
+      const blob = performer === 'Apple' ? saved?.bananaRole.videoBlob : saved?.appleRole.videoBlob;
+      return blob && blob.size > 0 ? blob : null;
     } catch {
       return null;
     }
@@ -648,12 +645,8 @@ const App: React.FC = () => {
     const subId = canonicalSubmissionId(src.lessonId, src.pairNumber, skillName);
 
     const poll = async () => {
-      const { data } = await supabase
-        .from('pair_submissions')
-        .select('teacher_feedback')
-        .eq('id', subId)
-        .maybeSingle();
-      const fb = data?.teacher_feedback?.trim();
+      const sub = await fetchPupilSubmission(subId, getOrCreatePairClaimToken(src.lessonId));
+      const fb = sub?.teacherFeedback?.trim();
       if (fb && fb !== lastSeenTeacherFeedbackRef.current) {
         lastSeenTeacherFeedbackRef.current = fb;
         setTeacherFeedbackBanner(fb);
@@ -688,10 +681,7 @@ const App: React.FC = () => {
       let sub: PairSubmissionRecord | null = null;
       try { sub = (await (await getDB()).get('submissions', subId)) as PairSubmissionRecord ?? null; } catch { /* ignore */ }
       if (!sub) {
-        try {
-          const { data } = await supabase.from('pair_submissions').select('*').eq('id', subId).maybeSingle();
-          if (data) sub = data as unknown as PairSubmissionRecord;
-        } catch { /* ignore */ }
+        sub = await fetchPupilSubmission(subId, getOrCreatePairClaimToken(pair.lessonId));
       }
       if (!cancelled) setActivePairSubmission(sub);
     })();
