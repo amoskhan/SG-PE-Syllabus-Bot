@@ -26,6 +26,7 @@ import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken, saveLessonPass } from './services/offline/offlineStorage';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
+import { setPupilAiRequest, PupilAiPurpose } from './services/ai/aiAccess';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
 
 type ModelId = 'gemini' | 'claude';
@@ -44,7 +45,8 @@ const ModelPicker: React.FC<{
   onSelect: (m: ModelId) => void;
   align?: 'left' | 'right';
   variant?: 'light' | 'dark';
-}> = ({ selectedModel, onSelect, align = 'right', variant = 'light' }) => {
+  claudeLocked?: boolean; // not signed in — Claude is paid, so it needs a sign-in
+}> = ({ selectedModel, onSelect, align = 'right', variant = 'light', claudeLocked = false }) => {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
@@ -66,23 +68,31 @@ const ModelPicker: React.FC<{
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-2.5 w-52 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/60 dark:border-zinc-800/80 overflow-hidden z-20 flex flex-col p-1.5 animate-scale-in`}>
-            {MODEL_OPTIONS.map((model) => (
+            {MODEL_OPTIONS.map((model) => {
+              const locked = claudeLocked && model.id === 'claude';
+              return (
               <button
                 key={model.id}
+                disabled={locked}
                 onClick={() => { onSelect(model.id); setOpen(false); }}
-                className={`w-full px-3 py-2 rounded-xl text-left transition-colors flex items-center gap-3 cursor-pointer ${
-                  selectedModel === model.id
-                    ? 'bg-indigo-50/80 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-semibold'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                className={`w-full px-3 py-2 rounded-xl text-left transition-colors flex items-center gap-3 ${
+                  locked
+                    ? 'opacity-50 cursor-not-allowed text-slate-500'
+                    : selectedModel === model.id
+                    ? 'bg-indigo-50/80 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 font-semibold cursor-pointer'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50 cursor-pointer'
                 }`}
               >
                 <img src={`/assets/model-icons/${model.icon}`} alt={model.name} className="w-5 h-5 object-contain" />
                 <div className="flex flex-col">
                   <span className="text-xs leading-tight font-medium">{model.name}</span>
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-normal">{model.desc}</span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-normal">
+                    {locked ? 'Sign in to use Claude' : model.desc}
+                  </span>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -316,6 +326,13 @@ const App: React.FC = () => {
   });
   const [activePairSession, setActivePairSession] = useState<PairSessionData | null>(null);
   const [activePeerSessionData, setActivePeerSessionData] = useState<CompletedPeerSession | null>(null);
+  // Claude is paid: visitors who aren't signed in use Gemini. Pupils in the
+  // Practice Station always use Claude, through their lesson pass (aiAccess.ts).
+  const isPupilPractice = !!activePeerSessionData && !user;
+  const effectiveModel: ModelId = isPupilPractice ? 'claude' : user ? selectedModel : 'gemini';
+  // Pupil budget bookkeeping: questions count against whoever was analysed last
+  const lastAnalysedPerformerRef = useRef<'apple' | 'banana'>('apple');
+  const pendingPupilPurposeRef = useRef<PupilAiPurpose | null>(null);
   const [claimedPairNumbers, setClaimedPairNumbers] = useState<Set<number>>(new Set());
   const [checkInModalKey, setCheckInModalKey] = useState(0);
   const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
@@ -380,7 +397,8 @@ const App: React.FC = () => {
         data.appleVideoBlob || null,
         data.bananaCues,
         data.appleCues,
-        updateLoadingMsg
+        updateLoadingMsg,
+        { lessonId: data.lessonId, pairNumber: data.pairNumber }
       );
 
       const discrepancyNote = result.teacherReport.discrepancies.length > 0
@@ -536,6 +554,8 @@ const App: React.FC = () => {
     activeStudentContextRef.current = null;
 
     const text = `Coach, grade ${performer}'s ${skillName} against the full 2024 MOE PE Syllabus checklist. Assess every performance criterion with frame evidence, then state the proficiency level.`;
+    lastAnalysedPerformerRef.current = performer === 'Apple' ? 'apple' : 'banana';
+    pendingPupilPurposeRef.current = 'analysis';
     await handleSendMessage(text, files, { skillName, isVerified: true });
   };
 
@@ -1530,7 +1550,17 @@ const App: React.FC = () => {
       // Every submission runs the model, including a re-upload of a video
       // already analysed. Results are still written to skill_analyses for
       // history, but a stored row is never served in place of a fresh run.
-      const aiService = getAIService(selectedModel);
+      const aiService = getAIService(effectiveModel);
+      if (isPupilPractice && activePeerSessionData) {
+        setPupilAiRequest({
+          lessonId: activePeerSessionData.lessonId,
+          pairNumber: activePeerSessionData.pairNumber,
+          performer: lastAnalysedPerformerRef.current,
+          purpose: pendingPupilPurposeRef.current ?? 'question',
+        });
+      }
+      pendingPupilPurposeRef.current = null;
+      try {
       response = await aiService(
         standardHistory,
         promptText,
@@ -1544,6 +1574,9 @@ const App: React.FC = () => {
         user?.id,  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
         skillMode
       );
+      } finally {
+        setPupilAiRequest(null);
+      }
 
       // --- Auto-save Phase 2 analysis to Supabase (fire-and-forget) ---
       // Use proficiency level detection — not isVerifying — as the Phase 2 signal.
@@ -1593,10 +1626,10 @@ const App: React.FC = () => {
         text: response.text,
         sender: Sender.BOT,
         timestamp: new Date(),
-        groundingChunks: selectedModel === 'gemini' ? response.groundingChunks : undefined,
+        groundingChunks: effectiveModel === 'gemini' ? response.groundingChunks : undefined,
         referenceImageURI: response.referenceImageURI,
         tokenUsage: response.tokenUsage,
-        modelId: selectedModel,
+        modelId: effectiveModel,
         studentId,
         // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
         hasMedia: newMessage.hasMedia || !!(contextPoseData && contextPoseData.length > 0)
@@ -2016,7 +2049,7 @@ const App: React.FC = () => {
 
               {/* Right: model choice for AI analysis + primary actions */}
               <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-                <ModelPicker selectedModel={selectedModel} onSelect={setSelectedModel} align="right" variant="dark" />
+                {user && <ModelPicker selectedModel={effectiveModel} onSelect={setSelectedModel} align="right" variant="dark" />}
                 <button
                   type="button"
                   onClick={() => setAppMode('peer_coaching')}
@@ -2118,7 +2151,7 @@ const App: React.FC = () => {
             </button>
 
             <div className="shrink-0">
-              <ModelPicker selectedModel={selectedModel} onSelect={setSelectedModel} align="right" />
+              <ModelPicker selectedModel={effectiveModel} onSelect={setSelectedModel} align="right" claudeLocked={!user} />
             </div>
           </div>
         </div>

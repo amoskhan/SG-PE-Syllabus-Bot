@@ -1,4 +1,5 @@
 import { OFFICIAL_FMS_PEER_CUES } from "../../data/peerSyllabusCues";
+import { claudeAccessHeaders, PupilAiRequest } from "./aiAccess";
 
 // Matches claudeService.ts. Haiku is enough here: four short, tightly
 // formatted calls over 4 frames each, not a full rubric grading.
@@ -90,10 +91,10 @@ function frameToClaudeBlock(dataUrl: string): ClaudeBlock | null {
  * flow, which has no login at all. Going through the proxy keeps the key
  * server-side, the same as every other model path in the app.
  */
-async function callClaude(blocks: ClaudeBlock[]): Promise<string> {
+async function callClaude(blocks: ClaudeBlock[], access?: PupilAiRequest): Promise<string> {
   const response = await fetch("/api/claude", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await claudeAccessHeaders(access)) },
     body: JSON.stringify({
       model: MODEL_HAIKU,
       max_tokens: 1024,
@@ -139,8 +140,12 @@ export async function runPeerCoachingAnalysis(
   appleVideoBlob: Blob | null,
   bananaCues: Record<string, boolean>,
   appleCues: Record<string, boolean>,
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  // Which lesson and pair is asking — pupils aren't signed in, so /api/claude
+  // needs the lesson pass (see aiAccess.ts)
+  pair?: { lessonId: string; pairNumber: number }
 ): Promise<PeerCoachingAIResult> {
+  const access: PupilAiRequest | undefined = pair && { ...pair, performer: "pair", purpose: "peer_feedback" };
   const cues = OFFICIAL_FMS_PEER_CUES[skillName] || [];
   const criteriaList = cues.map(c => `${c.itemNumber}. ${c.syllabusCriterion}`).join("\n");
 
@@ -187,10 +192,10 @@ Proficiency: Beginning(0-30%), Developing(31-60%), Competent(61-85%), Excellent(
 
   const [bananaStudentResult, appleStudentResult, bananaTeacherResult, appleTeacherResult] =
     await Promise.allSettled([
-      callClaude(buildStudentParts("Banana", bananaFrames, bananaPeerSummary)),
-      callClaude(buildStudentParts("Apple", appleFrames, applePeerSummary)),
-      callClaude(buildTeacherParts("Banana", bananaFrames, bananaPeerSummary)),
-      callClaude(buildTeacherParts("Apple", appleFrames, applePeerSummary)),
+      callClaude(buildStudentParts("Banana", bananaFrames, bananaPeerSummary), access),
+      callClaude(buildStudentParts("Apple", appleFrames, applePeerSummary), access),
+      callClaude(buildTeacherParts("Banana", bananaFrames, bananaPeerSummary), access),
+      callClaude(buildTeacherParts("Apple", appleFrames, applePeerSummary), access),
     ]);
 
   onProgress?.("Building your coaching report...");

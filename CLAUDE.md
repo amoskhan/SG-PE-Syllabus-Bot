@@ -36,6 +36,12 @@ React (src/) → POST /api/upload-pdf → pdf-parse → Gemini embeddings → Su
 | `/api/rag-search.ts` | Gemini embeddings + Supabase PGVector | Semantic search |
 | `/api/upload-pdf.ts` | pdf-parse + Gemini embeddings | PDF ingestion pipeline |
 
+**Who may call which model** (`api/claude.ts`, `api/gemini.ts`):
+- `/api/claude` (paid) answers only a **signed-in teacher** (`Authorization: Bearer` Supabase token) or a **pupil with today's lesson pass** (`X-Lesson-*` headers built by `src/services/ai/aiAccess.ts`). Pupil calls are checked and counted by `pupil_ai_use()` (`supabase_ai_usage.sql`): automatic peer feedback 12 calls/pair (Haiku); Practice Station analyses + questions 5/pupil, first analysis Sonnet then Haiku. The server picks the model and caps `max_tokens` — never trust the body's `model`.
+- `/api/gemini` is open to visitors; the server fixes the model, caps output tokens and allows only the Google Search tool.
+- In the app, `effectiveModel` in `App.tsx`: not signed in → Gemini (Claude greyed out); pupil in the Practice Station → Claude.
+- In local dev, Vite's `claude-dev-proxy` stands in for `api/claude.ts`, so these checks only apply on Vercel.
+
 ### Data Persistence
 
 Dual-write pattern: localStorage (instant UX) + Supabase (cloud sync). On page load, localStorage is loaded first, then merged with Supabase data (Supabase is source of truth for authenticated users).
@@ -184,7 +190,7 @@ Supabase fires `TOKEN_REFRESHED` on `onAuthStateChange` creating a new `user` ob
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` — nightly cron jobs only (bypasses RLS; never prefix with `VITE_`)
 - `CRON_SECRET` — Vercel sends it to the cron jobs; they refuse to run without it
-- `ALLOWED_ORIGIN` (CORS, e.g. `https://sg-pe-syllabus.vercel.app`)
+- `ALLOWED_ORIGIN` (CORS, e.g. `https://sg-pe-syllabus.vercel.app`) — the AI endpoints only allow browsers from this origin (plus localhost)
 
 ### Path Aliases
 
