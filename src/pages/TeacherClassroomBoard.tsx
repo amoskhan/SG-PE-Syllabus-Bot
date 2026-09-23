@@ -15,6 +15,7 @@ import {
   fetchPairCheckIns,
   deletePairCheckIn,
   PairCheckInRow,
+  getPlayableVideoUrl,
 } from '../services/cloudSyncService';
 import {
   Lesson,
@@ -64,7 +65,15 @@ const VideoBlobPlayer: React.FC<{ blob?: Blob; videoUrl?: string; performer: str
         URL.revokeObjectURL(objectUrl);
       };
     } else if (videoUrl) {
-      setUrl(videoUrl);
+      // Uploaded clips are private — swap the stored address for a 1-hour signed link
+      let cancelled = false;
+      setUrl(null);
+      getPlayableVideoUrl(videoUrl).then((playable) => {
+        if (!cancelled) setUrl(playable);
+      });
+      return () => {
+        cancelled = true;
+      };
     } else {
       setUrl(null);
     }
@@ -128,7 +137,6 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   // Review Tray shows every lesson by default so older work can still be marked
   const [reviewLessonFilter, setReviewLessonFilter] = useState<string>('ALL');
-  const [cartPin, setCartPin] = useState('1234');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [submissions, setSubmissions] = useState<PairSubmissionRecord[]>([]);
   const [activeReviewSub, setActiveReviewSub] = useState<PairSubmissionRecord | null>(null);
@@ -452,32 +460,6 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
       {viewMode === 'PROJECTOR' && lesson && (
         <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full flex flex-col gap-6">
           
-          {/* Top Banner: Locked iPad Passcode Reminder */}
-          <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-800/80 rounded-2xl p-4 flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">🔒</span>
-              <div>
-                <p className="text-xs uppercase font-extrabold text-amber-800 dark:text-amber-300 tracking-wider">
-                  iPad Cart Passcode Reminder (Look Here If iPad Is Locked)
-                </p>
-                <p className="text-2xl font-black font-mono tracking-widest text-amber-950 dark:text-amber-200">
-                  CART PIN: {cartPin}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <label className="text-xs font-semibold text-slate-500">Edit PIN:</label>
-              <input
-                type="text"
-                maxLength={4}
-                value={cartPin}
-                onChange={(e) => setCartPin(e.target.value)}
-                className="w-20 px-2 py-1 text-center font-mono font-bold border rounded-lg text-sm bg-white dark:bg-zinc-900"
-              />
-            </div>
-          </div>
-
           {lesson.objective && (
             <div className="bg-white dark:bg-zinc-900 border-2 border-indigo-200 dark:border-indigo-900 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
               <span className="text-3xl">🎯</span>

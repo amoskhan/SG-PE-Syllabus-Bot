@@ -42,6 +42,7 @@ Dual-write pattern: localStorage (instant UX) + Supabase (cloud sync). On page l
 
 - **Supabase tables**: `teacher_profiles`, `chat_sessions`, `chat_logs`, `document_chunks` (pgvector)
 - **Lessons**: `lessons` (`supabase_lessons.sql`) holds each planned lesson. Its `id` is what the class QR carries and keys `pair_sessions`, `pair_submissions` and Storage paths, so every lesson needs a fresh one. Which lesson is on the projector is per-device (localStorage).
+- **Pupil data is locked down** (`supabase_protect_pupil_data.sql`): pupil devices are not signed in and have **no direct access** to `pair_submissions` / `pair_sessions`. They must go through the `pupil_*` SECURITY DEFINER functions (`savePupilSubmission`, `fetchPupilSubmission`, `upsertPairCheckIn`, `fetchClaimedPairNumbers` in `cloudSyncService.ts`). Teachers read/update/delete only rows with their own `teacher_id`. The `student-videos` bucket is private — play clips via `getPlayableVideoUrl()` (signed URL), never a public URL. Don't add `using (true)` policies back.
 - **Auth**: Supabase Auth with Google OAuth, handled in `src/hooks/useAuth.ts`
 
 ### Syllabus Q&A System

@@ -1,5 +1,6 @@
 import { supabase } from './db/supabaseClient';
 import { Student, SkillAnalysis } from '../types';
+import { savePupilSubmission } from './cloudSyncService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -106,52 +107,27 @@ export const uploadGuestVideo = async (
         .from('student-videos')
         .upload(path, blob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
     if (error) { console.error('[GuestUpload] error:', error); return null; }
-    // Return public URL so teacher's Review Tray can play it immediately
+    // The bucket is private: this URL just records where the file is. The teacher's
+    // board turns it into a short-lived signed link to play it.
     const { data } = supabase.storage.from('student-videos').getPublicUrl(path);
     const publicUrl = data.publicUrl ?? null;
 
     if (publicUrl) {
       // Sync to pair_submissions so the teacher Review Tray shows the clip live.
-      // Insert if new, else update only this performer's video column — never a
-      // blind upsert (that would null teacher_feedback / teacher_star / ai_*).
-      try {
-        const safeSkill = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const subId = `sub-${lessonId}-p${pairNumber}-${safeSkill}`;
-        const videoCol = performer === 'banana' ? 'banana_video_url' : 'apple_video_url';
-
-        const { data: existing } = await supabase
-          .from('pair_submissions')
-          .select('id, claim_token')
-          .eq('id', subId)
-          .maybeSingle();
-
-        if (existing) {
-          if (existing.claim_token && claimToken && existing.claim_token !== claimToken) {
-            console.warn('[GuestUpload] row owned by another group — DB sync skipped');
-          } else {
-            const upd: Record<string, any> = { [videoCol]: publicUrl, status: 'pending_sync', updated_at: new Date().toISOString() };
-            if (pairPhoto) upd.pair_photo = pairPhoto;
-            if (claimToken) upd.claim_token = claimToken;
-            await supabase.from('pair_submissions').update(upd).eq('id', subId);
-          }
-        } else {
-          const ins: Record<string, any> = {
-            id: subId,
-            lesson_id: lessonId,
-            pair_number: pairNumber,
-            skill_name: skillName,
-            teacher_id: teacherId,
-            status: 'pending_sync',
-            created_at: new Date().toISOString(),
-            claim_token: claimToken ?? null,
-            [videoCol]: publicUrl,
-          };
-          if (pairPhoto) ins.pair_photo = pairPhoto;
-          await supabase.from('pair_submissions').insert(ins);
-        }
-      } catch (e) {
-        console.warn('[GuestUpload] DB record sync note:', e);
-      }
+      // Only this performer's video column is sent; everything else is kept.
+      const safeSkill = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const result = await savePupilSubmission({
+        id: `sub-${lessonId}-p${pairNumber}-${safeSkill}`,
+        lesson_id: lessonId,
+        pair_number: pairNumber,
+        skill_name: skillName,
+        teacher_id: teacherId,
+        status: 'pending_sync',
+        claim_token: claimToken,
+        pair_photo: pairPhoto,
+        [performer === 'banana' ? 'banana_video_url' : 'apple_video_url']: publicUrl,
+      });
+      if (result === 'claimed') console.warn('[GuestUpload] row owned by another group — DB sync skipped');
     }
 
     return publicUrl;
@@ -192,7 +168,7 @@ export const uploadPeerSessionToTeacher = async (params: {
     console.log('[Upload] Uploading banana video to:', path, 'size:', bananaBlob.size);
     const { error } = await supabase.storage
       .from('student-videos')
-      .upload(path, bananaBlob, { cacheControl: '3600', upsert: true, contentType: 'video/mp4' });
+      .upload(path, bananaBlob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
     if (error) {
       console.error('[Upload] Banana video upload FAILED:', error.message, error);
     } else {
@@ -208,7 +184,7 @@ export const uploadPeerSessionToTeacher = async (params: {
     console.log('[Upload] Uploading apple video to:', path, 'size:', appleBlob.size);
     const { error } = await supabase.storage
       .from('student-videos')
-      .upload(path, appleBlob, { cacheControl: '3600', upsert: true, contentType: 'video/mp4' });
+      .upload(path, appleBlob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
     if (error) {
       console.error('[Upload] Apple video upload FAILED:', error.message, error);
     } else {
@@ -219,73 +195,27 @@ export const uploadPeerSessionToTeacher = async (params: {
   }
 
   // ── Insert if new, else update ONLY student-owned columns ──────────────────
-  // A blind upsert would null out teacher_feedback / teacher_star / ai_* (omitted
-  // columns are set to null by supabase-js), which is how teacher feedback used to
-  // vanish when a pair re-uploaded. The DB trigger protect_teacher_columns is the
-  // server-side backstop; this is the client half.
-  const { data: existing, error: readErr } = await supabase
-    .from('pair_submissions')
-    .select('id, claim_token')
-    .eq('id', subId)
-    .maybeSingle();
-  if (readErr) console.warn('[Upload] existing-row read failed (continuing):', readErr.message);
-
-  if (existing) {
-    if (existing.claim_token && claimToken && existing.claim_token !== claimToken) {
-      console.warn('[Upload] pair_submissions row owned by another group — blocked');
-      return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
-    }
-    const updatePayload: Record<string, any> = {
-      skill_name: skillName,
-      status: 'pending_sync', // trigger maps to 'resubmitted' if already reviewed
-      updated_at: new Date().toISOString(),
-    };
-    if (pairPhoto) updatePayload.pair_photo = pairPhoto;
-    if (bananaVideoUrl) updatePayload.banana_video_url = bananaVideoUrl;
-    if (appleVideoUrl) updatePayload.apple_video_url = appleVideoUrl;
-    if (bananaCues?.length) updatePayload.banana_cues = bananaCues;
-    if (appleCues?.length) updatePayload.apple_cues = appleCues;
-    if (claimToken) updatePayload.claim_token = claimToken;
-
-    console.log('[Upload] Updating pair_submissions row (student columns only):', subId);
-    const { error: dbError } = await supabase
-      .from('pair_submissions')
-      .update(updatePayload)
-      .eq('id', subId);
-    if (dbError) {
-      if (String(dbError.message || '').includes('PAIR_CLAIMED')) {
-        return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
-      }
-      console.error('[Upload] pair_submissions update FAILED:', dbError.message, dbError);
-      return { bananaVideoUrl, appleVideoUrl, success: false };
-    }
-  } else {
-    const insertPayload: Record<string, any> = {
-      id: subId,
-      lesson_id: lessonId,
-      pair_number: pairNumber,
-      skill_name: skillName,
-      teacher_id: teacherId,
-      status: 'pending_sync',
-      created_at: new Date().toISOString(),
-      claim_token: claimToken ?? null,
-    };
-    if (pairPhoto) insertPayload.pair_photo = pairPhoto;
-    if (bananaVideoUrl) insertPayload.banana_video_url = bananaVideoUrl;
-    if (appleVideoUrl) insertPayload.apple_video_url = appleVideoUrl;
-    if (bananaCues) insertPayload.banana_cues = bananaCues;
-    if (appleCues) insertPayload.apple_cues = appleCues;
-
-    console.log('[Upload] Inserting pair_submissions row:', subId);
-    const { error: dbError } = await supabase.from('pair_submissions').insert(insertPayload);
-    if (dbError) {
-      if (String(dbError.message || '').includes('PAIR_CLAIMED')) {
-        return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
-      }
-      console.error('[Upload] pair_submissions insert FAILED:', dbError.message, dbError);
-      return { bananaVideoUrl, appleVideoUrl, success: false };
-    }
+  // pupil_save_submission keeps anything not sent (teacher feedback, star, AI
+  // analysis), and trg_protect_teacher_columns is the server-side backstop.
+  const result = await savePupilSubmission({
+    id: subId,
+    lesson_id: lessonId,
+    pair_number: pairNumber,
+    skill_name: skillName,
+    teacher_id: teacherId,
+    status: 'pending_sync', // trigger maps to 'resubmitted' if already reviewed
+    claim_token: claimToken,
+    pair_photo: pairPhoto,
+    banana_video_url: bananaVideoUrl,
+    apple_video_url: appleVideoUrl,
+    banana_cues: bananaCues,
+    apple_cues: appleCues,
+  });
+  if (result === 'claimed') {
+    console.warn('[Upload] pair_submissions row owned by another group — blocked');
+    return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
   }
+  if (result === 'error') return { bananaVideoUrl, appleVideoUrl, success: false };
 
   console.log('[Upload] pair_submissions written successfully ✓');
   return { bananaVideoUrl, appleVideoUrl, success: true };
