@@ -291,10 +291,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   const unapprovedCount = submissions.filter((s) => s.status === 'pending_sync' || s.status === 'resubmitted').length;
 
+  // The teacher's own name for the lesson. The date the lesson was created is
+  // added only to tell apart two lessons given the same name.
   const lessonLabel = (id: string) => {
-    if (id === LEGACY_LESSON_ID) return 'Earlier lessons';
+    if (id === LEGACY_LESSON_ID) return 'Older submissions';
     const known = lessonHistory.find((l) => l.id === id);
-    return known ? `${known.name} · ${formatLessonDate(known.startedAt)}` : id;
+    if (!known) return id;
+    const nameTaken = lessonHistory.some((l) => l.id !== id && l.name === known.name);
+    return nameTaken ? `${known.name} (created ${formatLessonDate(known.startedAt)})` : known.name;
   };
 
   const currentLessonSubmissions = submissions.filter((s) => s.lessonId === lessonId);
@@ -468,7 +472,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     <div className="min-w-0">
                       <p className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">Current lesson</p>
                       <p className="text-sm font-black text-slate-800 dark:text-white truncate">{lesson.name}</p>
-                      <p className="text-[11px] text-slate-400">Started {formatLessonDate(lesson.startedAt)}</p>
+                      <p className="text-[11px] text-slate-400">Created {formatLessonDate(lesson.startedAt)}</p>
                     </div>
                     <button
                       type="button"
@@ -623,7 +627,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">
-                Unapproved Submissions Queue
+                Pair Submissions
               </h2>
               <p className="text-xs text-slate-500">
                 Review peer ratings and AI motion analysis before publishing to class portfolio
@@ -687,7 +691,10 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           Pair #{sub.pairNumber}
                         </h4>
                         <span className="text-[10px] text-slate-400">{sub.skillName}</span>
-                        <span className="block text-[10px] text-slate-400 truncate">{lessonLabel(sub.lessonId)}</span>
+                        <span className="block text-[10px] text-slate-400 truncate">
+                          {sub.lessonId === LEGACY_LESSON_ID ? '' : `${lessonLabel(sub.lessonId)} · `}
+                          Sent {formatLessonDate(sub.createdAt)}
+                        </span>
                         {(sub.aiChatAnalysis?.apple || sub.aiChatAnalysis?.banana) && (
                           <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                             🤖 AI analysis
