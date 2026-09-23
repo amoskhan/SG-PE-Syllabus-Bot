@@ -12,9 +12,12 @@ interface ChatInputProps {
   selectedModel?: 'gemini' | 'claude';
   skillMode?: SkillMode;
   onSkillModeChange?: (mode: SkillMode) => void;
+  // 'pupil': the Practice Station — one compact row (text, voice, send) sized for
+  // phones and iPads; no skill-mode switch, file upload or camera.
+  variant?: 'default' | 'pupil';
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selectedModel = 'gemini', skillMode = 'fms', onSkillModeChange }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selectedModel = 'gemini', skillMode = 'fms', onSkillModeChange, variant = 'default' }) => {
   const [input, setInput] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showCamera, setShowCamera] = useState(false);
@@ -158,6 +161,68 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
     }
   }, [input]);
+
+  if (variant === 'pupil') {
+    const canSend = !!input.trim() && !isLoading;
+    return (
+      <form
+        onSubmit={handleSubmit}
+        className="flex items-end gap-1.5 p-1.5 pl-3 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl rounded-2xl shadow-lg border border-slate-200/70 dark:border-zinc-800/80"
+      >
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={isListening ? 'Listening…' : 'Ask your coach…'}
+          disabled={isLoading}
+          enterKeyHint="send"
+          aria-label="Ask your AI coach a question"
+          // 16px text stops iPhone Safari zooming in when the box is tapped
+          className="flex-1 min-w-0 py-2.5 bg-transparent text-slate-900 dark:text-white resize-none focus:outline-none disabled:opacity-50 text-[16px] leading-snug placeholder-slate-400 [&::-webkit-scrollbar]:hidden"
+          rows={1}
+        />
+        <button
+          type="button"
+          onClick={() => {
+            if (!hasRecognitionSupport) {
+              alert('Voice input is not supported in this browser. Please use Chrome, Edge, or Safari.');
+              return;
+            }
+            isListening ? stopListening() : startListening();
+          }}
+          disabled={isLoading}
+          aria-label={isListening ? 'Stop voice input' : 'Speak your question'}
+          className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer ${
+            isListening ? 'text-red-500 bg-red-50 dark:bg-red-950/30 animate-pulse' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
+          }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? 'currentColor' : 'none'} viewBox="0 0 24 24" strokeWidth={1.85} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+        </button>
+        <button
+          type="submit"
+          disabled={!canSend}
+          aria-label="Send"
+          className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+            canSend ? 'text-white bg-indigo-600 hover:bg-indigo-500 shadow-md active:scale-95' : 'text-slate-300 dark:text-zinc-600 cursor-not-allowed'
+          }`}
+        >
+          {isLoading ? (
+            <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 -rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
+          )}
+        </button>
+      </form>
+    );
+  }
 
   return (
     <>
