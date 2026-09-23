@@ -180,6 +180,8 @@ Supabase fires `TOKEN_REFRESHED` on `onAuthStateChange` creating a new `user` ob
 **Serverless functions (Vercel dashboard, no prefix):**
 - `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` — nightly cron jobs only (bypasses RLS; never prefix with `VITE_`)
+- `CRON_SECRET` — Vercel sends it to the cron jobs; they refuse to run without it
 - `ALLOWED_ORIGIN` (CORS, e.g. `https://sg-pe-syllabus.vercel.app`)
 
 ### Path Aliases

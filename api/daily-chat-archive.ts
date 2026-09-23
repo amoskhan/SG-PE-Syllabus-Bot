@@ -39,12 +39,17 @@ interface ChatSession {
 export default async function handler(req: any, res: any) {
     // 1. Verify Vercel cron secret — reject all unauthorised requests
     const authHeader = req.headers.authorization || req.headers['authorization'];
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    // An unset secret would make the expected header "Bearer undefined", which
+    // anyone could send — so a missing secret must also refuse.
+    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return res.status(401).send('Unauthorized');
     }
 
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+    // Service role, not anon: this job runs with no teacher signed in, so under
+    // RLS (auth.uid() = user_id) the anon key sees zero rows and can write none.
+    // Server-only — never give this variable a VITE_ prefix.
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
     const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
 
     if (!supabaseUrl || !supabaseKey || !anthropicKey) {
