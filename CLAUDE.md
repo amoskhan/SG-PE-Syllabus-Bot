@@ -41,6 +41,7 @@ React (src/) → POST /api/upload-pdf → pdf-parse → Gemini embeddings → Su
 Dual-write pattern: localStorage (instant UX) + Supabase (cloud sync). On page load, localStorage is loaded first, then merged with Supabase data (Supabase is source of truth for authenticated users).
 
 - **Supabase tables**: `teacher_profiles`, `chat_sessions`, `chat_logs`, `document_chunks` (pgvector)
+- **Lessons**: `lessons` (`supabase_lessons.sql`) holds each planned lesson. Its `id` is what the class QR carries and keys `pair_sessions`, `pair_submissions` and Storage paths, so every lesson needs a fresh one. Which lesson is on the projector is per-device (localStorage).
 - **Auth**: Supabase Auth with Google OAuth, handled in `src/hooks/useAuth.ts`
 
 ### Syllabus Q&A System

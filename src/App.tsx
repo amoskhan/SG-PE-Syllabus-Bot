@@ -18,7 +18,7 @@ import { ALL_FMS_SKILLS } from './data/fundamentalMovementSkillsData';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './services/db/supabaseClient';
 import Dashboard from './pages/Dashboard';
-import { TeacherClassroomBoard, getCurrentBoardLesson } from './pages/TeacherClassroomBoard';
+import { TeacherClassroomBoard } from './pages/TeacherClassroomBoard';
 import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal';
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
@@ -309,7 +309,7 @@ const App: React.FC = () => {
   const [appMode, setAppMode] = useState<'home_screen' | 'chat' | 'teacher_board' | 'peer_coaching'>('home_screen');
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isPairCheckInOpen, setIsPairCheckInOpen] = useState(false);
-  const [scannedLessonData, setScannedLessonData] = useState<{ lessonId: string; title: string; skillName: string; teacherId?: string }>({
+  const [scannedLessonData, setScannedLessonData] = useState<{ lessonId: string; title: string; skillName: string; teacherId?: string; pairCount?: number }>({
     lessonId: 'pe-lesson-today',
     title: 'Overhand Throw Practice',
     skillName: 'Overhand Throw',
@@ -1897,6 +1897,7 @@ const App: React.FC = () => {
           lessonId={scannedLessonData.lessonId}
           lessonTitle={scannedLessonData.title}
           skillName={scannedLessonData.skillName || 'Overhand Throw'}
+          pairCount={scannedLessonData.pairCount}
           claimedPairNumbers={claimedPairNumbers}
           onCompleteCheckIn={handleCompleteCheckIn}
           onCancel={() => setIsPairCheckInOpen(false)}
@@ -1910,14 +1911,8 @@ const App: React.FC = () => {
       <TeacherClassroomBoard
         onOpenChat={() => setAppMode('home_screen')}
         teacherId={user?.id}
-        onOpenStudentSession={() => {
-          const lesson = getCurrentBoardLesson(user?.id);
-          setScannedLessonData({
-            lessonId: lesson.id,
-            title: `${lesson.name} · Overhand Throw`,
-            skillName: 'Overhand Throw',
-            teacherId: user?.id,
-          });
+        onOpenStudentSession={(lesson) => {
+          setScannedLessonData({ ...lesson, teacherId: user?.id });
           setIsPairCheckInOpen(true);
         }}
       />
@@ -2402,6 +2397,7 @@ const App: React.FC = () => {
         lessonId={scannedLessonData.lessonId}
         lessonTitle={scannedLessonData.title}
         skillName={scannedLessonData.skillName}
+        pairCount={scannedLessonData.pairCount}
         claimedPairNumbers={claimedPairNumbers}
         onCompleteCheckIn={handleCompleteCheckIn}
         onCancel={() => setIsPairCheckInOpen(false)}
