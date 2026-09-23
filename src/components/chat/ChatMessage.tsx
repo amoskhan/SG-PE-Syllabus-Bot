@@ -37,9 +37,10 @@ interface ChatMessageProps {
   onSubmitChecklistToTeacher?: (message: Message) => Promise<void>;
   disabled?: boolean;
   skillMode?: SkillMode;
+  showDraftBanner?: boolean; // 'Draft AI Output — Approve' bar (Practice Station chat)
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms' }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms', showDraftBanner = false }) => {
   const [checklistSubmitState, setChecklistSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle');
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
@@ -133,8 +134,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                 : 'bg-gradient-to-br from-slate-900 to-slate-800 text-white dark:from-zinc-900 dark:to-zinc-850 dark:text-zinc-100 border border-slate-900/90 dark:border-zinc-800/80 shadow-md rounded-tr-xs'
               }`}>
 
-              {/* Requirement 2: Draft / Teacher Approval Banner */}
-              {isBot && !isError && (
+              {/* Draft / Teacher Approval Banner — Practice Station only, not Syllabus & Analysis */}
+              {isBot && !isError && showDraftBanner && (
                 <div className="mb-3 flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-100/90 dark:bg-zinc-800/90 border border-slate-200/80 dark:border-zinc-700 text-xs">
                   <div className="flex items-center gap-1.5 font-bold">
                     {message.approvalStatus === 'approved' ? (

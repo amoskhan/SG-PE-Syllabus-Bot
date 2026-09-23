@@ -2089,38 +2089,6 @@ const App: React.FC = () => {
 
           {/* Right: Actions Cluster */}
           <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto min-w-0">
-            {/* Class Partner Mode (Apple & Banana) */}
-            <button
-              onClick={() => {
-                if (activePairSession) {
-                  setAppMode('peer_coaching');
-                } else {
-                  setIsQrScannerOpen(true);
-                }
-              }}
-              className="px-2.5 sm:px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs font-black flex items-center gap-1.5 hover:bg-amber-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer shrink-0"
-              title="Classroom Partner Coaching (Apple & Banana)"
-            >
-              <span>🍎🍌</span>
-              <span className="hidden sm:inline">Partner Mode</span>
-            </button>
-
-            {/* Teacher Board & Review Tray */}
-            <button
-              onClick={() => {
-                if (user) {
-                  setAppMode('teacher_board');
-                } else {
-                  signInWithGoogle();
-                }
-              }}
-              className="px-2.5 sm:px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-100 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xs cursor-pointer shrink-0"
-              title={user ? "Teacher Whiteboard QR & Review Tray" : "Sign In to Open Teacher Board"}
-            >
-              <span>🏫</span>
-              <span className="hidden sm:inline">Teacher Board</span>
-            </button>
-
             {user && (
               <button
                 onClick={() => setShowDashboard(true)}
@@ -2238,6 +2206,7 @@ const App: React.FC = () => {
                 onSelectMultipleSkills={handleSelectMultipleSkills}
                 onShowAllSkills={() => setIsSkillSelectorOpen(true)}
                 onSubmitChecklistToTeacher={(activePairSession || activePeerSessionData) ? handleSubmitChecklistToTeacher : undefined}
+                showDraftBanner={!!activePeerSessionData}
                 disabled={isLoading || isProcessing}
                 skillMode={skillMode}
               />
