@@ -532,7 +532,10 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           claimToken: getOrCreatePairClaimToken(lessonId),
         });
 
-        if (result.blocked) {
+        if (result.invalidLesson) {
+          setSubmitError("This lesson's QR code isn't open today, so your teacher can't receive this yet. Your videos are saved on this iPad — ask your teacher.");
+          console.warn('[Submit] uploadPeerSessionToTeacher refused — lesson not on today or pass missing');
+        } else if (result.blocked) {
           setSubmitError(`Pair ${pairNumber} is already in use by another group. Ask your teacher to clear it, or check in again with a different pair number.`);
           console.warn('[Submit] uploadPeerSessionToTeacher blocked — pair claimed by another group');
         } else if (!result.success) {

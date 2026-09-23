@@ -36,13 +36,19 @@ React (src/) → POST /api/upload-pdf → pdf-parse → Gemini embeddings → Su
 | `/api/rag-search.ts` | Gemini embeddings + Supabase PGVector | Semantic search |
 | `/api/upload-pdf.ts` | pdf-parse + Gemini embeddings | PDF ingestion pipeline |
 
+**Who may call which model** (`api/claude.ts`, `api/gemini.ts`):
+- `/api/claude` (paid) answers only a **signed-in teacher** (`Authorization: Bearer` Supabase token) or a **pupil with today's lesson pass** (`X-Lesson-*` headers built by `src/services/ai/aiAccess.ts`). Pupil calls are checked and counted by `pupil_ai_use()` (`supabase_ai_usage.sql`): automatic peer feedback 12 calls/pair (Haiku); Practice Station analyses + questions 5/pupil, first analysis Sonnet then Haiku. The server picks the model and caps `max_tokens` — never trust the body's `model`.
+- `/api/gemini` is open to visitors; the server fixes the model, caps output tokens and allows only the Google Search tool.
+- In the app, `effectiveModel` in `App.tsx`: not signed in → Gemini (Claude greyed out); pupil in the Practice Station → Claude.
+- In local dev, Vite's `claude-dev-proxy` stands in for `api/claude.ts`, so these checks only apply on Vercel.
+
 ### Data Persistence
 
 Dual-write pattern: localStorage (instant UX) + Supabase (cloud sync). On page load, localStorage is loaded first, then merged with Supabase data (Supabase is source of truth for authenticated users).
 
 - **Supabase tables**: `teacher_profiles`, `chat_sessions`, `chat_logs`, `document_chunks` (pgvector)
 - **Lessons**: `lessons` (`supabase_lessons.sql`) holds each planned lesson. Its `id` is what the class QR carries and keys `pair_sessions`, `pair_submissions` and Storage paths, so every lesson needs a fresh one. Which lesson is on the projector is per-device (localStorage).
-- **Pupil data is locked down** (`supabase_protect_pupil_data.sql`): pupil devices are not signed in and have **no direct access** to `pair_submissions` / `pair_sessions`. They must go through the `pupil_*` SECURITY DEFINER functions (`savePupilSubmission`, `fetchPupilSubmission`, `upsertPairCheckIn`, `fetchClaimedPairNumbers` in `cloudSyncService.ts`). Teachers read/update/delete only rows with their own `teacher_id`. The `student-videos` bucket is private — play clips via `getPlayableVideoUrl()` (signed URL), never a public URL. Don't add `using (true)` policies back.
+- **Pupil data is locked down** (`supabase_protect_pupil_data.sql`): pupil devices are not signed in and have **no direct access** to `pair_submissions` / `pair_sessions`. They must go through the `pupil_*` SECURITY DEFINER functions (`savePupilSubmission`, `fetchPupilSubmission`, `upsertPairCheckIn`, `fetchClaimedPairNumbers` in `cloudSyncService.ts`). Teachers read/update/delete only rows with their own `teacher_id`. The `student-videos` bucket is private — play clips via `getPlayableVideoUrl()` (signed URL), never a public URL. Don't add `using (true)` policies back. Every pupil write also needs the **lesson pass** (`lessons.pupil_pass`, carried in the class QR, stored per lesson by `saveLessonPass`/`getLessonPass`) for a lesson dated **today in Singapore time** (`supabase_lesson_pass.sql`); the lesson's own `teacher_id` is used, never one sent by the device.
 - **Auth**: Supabase Auth with Google OAuth, handled in `src/hooks/useAuth.ts`
 
 ### Syllabus Q&A System
@@ -184,7 +190,7 @@ Supabase fires `TOKEN_REFRESHED` on `onAuthStateChange` creating a new `user` ob
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` — nightly cron jobs only (bypasses RLS; never prefix with `VITE_`)
 - `CRON_SECRET` — Vercel sends it to the cron jobs; they refuse to run without it
-- `ALLOWED_ORIGIN` (CORS, e.g. `https://sg-pe-syllabus.vercel.app`)
+- `ALLOWED_ORIGIN` (CORS, e.g. `https://sg-pe-syllabus.vercel.app`) — the AI endpoints only allow browsers from this origin (plus localhost)
 
 ### Path Aliases
 

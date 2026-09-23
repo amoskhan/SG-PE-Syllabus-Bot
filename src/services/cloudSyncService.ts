@@ -1,5 +1,5 @@
 import { supabase } from "./db/supabaseClient";
-import { PairSubmissionRecord, getDB } from "./offline/offlineStorage";
+import { PairSubmissionRecord, getDB, getLessonPass } from "./offline/offlineStorage";
 
 export async function backupSubmissionToSupabase(
   submission: PairSubmissionRecord,
@@ -90,6 +90,9 @@ export async function backupSubmissionToSupabase(
     console.warn(`[CloudBackup] submission ${submission.id} owned by another group — write blocked`);
     return { bananaVideoUrl, appleVideoUrl, blocked: true };
   }
+  if (result === "invalid_lesson") {
+    console.warn(`[CloudBackup] submission ${submission.id} refused — lesson not on today or pass missing`);
+  }
 
   return { bananaVideoUrl, appleVideoUrl };
 }
@@ -127,9 +130,23 @@ export function mapRowToSubmission(row: any): PairSubmissionRecord {
 // ─── Pupil-side access (no sign-in) ──────────────────────────────────────────
 // Pupil devices can't read or write the pair tables directly (see
 // supabase_protect_pupil_data.sql). Each of these calls one narrow database
-// function instead.
+// function instead, sending the lesson pass from the class QR
+// (supabase_lesson_pass.sql). Writes for a lesson that isn't on today, or
+// without its pass, come back as "invalid_lesson".
 
-export type PupilWriteResult = "ok" | "claimed" | "error";
+export type PupilWriteResult = "ok" | "claimed" | "invalid_lesson" | "error";
+
+export type LessonPassStatus = "ok" | "not_today" | "invalid" | "offline";
+
+/** Checked right after a QR scan, so pupils hear straight away if it's the wrong code. */
+export async function checkLessonPass(lessonId: string, pass: string): Promise<LessonPassStatus> {
+  const { data, error } = await supabase.rpc("pupil_lesson_status", { p_lesson_id: lessonId, p_pass: pass });
+  if (error) {
+    console.warn("[CloudSync] pupil_lesson_status error:", error);
+    return "offline";
+  }
+  return data === "ok" || data === "not_today" ? data : "invalid";
+}
 
 /**
  * Send a pair's work. Inserts the row, or updates only the student-owned
@@ -154,12 +171,14 @@ export async function savePupilSubmission(fields: {
   ai_chat_analysis?: unknown;
   created_at?: string;
 }): Promise<PupilWriteResult> {
-  const { data, error } = await supabase.rpc("pupil_save_submission", { p: fields });
+  const { data, error } = await supabase.rpc("pupil_save_submission", {
+    p: { ...fields, pass: getLessonPass(fields.lesson_id) },
+  });
   if (error) {
     console.error("[CloudSync] pupil_save_submission error:", error);
     return "error";
   }
-  return data === "claimed" ? "claimed" : "ok";
+  return data === "claimed" || data === "invalid_lesson" ? data : "ok";
 }
 
 /** A pair's own submission, proven by its claim token. Null if none or not theirs. */
@@ -315,13 +334,14 @@ export async function upsertPairCheckIn(params: {
   pairPhoto?: string;
   needsHelp?: boolean;
   claimToken?: string;
-}): Promise<{ blocked: boolean }> {
-  const { lessonId, pairNumber, skillName, teacherId, pairPhoto, needsHelp, claimToken } = params;
+}): Promise<{ blocked: boolean; invalidLesson?: boolean }> {
+  // teacherId is no longer sent: the database uses the lesson's own teacher
+  const { lessonId, pairNumber, skillName, pairPhoto, needsHelp, claimToken } = params;
   const { data, error } = await supabase.rpc("pupil_check_in", {
     p_lesson_id: lessonId,
+    p_pass: getLessonPass(lessonId),
     p_pair_number: pairNumber,
     p_skill_name: skillName ?? null,
-    p_teacher_id: teacherId ?? null,
     p_pair_photo: pairPhoto ?? null,
     p_needs_help: needsHelp ?? false,
     p_claim_token: claimToken ?? null,
@@ -334,6 +354,7 @@ export async function upsertPairCheckIn(params: {
     console.warn(`[CloudSync] Pair ${pairNumber} already claimed by another group — check-in blocked`);
     return { blocked: true };
   }
+  if (data === "invalid_lesson") return { blocked: false, invalidLesson: true };
   return { blocked: false };
 }
 
@@ -363,7 +384,10 @@ export async function fetchClaimedPairNumbers(
   lessonId?: string,
 ): Promise<Set<number>> {
   if (!lessonId) return new Set();
-  const { data, error } = await supabase.rpc("pupil_claimed_pairs", { p_lesson_id: lessonId });
+  const { data, error } = await supabase.rpc("pupil_claimed_pairs", {
+    p_lesson_id: lessonId,
+    p_pass: getLessonPass(lessonId),
+  });
   if (error) {
     console.warn("[CloudSync] pupil_claimed_pairs error:", error);
     return new Set();

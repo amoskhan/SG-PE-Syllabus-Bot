@@ -7,6 +7,7 @@ import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMA
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
 import { getFewShotExamples } from '../../data/skillExamples';
 import { supabase } from '../db/supabaseClient';
+import { claudeAccessHeaders, serverErrorMessage } from './aiAccess';
 
 const MODEL_HAIKU  = 'claude-haiku-4-5-20251001';
 const MODEL_SONNET = 'claude-sonnet-4-6';
@@ -936,7 +937,7 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         // PROD: Vercel serverless /api/claude.ts handles the request
         const response = await fetch('/api/claude', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(await claudeAccessHeaders()) },
             body: JSON.stringify(requestBody),
             signal: controller.signal,
         }).finally(() => clearTimeout(timeout));
@@ -944,8 +945,11 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: response.statusText })) as any;
             if (errorData.details) console.error('Claude API error details:', errorData.details);
-            if (response.status === 429) throw new Error('Claude API rate limit exceeded (429). Please try again later.');
-            if (response.status === 401) throw new Error('Claude API key invalid (401). Check your ANTHROPIC_API_KEY.');
+            // Sign-in, lesson and pupil-budget refusals carry a message meant for the user
+            if ([401, 403, 429].includes(response.status)) {
+                throw new Error(serverErrorMessage(errorData) ?? `Claude API error (${response.status})`);
+            }
+            if (response.status === 503) throw new Error('Claude is busy right now. Please try again in a minute.');
             const baseMsg = errorData.error?.message || errorData.error || `Claude API error (${response.status})`;
             throw new Error(errorData.details ? `${baseMsg} — ${errorData.details}` : baseMsg);
         }

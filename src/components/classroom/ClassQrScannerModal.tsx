@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { checkLessonPass } from '../../services/cloudSyncService';
+import { saveLessonPass } from '../../services/offline/offlineStorage';
+
+const NOT_A_LESSON_QR = "That isn't a lesson QR code. Scan the QR code your teacher is showing.";
 
 interface ClassQrScannerModalProps {
   isOpen: boolean;
@@ -13,7 +17,9 @@ export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
   onScanSuccess,
 }) => {
   const [error, setError] = useState<string | null>(null);
-  const [manualCode, setManualCode] = useState('');
+  const [isChecking, setIsChecking] = useState(false);
+  // The camera reports the same code many times a second — handle one at a time
+  const checkingRef = useRef(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isSecure, setIsSecure] = useState(true);
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -25,7 +31,7 @@ export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
       const secure = window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       setIsSecure(secure);
       if (!secure) {
-        setError('iOS Safari requires HTTPS for camera access. Please open with https:// or enter the 4-digit code below.');
+        setError('iOS Safari requires HTTPS for camera access. Please open the app with https://, or snap a photo of the QR code below.');
       }
     }
   }, []);
@@ -82,10 +88,10 @@ export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
       const isHttpsIssue = !window.isSecureContext && window.location.protocol === 'http:';
       setError(
         isHttpsIssue
-          ? 'iOS Safari blocks camera on HTTP. Please use HTTPS or enter the 4-digit code below.'
+          ? 'iOS Safari blocks camera on HTTP. Please use HTTPS, or snap a photo of the QR code below.'
           : err.name === 'NotAllowedError'
-          ? 'Camera permission denied. Allow camera in Safari Settings, or use the 4-digit code.'
-          : 'Could not start camera. Enter the 4-digit code shown on the screen.'
+          ? 'Camera permission denied. Allow camera in Safari Settings, or snap a photo of the QR code below.'
+          : 'Could not start camera. Snap a photo of the QR code below instead.'
       );
       setIsScanning(false);
     }
@@ -106,59 +112,47 @@ export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
     setIsScanning(false);
   };
 
-  const handleDecodedPayload = (payload: string) => {
+  // Only lesson QR codes from the teacher board are accepted. The lesson pass
+  // they carry is checked with the database before the pupil joins, so a
+  // wrong-day or made-up code is caught here rather than when they submit.
+  const handleDecodedPayload = async (payload: string) => {
+    let parsed: any = null;
     try {
-      if (payload.startsWith('{')) {
-        const parsed = JSON.parse(payload);
-        if (parsed.lessonId) {
-          stopScanner();
-          onScanSuccess({
-            lessonId: parsed.lessonId,
-            title: parsed.title || 'PE Partner Practice',
-            skillName: parsed.skillName || 'Overhand Throw',
-            teacherId: parsed.teacherId ?? undefined, // ← forwarded from teacher's QR
-            // Older QR codes carry no pairCount; the check-in modal then shows 15
-            pairCount: Number.isInteger(parsed.pairCount) ? parsed.pairCount : undefined,
-          });
-          return;
-        }
-      }
-
-      if (payload.includes(':')) {
-        const parts = payload.split(':');
-        stopScanner();
-        onScanSuccess({
-          lessonId: parts[1] || 'lesson-today',
-          title: 'Class PE Activity',
-          skillName: parts[2] || 'Overhand Throw',
-        });
-        return;
-      }
-
-      stopScanner();
-      onScanSuccess({
-        lessonId: payload.trim(),
-        title: 'Class PE Practice',
-        skillName: 'Overhand Throw',
-      });
+      parsed = payload.trim().startsWith('{') ? JSON.parse(payload) : null;
     } catch {
-      stopScanner();
-      onScanSuccess({
-        lessonId: 'class-session-1',
-        title: 'Class PE Session',
-        skillName: 'Overhand Throw',
-      });
+      parsed = null;
     }
-  };
+    if (!parsed?.lessonId || typeof parsed.pass !== 'string') {
+      setError(NOT_A_LESSON_QR);
+      return;
+    }
 
-  const handleManualSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualCode.trim()) return;
+    if (checkingRef.current) return;
+    checkingRef.current = true;
     stopScanner();
+    setIsChecking(true);
+    const status = await checkLessonPass(parsed.lessonId, parsed.pass);
+    setIsChecking(false);
+    checkingRef.current = false;
+
+    if (status === 'not_today') {
+      setError("This QR code is for a lesson on a different day. Ask your teacher to show today's lesson.");
+      return;
+    }
+    if (status === 'invalid') {
+      setError(NOT_A_LESSON_QR);
+      return;
+    }
+    // 'ok' — or 'offline': join anyway; the database checks again when work is sent
+
+    saveLessonPass(parsed.lessonId, parsed.pass);
     onScanSuccess({
-      lessonId: `manual-${manualCode.trim()}`,
-      title: `Lesson Code ${manualCode.trim()}`,
-      skillName: 'Overhand Throw',
+      lessonId: parsed.lessonId,
+      title: parsed.title || 'PE Partner Practice',
+      skillName: parsed.skillName || 'Overhand Throw',
+      teacherId: parsed.teacherId ?? undefined, // ← forwarded from teacher's QR
+      // Older QR codes carry no pairCount; the check-in modal then shows 15
+      pairCount: Number.isInteger(parsed.pairCount) ? parsed.pairCount : undefined,
     });
   };
 
@@ -170,7 +164,7 @@ export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
       const decoded = await scannerRef.current.scanFile(file, true);
       handleDecodedPayload(decoded);
     } catch {
-      setError('Could not find a QR code in that image. Try entering the code manually.');
+      setError('Could not find a QR code in that image. Try again with the whole code in the photo.');
     }
   };
 
@@ -222,6 +216,10 @@ export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
           )}
         </div>
 
+        {isChecking && (
+          <p className="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">Checking lesson…</p>
+        )}
+
         {error && (
           <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/30 rounded-xl text-xs text-amber-800 dark:text-amber-300 text-center">
             {error}
@@ -246,29 +244,6 @@ export const ClassQrScannerModal: React.FC<ClassQrScannerModalProps> = ({
             <span>📸 Or snap a photo of the QR code</span>
           </button>
         </div>
-
-        {/* Manual 4-Digit Fallback */}
-        <form onSubmit={handleManualSubmit} className="mt-4 w-full pt-4 border-t border-slate-100 dark:border-zinc-800 flex flex-col gap-2">
-          <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 text-center">
-            Can't scan? Enter 4-digit lesson code from screen:
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              maxLength={6}
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              placeholder="e.g. 1234"
-              className="flex-1 px-4 py-2 text-center text-lg font-mono font-bold tracking-widest bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <button
-              type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors cursor-pointer"
-            >
-              Join
-            </button>
-          </div>
-        </form>
 
       </div>
     </div>

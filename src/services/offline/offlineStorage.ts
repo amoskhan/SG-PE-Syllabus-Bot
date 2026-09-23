@@ -160,6 +160,29 @@ export const clearActivePairSession = async (): Promise<void> => {
 // It marks "this group" so the same group can resume its own pair after a reload,
 // while a different group is blocked from writing to a pair number already taken.
 
+// ─── Lesson Pass ─────────────────────────────────────────────────────────────
+// The secret each class QR carries (lessons.pupil_pass). The database accepts a
+// pupil's check-in, uploads and submissions only with the pass of a lesson that
+// is on today. Kept per lesson in localStorage so a reload doesn't lose it.
+
+const lessonPassKey = (lessonId: string) => `pe_lesson_pass_${lessonId}`;
+
+export const saveLessonPass = (lessonId: string, pass: string): void => {
+  try {
+    localStorage.setItem(lessonPassKey(lessonId), pass);
+  } catch {
+    // Storage blocked — writes for this lesson will be refused after a reload
+  }
+};
+
+export const getLessonPass = (lessonId: string): string | null => {
+  try {
+    return localStorage.getItem(lessonPassKey(lessonId));
+  } catch {
+    return null;
+  }
+};
+
 const claimTokenKey = (lessonId: string) => `pe_pair_claim_${lessonId}`;
 
 export const getOrCreatePairClaimToken = (lessonId: string): string => {

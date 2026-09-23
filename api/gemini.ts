@@ -6,15 +6,32 @@ import { GoogleGenAI } from '@google/genai';
 // Note: vercel dev exposes ALL .env.local vars to Node functions, including VITE_ ones
 const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
+// Gemini is open to visitors who aren't signed in (Claude is not — see
+// api/claude.ts), so the server, not the caller, sets the limits: the model is
+// fixed, answers are capped, and the only tool allowed is Google Search
+// grounding, which the syllabus chat uses.
+const MAX_OUTPUT_TOKENS = 2000;
+const MAX_HISTORY = 60;
+
+/** Only the app's own site (and local dev) may call this from a browser. */
+function applyCors(req: any, res: any) {
+    const allowed = [process.env.ALLOWED_ORIGIN, 'https://localhost:5173', 'http://localhost:5174'].filter(Boolean);
+    const origin = req.headers?.origin;
+    if (origin && allowed.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+const onlySearchTool = (tools: unknown) =>
+    Array.isArray(tools) && tools.some((t) => t && typeof t === 'object' && 'googleSearch' in t)
+        ? [{ googleSearch: {} }]
+        : undefined;
+
 export default async function handler(req: any, res: any) {
-    // Handle CORS
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    res.setHeader(
-        'Access-Control-Allow-Headers',
-        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-    );
+    applyCors(req, res);
 
     if (req.method === 'OPTIONS') {
         res.status(200).end();
@@ -33,7 +50,10 @@ export default async function handler(req: any, res: any) {
     }
 
     try {
-        const { history, message, systemInstruction, tools, maxOutputTokens } = req.body;
+        const { history, message, systemInstruction, tools, maxOutputTokens } = req.body ?? {};
+        if (!message || (Array.isArray(history) && history.length > MAX_HISTORY)) {
+            return res.status(400).json({ error: 'Invalid request: message missing or history too long.' });
+        }
 
         console.log(`[gemini] Request received. History length: ${history?.length ?? 0}, Has system instruction: ${!!systemInstruction}`);
 
@@ -45,12 +65,12 @@ export default async function handler(req: any, res: any) {
             model: 'gemini-2.5-flash',
             config: {
                 systemInstruction: systemInstruction,
-                tools: tools,
+                tools: onlySearchTool(tools),
                 temperature: 0.3,
                 // 1200 default for syllabus text Q&A (clarifications are short; full section
         // dumps for a single sub-category need ~600-900 tokens, so 1200 gives headroom).
         // Motion analysis overrides this with 1500 from the client.
-        maxOutputTokens: typeof maxOutputTokens === 'number' ? maxOutputTokens : 1200,
+        maxOutputTokens: typeof maxOutputTokens === 'number' ? Math.min(Math.max(maxOutputTokens, 1), MAX_OUTPUT_TOKENS) : 1200,
             },
             history: history || []
         });

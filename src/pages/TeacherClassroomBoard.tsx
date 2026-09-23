@@ -36,6 +36,7 @@ export interface BoardLessonLink {
   title: string;
   skillName: string;
   pairCount: number;
+  pass: string; // lesson pass — pupils' writes are refused without it
 }
 
 interface TeacherClassroomBoardProps {
@@ -154,6 +155,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     title: `${lessonTitle(lesson)} · ${lesson.skillName}`,
     skillName: lesson.skillName,
     pairCount: lesson.pairCount,
+    pass: lesson.pupilPass,
   };
 
   // Regenerate the class QR whenever the lesson on the projector changes
@@ -174,7 +176,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     })
       .then(setQrCodeUrl)
       .catch(console.error);
-  }, [lessonId, lessonLink?.title, lessonLink?.pairCount, teacherId]);
+  }, [lessonId, lessonLink?.title, lessonLink?.pairCount, lessonLink?.pass, teacherId]);
 
   const showLessonOnProjector = (id: string) => {
     setCurrentLessonId(teacherId, id);
