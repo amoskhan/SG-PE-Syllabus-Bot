@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Message, Sender, SkillMode } from '../../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
@@ -37,10 +38,9 @@ interface ChatMessageProps {
   onSubmitChecklistToTeacher?: (message: Message) => Promise<void>;
   disabled?: boolean;
   skillMode?: SkillMode;
-  showDraftBanner?: boolean; // 'Draft AI Output — Approve' bar (Practice Station chat)
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms', showDraftBanner = false }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms' }) => {
   const [checklistSubmitState, setChecklistSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle');
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
@@ -109,11 +109,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
   return (
     <>
       <div className={`flex w-full ${isBot ? 'justify-start' : 'justify-end'} mb-6 animate-fade-in-up`}>
-        <div className={`flex max-w-[90%] md:max-w-[80%] gap-3 ${isBot ? 'flex-row' : 'flex-row-reverse'}`}>
+        <div className={`flex ${isBot ? 'max-w-full sm:max-w-[90%]' : 'max-w-[88%] sm:max-w-[90%]'} md:max-w-[80%] gap-3 ${isBot ? 'flex-row' : 'flex-row-reverse'}`}>
 
           {/* Avatar (Only for Bot) */}
           {isBot && (
-            <div className="flex-shrink-0 w-9 h-9 rounded-2xl bg-gradient-to-br from-indigo-600 via-sky-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-indigo-600/20 mt-1 ring-1 ring-white/40 dark:ring-white/10">
+            <div className="hidden sm:flex flex-shrink-0 w-9 h-9 rounded-2xl bg-gradient-to-br from-indigo-600 via-sky-600 to-cyan-500 items-center justify-center text-white shadow-md shadow-indigo-600/20 mt-1 ring-1 ring-white/40 dark:ring-white/10">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
               </svg>
@@ -127,44 +127,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
             id={`message-${message.id}`}
             className="flex flex-col gap-2 w-full min-w-0"
           >
-            <div className={`px-5 py-3 rounded-2xl break-words overflow-hidden shadow-xs ${isError
+            <div className={`px-4 sm:px-5 py-3 rounded-2xl break-words overflow-hidden shadow-xs ${isError
               ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-300'
               : isBot
                 ? 'bg-indigo-50/10 dark:bg-zinc-900/30 border border-indigo-100/50 dark:border-zinc-800/30 text-slate-800 dark:text-slate-200 backdrop-blur-xs rounded-tl-xs'
                 : 'bg-gradient-to-br from-slate-900 to-slate-800 text-white dark:from-zinc-900 dark:to-zinc-850 dark:text-zinc-100 border border-slate-900/90 dark:border-zinc-800/80 shadow-md rounded-tr-xs'
               }`}>
-
-              {/* Draft / Teacher Approval Banner — Practice Station only, not Syllabus & Analysis */}
-              {isBot && !isError && showDraftBanner && (
-                <div className="mb-3 flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-100/90 dark:bg-zinc-800/90 border border-slate-200/80 dark:border-zinc-700 text-xs">
-                  <div className="flex items-center gap-1.5 font-bold">
-                    {message.approvalStatus === 'approved' ? (
-                      <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 text-[11px]">
-                        <span>✓</span>
-                        <span>Teacher Approved (Official)</span>
-                      </span>
-                    ) : (
-                      <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1 text-[11px]">
-                        <span>⚠️</span>
-                        <span>Draft AI Output — Requires Teacher Approval</span>
-                      </span>
-                    )}
-                  </div>
-                  {message.approvalStatus !== 'approved' && (
-                    <button
-                      onClick={() => {
-                        message.approvalStatus = 'approved';
-                        message.approvedBy = 'Teacher';
-                        message.approvedAt = new Date().toISOString();
-                        setLightboxSrc(lightboxSrc === '' ? null : '');
-                      }}
-                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[10px] transition-colors cursor-pointer"
-                    >
-                      Approve ⭐
-                    </button>
-                  )}
-                </div>
-              )}
 
               {isBot ? (
                 <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/3\.\s+\*?\*?Best\s+Model\s+Tip\*?\*?:[^\n]+(\n|$)/gi, '')} />
@@ -192,7 +160,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                       : <><span>📤</span><span>Send to Teacher for Grading</span></>}
                   </button>
 
-                  {checklistModalOpen && (
+                  {/* Rendered on <body>: an ancestor's backdrop-blur would otherwise make
+                      'fixed' relative to this bubble, pushing the dialog off a phone screen */}
+                  {checklistModalOpen && createPortal(
                     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in" onClick={() => checklistSubmitState !== 'submitting' && setChecklistModalOpen(false)}>
                       <div className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 dark:border-zinc-800 flex flex-col max-h-[85vh] animate-scale-in" onClick={(e) => e.stopPropagation()}>
                         <div className="p-5 border-b border-slate-100 dark:border-zinc-800">
@@ -203,8 +173,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                             Your teacher will see this AI analysis on their board, grade it against the syllabus, and send feedback back to you here.
                           </p>
                         </div>
-                        <div className="p-4 overflow-y-auto text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-zinc-950/40">
-                          {message.text.slice(0, 900)}{message.text.length > 900 ? '…' : ''}
+                        <div className="p-4 overflow-y-auto bg-slate-50 dark:bg-zinc-950/40">
+                          <MarkdownRenderer content={message.text} />
                         </div>
                         <div className="p-4 flex gap-2 border-t border-slate-100 dark:border-zinc-800">
                           <button
@@ -235,7 +205,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                         </div>
                       </div>
                     </div>
-                  )}
+                  , document.body)}
                 </>
               )}
 
@@ -645,7 +615,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
       </div>
 
       {/* Lightbox Modal */}
-      {lightboxSrc && (
+      {lightboxSrc && createPortal(
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 animate-fade-in" onClick={() => setLightboxSrc(null)}>
           <img
             src={lightboxSrc}
@@ -661,7 +631,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
             </svg>
           </button>
         </div>
-      )}
+      , document.body)}
     </>
   );
 };

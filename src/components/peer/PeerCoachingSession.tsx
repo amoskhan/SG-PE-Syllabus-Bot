@@ -656,7 +656,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             </div>
 
             {/* Camera Viewport */}
-            <div className="relative w-full h-56 sm:h-72 max-h-[40vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
+            <div className="relative w-full h-[46dvh] min-h-56 max-h-[620px] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
               <video
                 ref={(el) => {
                   videoPreviewRef.current = el;
@@ -665,7 +665,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
 
               {isRecording && (
@@ -937,7 +937,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               <p className="text-sm font-black text-white">Hold camera steady! Apple is performing {skillName}.</p>
             </div>
 
-            <div className="relative w-full h-56 sm:h-72 max-h-[40vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
+            <div className="relative w-full h-[46dvh] min-h-56 max-h-[620px] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
               <video
                 ref={(el) => {
                   videoPreviewRef.current = el;
@@ -946,7 +946,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
               
               {isRecording && (

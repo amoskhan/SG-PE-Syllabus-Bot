@@ -754,7 +754,7 @@ const App: React.FC = () => {
         id: `resume-${Date.now()}`,
         sender: Sender.BOT,
         timestamp: new Date(),
-        text: `## 🍎🍌 Practice Station — Pair #${pair.pairNumber}\n\nWelcome back! Tap **🍌 Analyze Banana's Form** or **🍎 Analyze Apple's Form** for a full AI grading, then **📤 Send to Teacher for Grading**. Your teacher's feedback shows up here.`,
+        text: `## 🍎🍌 Practice Station — Pair #${pair.pairNumber}\n\nWelcome back! Tap **🍌 Analyse Banana** or **🍎 Analyse Apple** below for a full AI grading, then **📤 Send to Teacher**. Your teacher's feedback shows up here.`,
         hasMedia: false,
       };
       setSessions(prev => [
@@ -1755,7 +1755,7 @@ const App: React.FC = () => {
 
   if (appMode === 'home_screen') {
     return (
-      <div className="relative flex flex-col h-screen w-screen bg-slate-950 overflow-hidden">
+      <div className="relative flex flex-col h-[100dvh] w-screen bg-slate-950 overflow-hidden">
         {/* Background gradient blobs */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
@@ -1765,7 +1765,7 @@ const App: React.FC = () => {
 
         <div className="relative z-10 flex flex-col h-full">
           {/* Top Bar */}
-          <div className="flex items-center justify-between px-6 pt-8 pb-4 shrink-0">
+          <div className="flex items-center justify-between px-5 sm:px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3 shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/40">
                 <span className="text-white text-xl font-black">PE</span>
@@ -1778,7 +1778,8 @@ const App: React.FC = () => {
           </div>
 
           {/* Hero */}
-          <div className="flex-1 flex flex-col items-center justify-center px-6 pb-6 gap-6 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <div className="min-h-full flex flex-col items-center justify-center gap-6 py-2">
             <div className="text-center">
               <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-3">Who are you today?</p>
               <h1 className="text-3xl md:text-4xl font-black text-white leading-tight">
@@ -1797,7 +1798,7 @@ const App: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-black text-sm leading-tight">Pair #{activePairSession.pairNumber} — active session</p>
                       <p className="text-emerald-100/90 text-xs font-medium truncate">
-                        {activePairSubmission ? 'Recording submitted · see your AI coach & teacher feedback' : 'Continue where you left off'}
+                        {activePairSubmission ? 'Sent to your teacher' : 'Continue where you left off'}
                       </p>
                     </div>
                     <button
@@ -1820,7 +1821,7 @@ const App: React.FC = () => {
                         onClick={handleResumePracticeChat}
                         className="flex-[1.3] px-3 py-2.5 bg-white text-emerald-700 hover:bg-emerald-50 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        <span>💬</span><span>AI Coach &amp; Feedback</span>
+                        <span>💬</span><span>AI Coach</span>
                       </button>
                     )}
                     <button
@@ -1842,12 +1843,12 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsQrScannerOpen(true)}
-                className="group relative w-full text-left bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-6 shadow-2xl shadow-orange-500/30 transition-all duration-200 cursor-pointer overflow-hidden"
+                className="group relative w-full text-left bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-5 sm:p-6 shadow-2xl shadow-orange-500/30 transition-all duration-200 cursor-pointer overflow-hidden"
               >
-                <div className="absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🍎🍌</div>
+                <div className="hidden sm:block absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🍎🍌</div>
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-3xl">🍎🍌</span>
-                  <span className="text-xl font-black text-white">I'm a Student</span>
+                  <span className="text-lg sm:text-xl font-black text-white leading-tight">I'm a Student</span>
                   <svg className="ml-auto w-5 h-5 text-white/60 shrink-0 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                 </div>
                 <p className="text-orange-100 text-sm font-semibold leading-relaxed">
@@ -1870,19 +1871,19 @@ const App: React.FC = () => {
                     signInWithGoogle();
                   }
                 }}
-                className="group relative w-full text-left bg-gradient-to-br from-indigo-600 to-violet-700 hover:from-indigo-500 hover:to-violet-600 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-6 shadow-2xl shadow-indigo-600/30 transition-all duration-200 cursor-pointer overflow-hidden"
+                className="group relative w-full text-left bg-gradient-to-br from-indigo-600 to-violet-700 hover:from-indigo-500 hover:to-violet-600 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-5 sm:p-6 shadow-2xl shadow-indigo-600/30 transition-all duration-200 cursor-pointer overflow-hidden"
               >
-                <div className="absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🏫</div>
+                <div className="hidden sm:block absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🏫</div>
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-3xl">🏫</span>
-                  <span className="text-xl font-black text-white">I'm a Teacher</span>
+                  <span className="text-lg sm:text-xl font-black text-white leading-tight">I'm a Teacher</span>
                   {!user && (
-                    <span className="px-2.5 py-0.5 bg-amber-400 text-slate-950 font-black text-[10px] rounded-full uppercase tracking-wider">
+                    <span className="px-2.5 py-0.5 bg-amber-400 text-slate-950 font-black text-[10px] rounded-full uppercase tracking-wider whitespace-nowrap">
                       Sign In
                     </span>
                   )}
                   {user && (
-                    <span className="px-2.5 py-0.5 bg-emerald-400/30 text-emerald-200 font-bold text-[10px] rounded-full border border-emerald-400/40">
+                    <span className="px-2.5 py-0.5 bg-emerald-400/30 text-emerald-200 font-bold text-[10px] rounded-full border border-emerald-400/40 whitespace-nowrap">
                       Logged In
                     </span>
                   )}
@@ -1904,12 +1905,12 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setAppMode('chat')}
-                className="group relative w-full text-left bg-gradient-to-br from-teal-700/80 to-cyan-800/80 hover:from-teal-600/90 hover:to-cyan-700/90 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-6 shadow-2xl shadow-teal-900/40 border border-teal-600/30 transition-all duration-200 cursor-pointer overflow-hidden"
+                className="group relative w-full text-left bg-gradient-to-br from-teal-700/80 to-cyan-800/80 hover:from-teal-600/90 hover:to-cyan-700/90 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-5 sm:p-6 shadow-2xl shadow-teal-900/40 border border-teal-600/30 transition-all duration-200 cursor-pointer overflow-hidden"
               >
-                <div className="absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🤖</div>
+                <div className="hidden sm:block absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🤖</div>
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-3xl">🤖</span>
-                  <span className="text-xl font-black text-white">Syllabus &amp; Analysis</span>
+                  <span className="text-lg sm:text-xl font-black text-white leading-tight">Syllabus &amp; Analysis</span>
                   <svg className="ml-auto w-5 h-5 text-white/60 shrink-0 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                 </div>
                 <p className="text-teal-100 text-sm font-semibold leading-relaxed">
@@ -1923,6 +1924,7 @@ const App: React.FC = () => {
               </button>
 
             </div>
+          </div>
           </div>
         </div>
 
@@ -1991,13 +1993,14 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors overflow-x-hidden">
+    <div className="relative flex h-[100dvh] overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors overflow-x-hidden">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 -left-24 h-80 w-80 rounded-full bg-indigo-200/35 blur-3xl dark:bg-indigo-500/10" />
         <div className="absolute top-28 -right-28 h-96 w-96 rounded-full bg-sky-200/30 blur-3xl dark:bg-cyan-500/10" />
         <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-amber-100/30 blur-3xl dark:bg-amber-400/10" />
       </div>
 
+      {!activePeerSessionData && (
       <SessionSidebar
         sessions={sessions}
         currentSessionId={currentSessionId}
@@ -2018,6 +2021,7 @@ const App: React.FC = () => {
         signOut={handleSignOut}
         onOpenSettings={() => setIsRubricBuilderOpen(true)}
       />
+      )}
 
       <div className="relative flex-1 flex flex-col h-full bg-white/75 dark:bg-slate-950/80 backdrop-blur-xl border-l border-white/60 dark:border-white/5 shadow-[0_0_80px_rgba(15,23,42,0.08)]">
         
@@ -2030,59 +2034,46 @@ const App: React.FC = () => {
           const bananaMet = Object.values(bananaCues).filter(Boolean).length;
           const bananaTotal = Object.keys(bananaCues).length;
           return (
-          <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 border-b border-indigo-500/40 px-3 md:px-5 py-3 shrink-0 z-40 shadow-lg">
-            <div className="max-w-5xl mx-auto flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-              {/* Left: identity + AI pill + peer cue scores */}
-              <div className="flex items-start gap-2.5 min-w-0">
-                <span className="text-xl shrink-0">🍎🍌</span>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="px-2 py-0.5 bg-indigo-500/30 text-indigo-200 font-black text-[11px] rounded-full border border-indigo-400/40">
-                      Pair #{activePeerSessionData.pairNumber}
-                    </span>
-                    <p className="text-sm font-black text-white">
-                      {activePeerSessionData.skillName} · Practice Station
-                    </p>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[10px] font-bold border border-emerald-400/30">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      AI Coach active
-                    </span>
-                    {appleTotal > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[10px] font-bold">
-                        🍎 {appleMet}/{appleTotal}
-                      </span>
-                    )}
-                    {bananaTotal > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-200 text-[10px] font-bold">
-                        🍌 {bananaMet}/{bananaTotal}
-                      </span>
-                    )}
-                  </div>
-                </div>
+          <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 border-b border-indigo-500/40 px-3 md:px-5 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] shrink-0 z-40 shadow-lg">
+            <div className="max-w-5xl mx-auto flex items-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => setAppMode('home_screen')}
+                aria-label="Home"
+                className="w-10 h-10 shrink-0 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm sm:text-base font-black text-white truncate">
+                  🍎🍌 Pair {activePeerSessionData.pairNumber} · {activePeerSessionData.skillName}
+                </p>
+                {(appleTotal > 0 || bananaTotal > 0) && (
+                  <p className="text-[11px] sm:text-xs font-bold text-slate-300 truncate">
+                    Partner ticks: 🍎 {appleMet}/{appleTotal} · 🍌 {bananaMet}/{bananaTotal}
+                  </p>
+                )}
               </div>
-
-              {/* Right: model choice for AI analysis + primary actions */}
-              <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-                {user && <ModelPicker selectedModel={effectiveModel} onSelect={setSelectedModel} align="right" variant="dark" />}
-                <button
-                  type="button"
-                  onClick={() => setAppMode('peer_coaching')}
-                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                >
-                  <span className="lg:hidden">🎥 Record</span>
-                  <span className="hidden lg:inline">🎥 Record New Attempt</span>
-                </button>
+              {user && <ModelPicker selectedModel={effectiveModel} onSelect={setSelectedModel} align="right" variant="dark" />}
+              <button
+                type="button"
+                onClick={() => setAppMode('peer_coaching')}
+                className="h-10 px-3.5 shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white rounded-xl text-sm font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🎥</span><span>Record</span>
+              </button>
+              {/* Teachers testing the pupil flow can jump back to their board */}
+              {user && (
                 <button
                   type="button"
                   onClick={() => setAppMode('teacher_board')}
-                  className="px-3 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+                  className="h-10 px-3 shrink-0 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
                 >
-                  <span className="lg:hidden">🏫 Board</span>
-                  <span className="hidden lg:inline">🏫 Teacher Board</span>
+                  🏫 Board
                 </button>
-              </div>
+              )}
             </div>
           </div>
           );
@@ -2173,7 +2164,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Main Chat Area */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 scroll-smooth pt-16 md:pt-6">
+        <main className={`flex-1 overflow-y-auto overflow-x-hidden scroll-smooth ${activePeerSessionData ? 'px-3 py-4 sm:p-6' : 'p-4 md:p-6 pt-16 md:pt-6'}`}>
           <div className="max-w-5xl mx-auto min-h-full flex flex-col justify-end">
 
             {/* Spacer for empty chat to push welcome down? No, standard flow */}
@@ -2253,7 +2244,6 @@ const App: React.FC = () => {
                 onSelectMultipleSkills={handleSelectMultipleSkills}
                 onShowAllSkills={() => setIsSkillSelectorOpen(true)}
                 onSubmitChecklistToTeacher={(activePairSession || activePeerSessionData) ? handleSubmitChecklistToTeacher : undefined}
-                showDraftBanner={!!activePeerSessionData}
                 disabled={isLoading || isProcessing}
                 skillMode={skillMode}
               />
@@ -2286,43 +2276,47 @@ const App: React.FC = () => {
         </main>
 
         {/* Footer Input */}
-        <div className="p-4 bg-transparent shrink-0 z-10">
+        <div className={`bg-transparent shrink-0 z-10 ${activePeerSessionData ? 'px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6' : 'p-4'}`}>
           <div className="max-w-5xl mx-auto">
-            {/* AI Coach Action Chips for Apple & Banana */}
+            {/* Practice Station actions: grade each pupil, plus two quick questions */}
             {activePeerSessionData && (
-              <div className="flex gap-2 overflow-x-auto pb-2.5 mb-1 scrollbar-thin px-1">
-                <button
-                  type="button"
-                  disabled={isLoading || isProcessing}
-                  onClick={() => handleAnalyzePeerPerformer('Banana')}
-                  className="px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-black shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
-                >
-                  <span>🍌 Analyze Banana's Form (AI Vision)</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading || isProcessing}
-                  onClick={() => handleAnalyzePeerPerformer('Apple')}
-                  className="px-3.5 py-2 bg-red-500/20 hover:bg-red-500/30 active:scale-95 border border-red-500/40 text-red-300 rounded-xl text-xs font-black shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
-                >
-                  <span>🍎 Analyze Apple's Form (AI Vision)</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading || isProcessing}
-                  onClick={() => handleSendMessage(`Coach, how can we get more distance and power on our ${activePeerSessionData.skillName}?`)}
-                  className="px-3 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 active:scale-95 border border-indigo-500/40 text-indigo-300 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <span>⚡ How to get more power?</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading || isProcessing}
-                  onClick={() => handleSendMessage(`Give us a fun 2-minute partner challenge drill for ${activePeerSessionData.skillName}!`)}
-                  className="px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 active:scale-95 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <span>🎮 Fun Partner Drill</span>
-                </button>
+              <div className="mb-2 flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isLoading || isProcessing}
+                    onClick={() => handleAnalyzePeerPerformer('Banana')}
+                    className="h-12 px-3 bg-amber-400 hover:bg-amber-300 active:scale-[0.98] text-amber-950 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    <span>🍌</span><span>Analyse Banana</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isLoading || isProcessing}
+                    onClick={() => handleAnalyzePeerPerformer('Apple')}
+                    className="h-12 px-3 bg-rose-500 hover:bg-rose-400 active:scale-[0.98] text-white rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    <span>🍎</span><span>Analyse Apple</span>
+                  </button>
+                </div>
+                <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                  <button
+                    type="button"
+                    disabled={isLoading || isProcessing}
+                    onClick={() => handleSendMessage(`Coach, how can we get more distance and power on our ${activePeerSessionData.skillName}?`)}
+                    className="h-9 px-3 shrink-0 bg-white/90 dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    ⚡ More power?
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isLoading || isProcessing}
+                    onClick={() => handleSendMessage(`Give us a fun 2-minute partner challenge drill for ${activePeerSessionData.skillName}!`)}
+                    className="h-9 px-3 shrink-0 bg-white/90 dark:bg-zinc-900 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-full text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    🎮 Fun partner drill
+                  </button>
+                </div>
               </div>
             )}
 
@@ -2332,6 +2326,7 @@ const App: React.FC = () => {
               selectedModel={selectedModel}
               skillMode={skillMode}
               onSkillModeChange={setSkillMode}
+              variant={activePeerSessionData ? 'pupil' : 'default'}
             />
           </div>
         </div>
