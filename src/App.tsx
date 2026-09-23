@@ -413,10 +413,12 @@ const App: React.FC = () => {
         analysisFrames: [...data.bananaPoseFrames.slice(0, 2), ...data.applePoseFrames.slice(0, 2)],
       };
 
-      // Swap loading card out for the real coaching card
+      // Swap ONLY the loading card for the coaching card. Pupils often tap Analyse
+      // while this is still running; replacing the whole list wiped their checklist
+      // card and video (with its skeleton) from the chat.
       setSessions((prev) => prev.map(s =>
         s.id === newSessionId
-          ? { ...s, messages: [coachingCard], updatedAt: new Date() }
+          ? { ...s, messages: s.messages.map(m => m.id === loadingMsgId ? coachingCard : m), updatedAt: new Date() }
           : s
       ));
 
@@ -462,7 +464,7 @@ const App: React.FC = () => {
       };
       setSessions((prev) => prev.map(s =>
         s.id === newSessionId
-          ? { ...s, messages: [fallbackCard], updatedAt: new Date() }
+          ? { ...s, messages: s.messages.map(m => m.id === loadingMsgId ? fallbackCard : m), updatedAt: new Date() }
           : s
       ));
     }
@@ -2023,7 +2025,7 @@ const App: React.FC = () => {
       />
       )}
 
-      <div className="relative flex-1 flex flex-col h-full bg-white/75 dark:bg-slate-950/80 backdrop-blur-xl border-l border-white/60 dark:border-white/5 shadow-[0_0_80px_rgba(15,23,42,0.08)]">
+      <div className="relative flex-1 min-w-0 flex flex-col h-full bg-white/75 dark:bg-slate-950/80 backdrop-blur-xl border-l border-white/60 dark:border-white/5 shadow-[0_0_80px_rgba(15,23,42,0.08)]">
         
         {/* Dedicated Student Station Header when in Pair Practice Mode */}
         {activePeerSessionData && (() => {
