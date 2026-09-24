@@ -6,6 +6,7 @@ import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_I
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
 import { getFewShotExamples } from '../../data/skillExamples';
+import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 import { supabase } from '../db/supabaseClient';
 import { claudeAccessHeaders, serverErrorMessage } from './aiAccess';
 
@@ -257,10 +258,12 @@ export const sendMessageToClaudeAPI = async (
                 let rightHipY = 0;
                 let minLeftHandY = 0;
                 let leftHipY = 0;
-                let noseY = 1;
 
                 let maxRightHandHighY = 1;
                 let maxLeftHandHighY = 1;
+                // Nose height in the SAME frame as each hand's high point (not the last frame's).
+                let noseAtRightHigh = 1;
+                let noseAtLeftHigh = 1;
 
                 let minKneeAngle = 180;
                 let initialAnkleDist = 0;
@@ -271,6 +274,7 @@ export const sendMessageToClaudeAPI = async (
                     initialAnkleDist = Math.hypot(firstFrame[27].x - firstFrame[28].x, firstFrame[27].y - firstFrame[28].y);
                     maxRightHandHighY = firstFrame[16].y;
                     maxLeftHandHighY = firstFrame[15].y;
+                    noseAtRightHigh = noseAtLeftHigh = firstFrame[0].y;
                 }
 
                 let minKneeAngleFrame = -1;
@@ -293,8 +297,6 @@ export const sendMessageToClaudeAPI = async (
                     const prev = poseData[i - 1].landmarks;
                     const curr = poseData[i].landmarks;
 
-                    noseY = curr[0].y;
-
                     const rightHandMove = Math.hypot(curr[16].x - prev[16].x, curr[16].y - prev[16].y);
                     const leftHandMove = Math.hypot(curr[15].x - prev[15].x, curr[15].y - prev[15].y);
 
@@ -315,10 +317,12 @@ export const sendMessageToClaudeAPI = async (
                     if (curr[16].y < maxRightHandHighY) {
                         maxRightHandHighY = curr[16].y;
                         maxRightHandHighFrame = i + 1;
+                        noseAtRightHigh = curr[0].y;
                     }
                     if (curr[15].y < maxLeftHandHighY) {
                         maxLeftHandHighY = curr[15].y;
                         maxLeftHandHighFrame = i + 1;
+                        noseAtLeftHigh = curr[0].y;
                     }
 
                     rightHipY = curr[24].y;
@@ -379,18 +383,21 @@ export const sendMessageToClaudeAPI = async (
 
                 const highPoint = dominantHand === 'Right' ? maxRightHandHighY : maxLeftHandHighY;
                 const highPointFrame = dominantHand === 'Right' ? maxRightHandHighFrame : maxLeftHandHighFrame;
-                const isUnderhanded = skillName && ['Underhand Throw', 'Underhand Roll'].some(s => skillName.includes(s));
+                const noseAtHigh = dominantHand === 'Right' ? noseAtRightHigh : noseAtLeftHigh;
 
                 let highSwingCheck = '✅ Arm height appropriate for this skill.';
                 let highSwingFailed = false;
 
-                if (highPoint < noseY) {
-                    if (isUnderhanded) {
-                        highSwingCheck = `⚠️ High swing detected (above head level at Frame ${highPointFrame}). Check if this was a follow-through or an erratic backswing. Do not automatically fail the backswing criterion.`;
-                        highSwingFailed = false;
-                    } else {
-                        highSwingCheck = `✅ Arm peaked above head level at Frame ${highPointFrame}. Normal for Overhand Throw, Chest Pass, or overhead striking.`;
-                    }
+                // Underhand skills: the backswing is measured at the back of the swing, before
+                // release, from dense tracking — never the clip's highest hand, which is
+                // usually the follow-through.
+                const backswing = backswingCheck(skillName, poseData[0]?.motion?.backswing);
+                if (backswing) {
+                    highSwingCheck = backswing.line;
+                    highSwingFailed = backswing.failed;
+                    windUpCheck = 'See Backswing Height (item 6).';
+                } else if (highPoint < noseAtHigh) {
+                    highSwingCheck = `✅ Arm peaked above head level at Frame ${highPointFrame}. Normal for Overhand Throw, Chest Pass, or overhead striking.`;
                 }
 
                 let setupKneeBendStatus = '⚠️ Unable to assess';
@@ -455,7 +462,7 @@ export const sendMessageToClaudeAPI = async (
                 if (skillName === 'Underhand Roll' || skillName === 'Underhand Throw') {
                     skillDifferentiation = `\n**SKILL DIFFERENTIATION (Throw vs Roll):**
 - Release Point: ${releasePoint === 'below-knee' ? 'BELOW KNEE (Roll pattern)' : releasePoint === 'between-knee-waist' ? 'BETWEEN KNEE-WAIST (Throw pattern)' : 'UNCLEAR'}
-- Backswing Control: ${highSwingFailed ? 'EXCESSIVE (Above head - violates controlled underhand motion)' : 'Controlled'}
+- Backswing Control: ${highSwingFailed ? 'NOT AT WAIST HEIGHT (see Backswing Height)' : 'See Backswing Height'}
 - Setup Knee Bend: ${setupKneeBendFailed ? 'MISSING (Straight knees in "Pray" position)' : 'Present'}
 `;
                 }
@@ -484,7 +491,7 @@ export const sendMessageToClaudeAPI = async (
 ${skillDifferentiation}
 **KEY FRAMES FOR GRADING:**
 - Setup Phase (Pray Position): Frames 1-2 → Check knee angle ${setupKneeAngle.toFixed(0)}°
-- Backswing Peak: Frame ${highPointFrame} → Hand Y position ${highPoint.toFixed(3)} (nose Y = ${noseY.toFixed(3)})
+${backswing ? '' : `- Highest Hand: Frame ${highPointFrame} → Hand Y position ${highPoint.toFixed(3)} (nose Y in that frame = ${noseAtHigh.toFixed(3)})\n`}
 - Release: Frame ${releaseFrameIndex >= 0 ? releaseFrameIndex + 1 : 'N/A'} → ${releasePoint === 'unknown' ? 'Ball not tracked' : releasePoint}
 `;
 
@@ -765,7 +772,8 @@ ${skillName ? `Proceed directly to grading "${skillName}" using the FMS Rubric. 
 
 **MANDATORY CHECKLIST RULES FOR UNDERHAND ROLL:**
 1. **Checklist Item #3 "Keep knees slightly bent"**: Look at "Setup Knee Bend" in biomechanics. If ❌ STRAIGHT KNEES → mark as ❌.
-2. **Checklist Item #5 "Swing dominant hand back at least to waist level"**: Look at "Wind-up (Depth)" in biomechanics. If it says "No significant wind-up" → mark as ❌.
+2. **Checklist Item #5 "Swing dominant hand back at least to waist level" (Backswing at waist height)**:
+${BACKSWING_ITEM5_RULE}
 3. **Checklist Item #8 "Release ball on the ground"**: Look at "Ball Release Point". If above waist/knee-waist → mark as ❌.
 
 - **CAMERA ANGLE AWARENESS**:

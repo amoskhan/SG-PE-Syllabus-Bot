@@ -10,7 +10,7 @@ import { getAIService } from './services/ai/aiServiceRegistry';
 import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
 import { computeVideoHash } from './services/videoAnalysisCache';
 
-import { poseDetectionService, type PoseData } from './services/vision/poseDetectionService';
+import { poseDetectionService, measureBackswing, findStep, type PoseData, type ClipMotion } from './services/vision/poseDetectionService';
 import { parseDocument } from './services/documentService';
 import PdfUploaderModal from './components/admin/PdfUploaderModal';
 import RubricBuilderModal from './components/admin/RubricBuilderModal';
@@ -1138,6 +1138,7 @@ const App: React.FC = () => {
       const debugFrames: string[] = [];
       const analysisFrames: MediaData[] = [];
       let rawVideoFrames: string[] = []; // fallback if no pose detected
+      let clipMotion: ClipMotion | undefined;
 
       for (const file of files) {
         if (file.type.startsWith('image/')) {
@@ -1151,15 +1152,18 @@ const App: React.FC = () => {
           // Gymnastics is sampled denser: rolls, hops and flight phases are
           // over in well under a second, so 1 sample/s misses the skill.
           const isGymnastics = skillMode === 'gymnastics';
+          const frameTimes: number[] = [];
           const frames = await extractVideoFrames(
             file,
             12,                        // floor — short clips keep today's density
             metadata?.startTime,
             metadata?.endTime,
             isGymnastics ? 2 : 1,      // target samples per second
-            isGymnastics ? 30 : 20     // ceiling, to bound the request payload
+            isGymnastics ? 30 : 20,    // ceiling, to bound the request payload
+            frameTimes
           );
           rawVideoFrames = frames;
+          const firstOfThisVideo = processedImages.length;
           for (let i = 0; i < frames.length; i++) {
             const img = await loadImageFromUrl(frames[i]);
             try {
@@ -1174,10 +1178,45 @@ const App: React.FC = () => {
               console.error(`❌ Error processing frame ${i}:`, frameError);
             }
           }
+
+          // Dense pass for measurements only (these frames are never sent to the AI,
+          // so they cost nothing): the top of an underhand backswing lasts a fraction
+          // of a second and falls between the 1-per-second stills above. When the
+          // stills show a step, look closely at the 2s before it lands (the backswing);
+          // otherwise sample the whole clip.
+          if (!isGymnastics) {
+            try {
+              const clipStart = metadata?.startTime ?? 0;
+              const stills = processedImages.slice(firstOfThisVideo);
+              const step = findStep(stills.map(p => ({
+                ...p.pose, timestamp: p.timestamp, aspect: p.img.naturalWidth / p.img.naturalHeight,
+              })));
+              const plantAt = step ? frameTimes[stills[step.plant].timestamp] : undefined;
+              const from = plantAt !== undefined ? clipStart + Math.max(0, plantAt - 2) : metadata?.startTime;
+              const to = plantAt !== undefined ? clipStart + plantAt + 0.5 : metadata?.endTime;
+              const denseTimes: number[] = [];
+              const dense = await extractVideoFrames(file, 12, from, to, plantAt !== undefined ? 15 : 8, 40, denseTimes);
+              const densePoses: PoseData[] = [];
+              for (let i = 0; i < dense.length; i++) {
+                const img = await loadImageFromUrl(dense[i]);
+                const pose = await poseDetectionService.detectPoseFromImage(img);
+                // Timestamps in seconds from the start of the analysed clip.
+                if (pose) densePoses.push({ ...pose, timestamp: (from ?? 0) - clipStart + denseTimes[i], aspect: img.naturalWidth / img.naturalHeight });
+              }
+              clipMotion = { backswing: measureBackswing(densePoses) };
+            } catch (denseError) {
+              console.warn('Dense motion pass failed (non-fatal):', denseError);
+            }
+          }
         }
       }
 
-      const poseData = processedImages.map(p => ({ ...p.pose, timestamp: p.timestamp, ball: p.ball }));
+      // A "ball" that never moves is a floor spot or cone, not the ball.
+      const poseData = poseDetectionService.filterStaticObjects(processedImages.map(p => ({
+        ...p.pose, timestamp: p.timestamp, ball: p.ball,
+        aspect: p.img.naturalWidth / p.img.naturalHeight,
+      })));
+      if (poseData.length && clipMotion) poseData[0] = { ...poseData[0], motion: clipMotion };
 
       // Render the skeleton overlay for every frame where a pose was found.
       const overlays: (string | null)[] = [];
@@ -1258,7 +1297,8 @@ const App: React.FC = () => {
     startTime?: number,
     endTime?: number,
     targetFps?: number,
-    maxFrames: number = 24
+    maxFrames: number = 24,
+    timesOut?: number[]        // filled with each frame's seconds from `startTime`
   ): Promise<string[]> => {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
@@ -1288,7 +1328,7 @@ const App: React.FC = () => {
         canvas.height = height;
 
         const start = startTime !== undefined ? startTime : 0;
-        const end = endTime !== undefined ? endTime : video.duration;
+        const end = Math.min(endTime !== undefined ? endTime : video.duration, video.duration);
         const duration = Math.max(0, end - start);
 
         const frameTarget = targetFps
@@ -1312,6 +1352,7 @@ const App: React.FC = () => {
           if (ctx) {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             frames.push(canvas.toDataURL('image/jpeg', 0.8));
+            timesOut?.push(video.currentTime - start);
           }
           currentFrame++;
           captureFrame();

@@ -9,9 +9,12 @@ yarn install      # Install dependencies
 yarn dev          # Start dev server at http://localhost:5173 (accessible on LAN via 0.0.0.0)
 yarn build        # Production build → dist/
 yarn preview      # Preview production build locally
+yarn test         # Run unit tests once (Vitest, *.test.ts)
+yarn vitest       # Re-run tests on every save
+yarn typecheck:api  # Type-check api/ (strict)
 ```
 
-No test or lint commands are configured in package.json.
+No lint command is configured. Tests cover the pose-analysis maths (`src/services/vision/poseDetectionService.test.ts`); CI (`.github/workflows/ci.yml`) runs them on every PR to `main`.
 
 ## Architecture Overview
 
@@ -114,9 +117,10 @@ Computed independently in `geminiService.ts` and `claudeService.ts`, injected in
 | Camera orientation | `resolveThrowOrientation()` — torso side-on test (shoulder span ÷ torso height, plus left/right landmark visibility asymmetry) | If side-on, MediaPipe's per-frame **Left/Right joint labels may be mirror-flipped**; the report tells the LLM to trust the frames + lead-foot-vs-target framing over any raw "Left"/"Right" |
 | Throwing Arm | Whichever wrist (landmark 15 / 16) has higher total distance moved (visibility-gated). Reported as a side only when orientation is reliable, else "the more-active arm" | Which arm is throwing/passing — swap-invariant |
 | Arm Trajectory | Highest point of throwing wrist vs nose Y (landmark 0) and hip Y (landmark 23/24) | **Primary skill classifier**: OVERHEAD → overhand family; LOW SWING → underhand family; MID-LEVEL → passes/dribble |
-| Wind-up | Did throwing wrist drop below hip Y at any frame | Confirms underhand backswing (low) vs overhand backswing (high) |
-| Stepping Foot (lead foot) | `resolveThrowOrientation()` — all maths confined to the **active throw window** (setup → release), so a post-release turn-around never flips the answer. Throw direction from ball-vs-body → ball travel → forward hand-swing → body facing; then the ankle furthest toward that direction near release. Reported as "Left/Right foot forward" only when orientation is reliable, else "lead foot points toward screen-\<dir\>" | Which foot is planted forward toward the target |
-| Coordination | Throwing-wrist index vs lead-ankle index (27 pairs 15, 28 pairs 16). Same index → ipsilateral error ❌. **Swap-invariant**: both flip together, so this is correct even when the absolute side isn't | Common beginner mistake (removes trunk rotation) |
+| Wind-up | Did throwing wrist drop below hip Y at any frame (not used for underhand skills — see Backswing Height) | Confirms underhand backswing (low) vs overhand backswing (high) |
+| Backswing Height (Underhand Roll/Throw) | `measureBackswing()` on a **dense pass** (App.tsx: ~15 fps over the 2s before the step lands, never sent to the AI) — the rolling wrist at its furthest point behind the hips, before release, as 0 = hip line … 1 = shoulder line in that frame. Stored as `poseData[0].motion`. `backswingCheck.ts` turns it into the report line + shared item-5 rule for both AIs | Underhand Roll item 5: hand at **waist height**, not higher or lower (teacher's rule). The follow-through rising high is correct and is not the backswing |
+| Stepping Foot (lead foot) | `findStep()` — the stepping foot is the first ankle to move > ½ torso length from its start; the way it moves is the throw direction. Falls back to ball-vs-body → ball travel → hand-swing → body facing when there's no step. Balls that never move (floor spots) are ignored. Reported as "Left/Right foot forward" only when orientation is reliable, else "lead foot points toward screen-\<dir\>" | Which foot steps toward the target |
+| Coordination | Arm and foot judged **inside the same frame** around the step (rolling hand = the one well out from the body; lead foot = nearer the target), majority over those frames. MediaPipe can swap left/right on some frames only, so picking arm and foot from different frames is unreliable | Common beginner mistake (removes trunk rotation) |
 | Stance | Ankle gap vs shoulder width (landmarks 11/12 = shoulders, 27/28 = ankles) | Checks "feet shoulder-width apart" criterion |
 | Knee Bend | Minimum knee angle across all frames, cited with frame number | Checks "knees slightly bent" criterion |
 | Step Detection | Stride expansion ratio = maxAnkleDist / initialAnkleDist > 1.2 | Checks "step toward target" criterion |

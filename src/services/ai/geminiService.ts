@@ -11,6 +11,7 @@ import {
 } from '../../data/gymnasticsSkillsData';
 import type { SkillMode } from '../../types';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
+import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -257,11 +258,13 @@ export const sendMessageToGemini = async (
         let rightHipY = 0;
         let minLeftHandY = 0;
         let leftHipY = 0;
-        let noseY = 1; // Default to bottom
 
         // High Arm Detection (For excessive swing)
         let maxRightHandHighY = 1; // 1 is bottom. Smallest value = highest point.
         let maxLeftHandHighY = 1;
+        // Nose height in the SAME frame as each hand's high point (not the last frame's).
+        let noseAtRightHigh = 1;
+        let noseAtLeftHigh = 1;
 
         // Knee Bend Detection
         let minKneeAngle = 180;
@@ -275,6 +278,7 @@ export const sendMessageToGemini = async (
           initialAnkleDist = Math.hypot(firstFrame[27].x - firstFrame[28].x, firstFrame[27].y - firstFrame[28].y);
           maxRightHandHighY = firstFrame[16].y;
           maxLeftHandHighY = firstFrame[15].y;
+          noseAtRightHigh = noseAtLeftHigh = firstFrame[0].y;
         }
 
         // Key Frame Indices
@@ -299,9 +303,6 @@ export const sendMessageToGemini = async (
           const prev = poseData[i - 1].landmarks;
           const curr = poseData[i].landmarks;
 
-          // ... (existing code for noseY, moves, etc) ...
-          noseY = curr[0].y;
-
           // Movement Calcs
           const rightHandMove = Math.hypot(curr[16].x - prev[16].x, curr[16].y - prev[16].y);
           const leftHandMove = Math.hypot(curr[15].x - prev[15].x, curr[15].y - prev[15].y);
@@ -325,10 +326,12 @@ export const sendMessageToGemini = async (
           if (curr[16].y < maxRightHandHighY) {
             maxRightHandHighY = curr[16].y;
             maxRightHandHighFrame = i + 1;
+            noseAtRightHigh = curr[0].y;
           }
           if (curr[15].y < maxLeftHandHighY) {
             maxLeftHandHighY = curr[15].y;
             maxLeftHandHighFrame = i + 1;
+            noseAtLeftHigh = curr[0].y;
           }
 
           // Store Hip Y
@@ -400,19 +403,22 @@ export const sendMessageToGemini = async (
         // Arm Height Check — interpretation depends on skill
         const highPoint = dominantHand === 'Right' ? maxRightHandHighY : maxLeftHandHighY;
         const highPointFrame = dominantHand === 'Right' ? maxRightHandHighFrame : maxLeftHandHighFrame;
-        const isUnderhanded = skillName && ['Underhand Throw', 'Underhand Roll'].some(s => skillName.includes(s));
+        const noseAtHigh = dominantHand === 'Right' ? noseAtRightHigh : noseAtLeftHigh;
 
         let highSwingCheck = '✅ Arm height appropriate for this skill.';
         let highSwingFailed = false;
 
-        if (highPoint < noseY) {
-          if (isUnderhanded) {
-            highSwingCheck = `❌ EXCESSIVE BACKSWING: Hand raised ABOVE HEAD level at Frame ${highPointFrame}. This violates the controlled low-swing requirement for ${skillName}.`;
-            highSwingFailed = true;
-          } else {
-            // Overhand Throw, Chest Pass, etc. — overhead arm is expected/correct
-            highSwingCheck = `✅ Arm peaked above head level at Frame ${highPointFrame}. Normal for Overhand Throw, Chest Pass, or overhead striking.`;
-          }
+        // Underhand skills: the backswing is measured at the back of the swing, before
+        // release, from dense tracking — never the clip's highest hand, which is
+        // usually the follow-through.
+        const backswing = backswingCheck(skillName, poseData[0]?.motion?.backswing);
+        if (backswing) {
+          highSwingCheck = backswing.line;
+          highSwingFailed = backswing.failed;
+          windUpCheck = 'See Backswing Height (item 6).';
+        } else if (highPoint < noseAtHigh) {
+          // Overhand Throw, Chest Pass, etc. — overhead arm is expected/correct
+          highSwingCheck = `✅ Arm peaked above head level at Frame ${highPointFrame}. Normal for Overhand Throw, Chest Pass, or overhead striking.`;
         }
 
         // Knee Bend Check - SETUP PHASE (First 2 frames) vs MOVEMENT PHASE
@@ -494,7 +500,7 @@ export const sendMessageToGemini = async (
         if (skillName === 'Underhand Roll' || skillName === 'Underhand Throw') {
           skillDifferentiation = `\n**SKILL DIFFERENTIATION (Throw vs Roll):**
 - Release Point: ${releasePoint === 'below-knee' ? 'BELOW KNEE (Roll pattern)' : releasePoint === 'between-knee-waist' ? 'BETWEEN KNEE-WAIST (Throw pattern)' : 'UNCLEAR'}
-- Backswing Control: ${highSwingFailed ? 'EXCESSIVE (Above head - violates controlled underhand motion)' : 'Controlled'}
+- Backswing Control: ${highSwingFailed ? 'NOT AT WAIST HEIGHT (see Backswing Height)' : 'See Backswing Height'}
 - Setup Knee Bend: ${setupKneeBendFailed ? 'MISSING (Straight knees in "Pray" position)' : 'Present'}
 `;
         }
@@ -524,7 +530,7 @@ export const sendMessageToGemini = async (
 ${skillDifferentiation}
 **KEY FRAMES FOR GRADING:**
 - Setup Phase (Pray Position): Frames 1-2 → Check knee angle ${setupKneeAngle.toFixed(0)}°
-- Backswing Peak: Frame ${highPointFrame} → Hand Y position ${highPoint.toFixed(3)} (nose Y = ${noseY.toFixed(3)})
+${backswing ? '' : `- Highest Hand: Frame ${highPointFrame} → Hand Y position ${highPoint.toFixed(3)} (nose Y in that frame = ${noseAtHigh.toFixed(3)})\n`}
 - Release: Frame ${releaseFrameIndex >= 0 ? releaseFrameIndex + 1 : 'N/A'} → ${releasePoint === 'unknown' ? 'Ball not tracked' : releasePoint}
 `;
 
@@ -798,11 +804,8 @@ The biomechanics report now provides SPECIFIC frame-level evidence. You MUST use
    - If it says "❌ STRAIGHT KNEES IN SETUP" or "**FAILURE**" → You MUST mark Item #3 as ❌
    - Evidence format: "At Frame 1-2, knee angle was XX° (straight). The 'Pray' position requires slightly bent knees from the start."
 
-2. **Checklist Item #5 "Swing dominant hand back at least to waist level" (Controlled Backswing)**:
-   - Look at "**Backswing Height**" in the biomechanics report
-   - If it says "❌ EXCESSIVE BACKSWING" or "ABOVE HEAD" or "**FAILURE**" → You MUST mark Item #5 as ❌
-   - Evidence format: "At Frame X, hand reached Y position (above head level). The backswing must be CONTROLLED at waist level, not excessively high."
-   - **DO NOT** give a "Pass" just because the hand went *past* the waist. "At least to waist level" means the MINIMUM is waist, but for Underhand Roll the MAXIMUM is also waist (controlled). "Too much" is a failure.
+2. **Checklist Item #5 "Swing dominant hand back at least to waist level" (Backswing at waist height)**:
+${BACKSWING_ITEM5_RULE}
 
 3. **Checklist Item #8 "Release ball on the ground"**:
    - Look at "**Ball Release Point**" in the biomechanics report

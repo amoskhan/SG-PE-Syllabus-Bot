@@ -8,11 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "typecheck:api": "tsc -p api --noEmit"
+    "typecheck:api": "tsc -p api --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
-    "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
+    "@mediapipe/tasks-vision": "1.0.1",
     "@supabase/supabase-js": "^2.95.3",
     "@types/qrcode": "^1.5.6",
     "@vercel/analytics": "^1.5.0",
@@ -37,7 +38,8 @@
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "vitest": "^5.0.1"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
