@@ -27,7 +27,7 @@ export default async function handler(req: any, res: any) {
     // 1. Fetch all unsummarised analyses
     const { data: unsummarised, error: fetchError } = await supabase
         .from('skill_analyses')
-        .select('id, student_id, skill_name, proficiency_level, analysis_text, created_at')
+        .select('id, student_id, skill_name, proficiency_level, analysis_text, created_at, teacher_criteria, teacher_level, teacher_reviewed_at')
         .eq('summarised', false)
         .order('created_at', { ascending: true });
 
@@ -62,6 +62,15 @@ export default async function handler(req: any, res: any) {
 
         const sessionLines = analyses.map(a => {
             const date = new Date(a.created_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+            // A teacher's review is the final word: give their level and cue
+            // marks instead of the AI's text, which they may have overruled.
+            if (a.teacher_reviewed_at) {
+                const cues = Object.entries((a.teacher_criteria ?? {}) as Record<string, string>);
+                const hit = cues.filter(([, r]) => r === 'met').map(([c]) => c);
+                const missed = cues.filter(([, r]) => r === 'missed').map(([c]) => c);
+                return `- ${date}: ${a.teacher_level ?? a.proficiency_level ?? 'Unknown'} (CHECKED BY TEACHER — overrides any earlier AI grading of this session)`
+                    + (cues.length ? ` — hit ${hit.length}/${cues.length}. Hit: ${hit.join(', ') || 'none'}. Missed: ${missed.join(', ') || 'none'}.` : '');
+            }
             const snippet = a.analysis_text.slice(0, 200).replace(/\n/g, ' ');
             return `- ${date}: ${a.proficiency_level ?? 'Unknown'} — ${snippet}`;
         }).join('\n');
@@ -77,6 +86,8 @@ Write 2–3 sentences covering:
 1. Current proficiency level
 2. Criteria consistently met or missed
 3. Trajectory (improving / plateauing / regressing)
+
+A session marked CHECKED BY TEACHER may be one already in the current summary, now corrected by the teacher. Where the teacher's result disagrees with the current summary, the teacher is right: rewrite that part.
 
 Be concise. This is injected into an AI grader's context, not shown to the teacher directly.`;
 

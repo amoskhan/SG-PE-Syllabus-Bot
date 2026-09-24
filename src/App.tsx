@@ -23,7 +23,7 @@ import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal'
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken, saveLessonPass } from './services/offline/offlineStorage';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest } from './services/ai/aiAccess';
@@ -1961,11 +1961,6 @@ const App: React.FC = () => {
       <TeacherClassroomBoard
         onOpenChat={() => setAppMode('home_screen')}
         teacherId={user?.id}
-        onOpenStudentSession={({ pass, ...lesson }) => {
-          saveLessonPass(lesson.lessonId, pass);
-          setScannedLessonData({ ...lesson, teacherId: user?.id });
-          setIsPairCheckInOpen(true);
-        }}
       />
     );
   }
