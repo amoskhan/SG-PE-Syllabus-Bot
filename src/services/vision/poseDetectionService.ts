@@ -5,6 +5,23 @@ export interface PoseData {
     worldLandmarks: NormalizedLandmark[];
     timestamp?: number;
     ball?: BallData;
+    /** Frame width ÷ height. Normalised x and y use different pixel scales, so distances need it. */
+    aspect?: number;
+    /** Measurements from dense (~8 fps) tracking of the whole clip. Set on the first frame only. */
+    motion?: ClipMotion;
+}
+
+export interface BackswingMeasure {
+    /** Rolling hand height at the back of the backswing: 0 = hip line, 1 = shoulder line (same frame). */
+    height: number;
+    /** How far the hand got behind the hips, in torso lengths. */
+    reach: number;
+    /** Seconds into the analysed clip. */
+    time: number;
+}
+
+export interface ClipMotion {
+    backswing: BackswingMeasure | null;
 }
 
 export interface MovementAnalysis {
@@ -71,6 +88,96 @@ const lmVis = (lm?: NormalizedLandmark): number =>
 
 const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
+const hasPose = (p: PoseData) => !!p.landmarks && p.landmarks.length >= 33;
+const hipMid = (f: PoseData) => ({ x: (f.landmarks[23].x + f.landmarks[24].x) / 2, y: (f.landmarks[23].y + f.landmarks[24].y) / 2 });
+const shoulderMidY = (f: PoseData) => (f.landmarks[11].y + f.landmarks[12].y) / 2;
+
+/** Median shoulder-line-to-hip-line height: the pupil's own ruler, so thresholds hold at any distance from the camera. */
+const torsoLength = (frames: PoseData[]): number => {
+    const t = frames.map(f => Math.abs(hipMid(f).y - shoulderMidY(f))).sort((a, b) => a - b);
+    return Math.max(t[Math.floor(t.length / 2)] ?? 0, 1e-3);
+};
+
+/**
+ * Valid ball sightings, or none if the "ball" never moves. A detection that sits in
+ * the same spot in every frame is a floor spot, cone or bag the detector latched
+ * onto, and trusting it points the throw the wrong way.
+ */
+function movingBallFrames(frames: PoseData[]): PoseData[] {
+    const seen = frames.filter(f => f.ball?.isValid && f.ball.centerNormalized);
+    if (seen.length < 2) return seen;
+    const xs = seen.map(f => f.ball!.centerNormalized!.x), ys = seen.map(f => f.ball!.centerNormalized!.y);
+    const spread = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    return spread < 0.03 ? [] : seen;
+}
+
+export interface StepEvent {
+    /** Frame index where the foot has clearly left its starting spot. */
+    onset: number;
+    /** Frame index where the step is (near enough) complete — about when an underhand ball is released. */
+    plant: number;
+    ankle: 27 | 28;
+    direction: 'left' | 'right';
+}
+
+/**
+ * The stepping foot is the one that moves: the first ankle to travel more than half
+ * a torso length sideways from where it started. The way it travels is the way the
+ * pupil is throwing. Both hold whether or not MediaPipe has swapped left and right.
+ * Only frames before `end` are searched.
+ */
+export function findStep(poseData: PoseData[], end = poseData.length): StepEvent | null {
+    const frames = poseData.filter(hasPose);
+    if (frames.length < 3) return null;
+    const aspect = frames[0].aspect ?? 1;
+    const T = torsoLength(frames);
+    const startX = (a: 27 | 28) => (frames[0].landmarks[a].x + frames[1].landmarks[a].x) / 2;
+    const moved = (i: number, a: 27 | 28) => (frames[i].landmarks[a].x - startX(a)) * aspect / T;
+
+    for (let i = 2; i < Math.min(end, frames.length); i++) {
+        for (const ankle of [27, 28] as const) {
+            if (Math.abs(moved(i, ankle)) <= 0.5) continue;
+            const reach = frames.slice(i, i + 6).map((_, k) => Math.abs(moved(i + k, ankle)));
+            const plant = i + reach.findIndex(r => r >= 0.9 * Math.max(...reach));
+            return { onset: i, plant, ankle, direction: moved(i, ankle) > 0 ? 'right' : 'left' };
+        }
+    }
+    return null;
+}
+
+/**
+ * How high the rolling hand is at the back of the backswing, before the step lands.
+ * The rolling hand is whichever wrist gets furthest behind the hips (away from the
+ * target); its height is read in that same frame against the pupil's own hip and
+ * shoulder lines. Needs densely sampled frames (~8 fps): the top of a backswing
+ * lasts a fraction of a second and falls between 1-per-second samples.
+ * `timestamp` on each frame must be seconds into the clip.
+ */
+export function measureBackswing(poseData: PoseData[]): BackswingMeasure | null {
+    const frames = poseData.filter(hasPose);
+    const step = findStep(frames);
+    if (!step) return null;
+    const aspect = frames[0].aspect ?? 1;
+    const T = torsoLength(frames);
+    const away = step.direction === 'right' ? -1 : 1;
+
+    let best = { reach: -Infinity, i: -1, wrist: 15 as 15 | 16 };
+    for (let i = 0; i <= step.plant; i++) {
+        for (const wrist of [15, 16] as const) {
+            const reach = away * (frames[i].landmarks[wrist].x - hipMid(frames[i]).x) * aspect / T;
+            if (reach > best.reach) best = { reach, i, wrist };
+        }
+    }
+    const f = frames[best.i];
+    const hipY = hipMid(f).y, torso = hipY - shoulderMidY(f);
+    if (torso <= 1e-3) return null;
+    return {
+        height: (hipY - f.landmarks[best.wrist].y) / torso,
+        reach: best.reach,
+        time: f.timestamp ?? best.i,
+    };
+}
+
 /**
  * Resolve throw/step orientation from a sequence of pose frames without trusting
  * MediaPipe's anatomical left/right labels for a side-on subject.
@@ -95,13 +202,32 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
 
     const hipMidX = (f: PoseData) => (f.landmarks[23].x + f.landmarks[24].x) / 2;
     const shoulderMidX = (f: PoseData) => (f.landmarks[11].x + f.landmarks[12].x) / 2;
-    const ballFrames = frames.filter(f => f.ball && f.ball.isValid);
+    const ballFrames = movingBallFrames(frames);
 
     // --- 1. Release frame + active window (setup → release; excludes any turn-around tail) ---
+    // The step is searched only up to a tracked release, so feet moving in a
+    // turn-around afterwards can't be mistaken for it. One sighting can't show
+    // when the ball left the hand, so it takes two to set the release.
+    const ballReleaseIdx = ballFrames.length >= 2 ? frames.lastIndexOf(ballFrames[ballFrames.length - 1]) : -1;
+    const ballTravel = (): ScreenSide => {
+        const x0 = ballFrames[0]?.ball?.centerNormalized?.x, x1 = ballFrames[ballFrames.length - 1]?.ball?.centerNormalized?.x;
+        return typeof x0 === 'number' && typeof x1 === 'number' && Math.abs(x1 - x0) > 0.04 ? (x1 > x0 ? 'right' : 'left') : 'unknown';
+    };
+    let step = findStep(frames, ballReleaseIdx >= 0 ? ballReleaseIdx + 1 : frames.length);
+    if (!step && ballReleaseIdx >= 0) {
+        // The ball is often only tracked while held at setup, so its "last sighting"
+        // comes before the step. Take a later step — unless it heads the opposite
+        // way to the ball, as a turn-around after a real release does.
+        const late = findStep(frames);
+        if (late && (ballTravel() === 'unknown' || ballTravel() === late.direction)) step = late;
+    }
     let releaseIdx: number;
-    if (ballFrames.length > 0) {
+    if (step && step.onset > ballReleaseIdx) {
+        // No ball in hand after the step began: an underhand ball leaves the hand about as the step lands.
+        releaseIdx = step.plant;
+    } else if (ballReleaseIdx >= 0) {
         // Last frame the ball was still tracked near the thrower.
-        releaseIdx = frames.lastIndexOf(ballFrames[ballFrames.length - 1]);
+        releaseIdx = ballReleaseIdx;
     } else {
         // No ball: use the frame (within the first 80%) where the more-active wrist is
         // horizontally furthest from the shoulder line — the extended release/​follow-through.
@@ -127,7 +253,14 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
         if (lmVis(a[15]) > 0.5 && lmVis(b[15]) > 0.5) move15 += Math.hypot(b[15].x - a[15].x, b[15].y - a[15].y);
         if (lmVis(a[16]) > 0.5 && lmVis(b[16]) > 0.5) move16 += Math.hypot(b[16].x - a[16].x, b[16].y - a[16].y);
     }
-    const throwingWristIndex: 15 | 16 = move16 >= move15 ? 16 : 15;
+    // With a step to go on, the throwing hand is the one that swings furthest back,
+    // away from the target — a backswing, not just busy hands.
+    let throwingWristIndex: 15 | 16 = move16 >= move15 ? 16 : 15;
+    if (step) {
+        const away = step.direction === 'right' ? -1 : 1;
+        const back = (w: 15 | 16) => Math.max(...active.map(f => away * (f.landmarks[w].x - hipMidX(f))));
+        throwingWristIndex = back(16) >= back(15) ? 16 : 15;
+    }
     const throwingAnkleIndex: 27 | 28 = throwingWristIndex === 16 ? 28 : 27;
     const wristRatio = Math.max(move15, move16) / (Math.min(move15, move16) + 1e-6);
 
@@ -160,12 +293,14 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
     const faceOffset = mean(active.map(f => f.landmarks[0].x - hipMidX(f)));
     const faceDir: ScreenSide = Math.abs(faceOffset) > 0.03 ? (faceOffset > 0 ? 'right' : 'left') : 'unknown';
 
+    // A step is the most direct evidence: the foot travels toward the target.
     const throwDirection: ScreenSide =
-        ballDir !== 'unknown' ? ballDir
+        step ? step.direction
+        : ballDir !== 'unknown' ? ballDir
         : ballTravelDir !== 'unknown' ? ballTravelDir
         : wristDir !== 'unknown' ? wristDir
         : faceDir;
-    notes.push(`dir ball=${ballDir} ballTravel=${ballTravelDir} wrist=${wristDir} face=${faceDir} -> ${throwDirection}`);
+    notes.push(`dir step=${step ? `${step.direction}(ankle ${step.ankle} @${step.onset})` : 'none'} ball=${ballDir} ballTravel=${ballTravelDir} wrist=${wristDir} face=${faceDir} -> ${throwDirection}`);
 
     // --- 4. Lead / trailing ankle in a window around release (clamped to the active window) ---
     const relWin = active.slice(Math.max(0, releaseIdx - 2), releaseIdx + 1)
@@ -175,7 +310,10 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
 
     let leadAnkleIndex: 27 | 28 | null = null;
     let trailAnkleIndex: 27 | 28 | null = null;
-    if (throwDirection !== 'unknown' && Math.abs(ankle27x - ankle28x) > 0.02) {
+    if (step) {
+        leadAnkleIndex = step.ankle;
+        trailAnkleIndex = step.ankle === 28 ? 27 : 28;
+    } else if (throwDirection !== 'unknown' && Math.abs(ankle27x - ankle28x) > 0.02) {
         const largerX: 27 | 28 = ankle28x > ankle27x ? 28 : 27;
         const smallerX: 27 | 28 = largerX === 28 ? 27 : 28;
         leadAnkleIndex = throwDirection === 'right' ? largerX : smallerX;
@@ -197,7 +335,27 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
     notes.push(`shoulderRatio=${shoulderRatio.toFixed(2)} visAsym=${visAsym.toFixed(2)} sideOn=${sideOn}`);
 
     // --- 6. Coordination (swap-invariant: wrist & ankle indices flip together) ---
-    const ipsilateralStep = leadAnkleIndex === null ? null : leadAnkleIndex === throwingAnkleIndex;
+    let ipsilateralStep = leadAnkleIndex === null ? null : leadAnkleIndex === throwingAnkleIndex;
+    if (step) {
+        // MediaPipe can swap left/right on some frames and not others, so arm and foot
+        // picked from different frames can disagree. Judge both inside the SAME frame,
+        // as a teacher would from one freeze-frame, around the step: the rolling hand
+        // is the one well out from the body, the lead foot the one nearer the target.
+        const aspect = frames[0].aspect ?? 1, T = torsoLength(frames);
+        const votes: boolean[] = [];
+        for (let i = step.onset; i <= Math.min(frames.length - 1, step.plant + 1); i++) {
+            const lm = frames[i].landmarks, hx = hipMidX(frames[i]);
+            const out15 = Math.abs(lm[15].x - hx), out16 = Math.abs(lm[16].x - hx);
+            const feetApart = Math.abs(lm[27].x - lm[28].x) * aspect / T;
+            if (Math.max(out15, out16) < 1.5 * Math.min(out15, out16) || feetApart < 0.3) continue;
+            const wrist: 15 | 16 = out16 > out15 ? 16 : 15;
+            const lead: 27 | 28 = (lm[27].x > lm[28].x) === (step.direction === 'right') ? 27 : 28;
+            votes.push(lead === (wrist === 16 ? 28 : 27));
+        }
+        const same = votes.filter(Boolean).length, opposite = votes.length - same;
+        if (votes.length) ipsilateralStep = same === opposite ? null : same > opposite;
+        notes.push(`coordination votes same=${same} opposite=${opposite}`);
+    }
 
     // --- 7. Labels ---
     // MediaPipe convention: 27 = left ankle, 28 = right ankle (only trustworthy when !sideOn).
@@ -212,7 +370,7 @@ export function resolveThrowOrientation(poseData: PoseData[]): ThrowOrientation 
     }
 
     const confidence: 'high' | 'low' =
-        throwDirection !== 'unknown' && leadAnkleIndex !== null && (ballFrames.length >= 2 || wristRatio > 1.15)
+        throwDirection !== 'unknown' && leadAnkleIndex !== null && (!!step || ballFrames.length >= 2 || wristRatio > 1.15)
             ? 'high' : 'low';
 
     return {
@@ -233,7 +391,7 @@ class PoseDetectionService {
     // Helper to load vision tasks
     private async createVision() {
         // Pinned version to match package.json to prevent WASM/JS mismatch
-        const MP_VERSION = '0.10.22-rc.20250304';
+        const MP_VERSION = '1.0.1';
         return await FilesetResolver.forVisionTasks(
             `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`
         );

@@ -18,23 +18,30 @@ export interface Criterion {
   teacherSet: boolean;      // true when the teacher decided this one
 }
 
+const toResult = (mark: string): CriterionResult =>
+  mark.startsWith('✅') ? 'met' : mark.startsWith('❌') ? 'missed' : 'unsure';
+
 /**
- * Pulls the checklist out of a Phase 2 grading. The grader writes a table
- * `| # | Criterion | Result | Note |` with ✅/❌/⚠️ in the Result column; the
- * criterion is the cell just before the mark.
+ * Pulls the checklist out of a Phase 2 grading. Claude writes a table
+ * `| # | Criterion | Result | Note |` with ✅/❌/⚠️ in the Result column (the
+ * criterion is the cell just before the mark). Gemini often writes bullets
+ * instead: `* ✅ **Face Target:** Observed…`.
  */
 export const parseAiCriteria = (text: string): { name: string; result: CriterionResult }[] => {
   const criteria: { name: string; result: CriterionResult }[] = [];
+  const add = (name: string, mark: string) => {
+    const clean = name.replace(/\*\*/g, '').trim();
+    if (clean && !criteria.some(c => c.name === clean)) criteria.push({ name: clean, result: toResult(mark) });
+  };
   for (const line of text.split('\n')) {
-    if (!line.trim().startsWith('|')) continue;
-    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-    const markAt = cells.findIndex(c => /^(✅|❌|⚠)/.test(c));
-    if (markAt < 1) continue;
-    const mark = cells[markAt];
-    criteria.push({
-      name: cells[markAt - 1].replace(/\*\*/g, ''),
-      result: mark.startsWith('✅') ? 'met' : mark.startsWith('❌') ? 'missed' : 'unsure',
-    });
+    if (line.trim().startsWith('|')) {
+      const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+      const markAt = cells.findIndex(c => /^(✅|❌|⚠)/.test(c));
+      if (markAt >= 1) add(cells[markAt - 1], cells[markAt]);
+      continue;
+    }
+    const bullet = line.match(/^\s*(?:[*\-•]|\d+\.)\s+(✅|❌|⚠️?)\s*\*{0,2}([^:*\n]+?)\*{0,2}\s*:/);
+    if (bullet) add(bullet[2], bullet[1]);
   }
   return criteria;
 };

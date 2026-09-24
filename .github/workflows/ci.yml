@@ -37,6 +37,10 @@ jobs:
       - name: Typecheck api/
         run: yarn typecheck:api
 
+      # Blocking. Unit tests for the pose-analysis maths (Vitest, *.test.ts).
+      - name: Run tests
+        run: yarn test
+
       # Not a gate yet — @types/react and @types/react-dom are missing from
       # devDependencies, so tsc reports errors that aren't real. Once those
       # are installed and the real errors are cleared, drop continue-on-error.
