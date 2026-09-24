@@ -203,6 +203,8 @@ interface LessonListProps {
   onPlan: () => void;
   onShow: (lesson: Lesson) => void;
   onDelete: (lesson: Lesson) => void;
+  onPairs: (lesson: Lesson) => void;
+  namedCounts: Record<string, number>; // lesson id → pupils named in its pairs
 }
 
 const LessonRow: React.FC<{
@@ -210,7 +212,9 @@ const LessonRow: React.FC<{
   isCurrent: boolean;
   onShow: () => void;
   onDelete: () => void;
-}> = ({ lesson, isCurrent, onShow, onDelete }) => (
+  onPairs: () => void;
+  named: number;
+}> = ({ lesson, isCurrent, onShow, onDelete, onPairs, named }) => (
   <li
     className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center gap-3 ${
       isCurrent
@@ -236,6 +240,17 @@ const LessonRow: React.FC<{
       {lesson.objective && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{lesson.objective}</p>}
     </div>
     <div className="flex gap-2 shrink-0">
+      <button
+        type="button"
+        onClick={onPairs}
+        title="Name the pupils in each pair"
+        className="px-3 py-2 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer"
+      >
+        👥 Pairs{' '}
+        <span className={named ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}>
+          {named}/{lesson.pairCount * 2}
+        </span>
+      </button>
       {!isCurrent && (
         <button
           type="button"
@@ -266,6 +281,8 @@ export const LessonList: React.FC<LessonListProps> = ({
   onPlan,
   onShow,
   onDelete,
+  onPairs,
+  namedCounts,
 }) => {
   const today = todayIso();
   const upcoming = lessons.filter((l) => l.lessonDate >= today).reverse(); // soonest first
@@ -283,6 +300,8 @@ export const LessonList: React.FC<LessonListProps> = ({
               isCurrent={l.id === currentLessonId}
               onShow={() => onShow(l)}
               onDelete={() => onDelete(l)}
+              onPairs={() => onPairs(l)}
+              named={namedCounts[l.id] ?? 0}
             />
           ))}
         </ul>

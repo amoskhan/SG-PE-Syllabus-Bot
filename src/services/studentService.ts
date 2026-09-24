@@ -14,7 +14,7 @@ const mapStudent = (row: any): Student => ({
     createdAt: new Date(row.created_at),
 });
 
-const mapAnalysis = (row: any): SkillAnalysis => ({
+export const mapAnalysis = (row: any): SkillAnalysis => ({
     id: row.id,
     studentId: row.student_id,
     skillName: row.skill_name,
@@ -27,6 +27,13 @@ const mapAnalysis = (row: any): SkillAnalysis => ({
     tokenUsage: row.token_usage ?? undefined,
     summarised: row.summarised ?? false,
     createdAt: new Date(row.created_at),
+    teacherCriteria: row.teacher_criteria ?? undefined,
+    teacherLevel: row.teacher_level ?? undefined,
+    teacherReviewedAt: row.teacher_reviewed_at ? new Date(row.teacher_reviewed_at) : undefined,
+    source: row.source === 'practice_station' ? 'practice_station' : 'chat',
+    lessonId: row.lesson_id ?? undefined,
+    submissionId: row.submission_id ?? undefined,
+    performer: row.performer ?? undefined,
 });
 
 // ─── Students ─────────────────────────────────────────────────────────────────
@@ -66,6 +73,54 @@ export const getOrCreateStudent = async (
 
     if (error) { console.error('createStudent error:', error); return null; }
     return mapStudent(created);
+};
+
+/**
+ * Rename a student, or change their index number or class. Returns
+ * 'duplicate' when another of this teacher's students already has that index
+ * number (students are unique per teacher + index number).
+ */
+export const updateStudent = async (
+    studentId: string,
+    { indexNumber, name, studentClass }: { indexNumber: string; name: string; studentClass?: string }
+): Promise<Student | 'duplicate' | null> => {
+    const { data, error } = await supabase
+        .from('students')
+        .update({ index_number: indexNumber, name, class: studentClass || null })
+        .eq('id', studentId)
+        .select()
+        .single();
+    if (error) {
+        if (error.code === '23505') return 'duplicate';
+        console.error('updateStudent error:', error);
+        return null;
+    }
+    return mapStudent(data);
+};
+
+/**
+ * Delete a student with all their gradings and graded videos. The gradings go
+ * with the row (on delete cascade); the video files have to be removed from
+ * Storage separately, and that's done first while their paths are still known.
+ */
+export const deleteStudent = async (studentId: string): Promise<boolean> => {
+    // Only videos from chat gradings: a Practice Station grading points at the
+    // pair's clip, which still belongs to the lesson in the Review Tray.
+    const { data: rows } = await supabase
+        .from('skill_analyses')
+        .select('video_url')
+        .eq('student_id', studentId)
+        .neq('source', 'practice_station');
+    const paths = (rows ?? []).map(r => r.video_url).filter((p): p is string => !!p);
+    if (paths.length) {
+        // Best effort: a video that fails to delete shouldn't keep the student.
+        const { error } = await supabase.storage.from('student-videos').remove(paths);
+        if (error) console.warn('deleteStudent: some videos were not removed:', error);
+    }
+
+    const { error } = await supabase.from('students').delete().eq('id', studentId);
+    if (error) { console.error('deleteStudent error:', error); return false; }
+    return true;
 };
 
 // ─── Analyses ─────────────────────────────────────────────────────────────────
@@ -260,6 +315,30 @@ export const saveAnalysis = async (entry: {
         summarised: false,
     });
     if (error) console.error('saveAnalysis error:', error);
+};
+
+/**
+ * Save (or clear, with `null`) a teacher's corrections to one grading.
+ * Also marks the grading unsummarised so tonight's summary job rewrites the
+ * pupil's AI note from the corrected result.
+ */
+export const saveTeacherReview = async (
+    analysisId: string,
+    review: { criteria: Record<string, 'met' | 'missed'>; level: string } | null,
+): Promise<SkillAnalysis | null> => {
+    const { data, error } = await supabase
+        .from('skill_analyses')
+        .update({
+            teacher_criteria: review?.criteria ?? null,
+            teacher_level: review?.level ?? null,
+            teacher_reviewed_at: review ? new Date().toISOString() : null,
+            summarised: false,
+        })
+        .eq('id', analysisId)
+        .select()
+        .single();
+    if (error) { console.error('saveTeacherReview error:', error); return null; }
+    return mapAnalysis(data);
 };
 
 export const getAnalysisHistory = async (studentId: string): Promise<SkillAnalysis[]> => {

@@ -29,6 +29,19 @@ import {
   getLocalLessonNames,
 } from '../services/lessonService';
 import { LessonPlanForm, LessonList } from '../components/classroom/LessonPlanner';
+import { PairAssignment } from '../components/classroom/PairAssignment';
+import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
+import { Student, SkillAnalysis } from '../types';
+import { getStudents } from '../services/studentService';
+import {
+  PairSlot,
+  Performer,
+  fetchPairSlots,
+  fetchSubmissionGradings,
+  sameClass,
+  setPairSlot,
+  slotKey,
+} from '../services/pairService';
 
 /** What a pupil's phone needs to join a lesson — the same data the class QR carries. */
 export interface BoardLessonLink {
@@ -41,7 +54,6 @@ export interface BoardLessonLink {
 
 interface TeacherClassroomBoardProps {
   onOpenChat: () => void;
-  onOpenStudentSession: (lesson: BoardLessonLink) => void;
   teacherId?: string; // Signed-in teacher's Supabase UUID — embedded in QR so students upload to their bucket
 }
 
@@ -103,10 +115,9 @@ const VideoBlobPlayer: React.FC<{ blob?: Blob; videoUrl?: string; performer: str
 
 export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   onOpenChat,
-  onOpenStudentSession,
   teacherId,
 }) => {
-  const [viewMode, setViewMode] = useState<'PROJECTOR' | 'REVIEW_TRAY' | 'LESSONS' | 'PLAN_LESSON'>('PROJECTOR');
+  const [viewMode, setViewMode] = useState<'PROJECTOR' | 'REVIEW_TRAY' | 'LESSONS' | 'PLAN_LESSON' | 'PAIRS'>('PROJECTOR');
 
   // Planned lessons (Supabase) and the one on this device's projector
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -129,12 +140,35 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     }
   };
 
+  // Named pairs: who is Apple and Banana in each pair of each lesson
+  const [students, setStudents] = useState<Student[]>([]);
+  const [pairSlots, setPairSlots] = useState<PairSlot[]>([]);
+  const [pairsLessonId, setPairsLessonId] = useState<string | null>(null);
+  const pairsLesson = lessons.find((l) => l.id === pairsLessonId) ?? null;
+
+  const loadPairSlots = async () => setPairSlots(await fetchPairSlots());
+
   // Sign-in can finish after the board mounts — load that teacher's lessons
   useEffect(() => {
     setCurrentLessonIdState(getCurrentLessonId(teacherId));
-    if (teacherId) loadLessons();
-    else setLessonsLoading(false);
+    if (teacherId) {
+      loadLessons();
+      getStudents(teacherId).then(setStudents);
+      loadPairSlots();
+    } else setLessonsLoading(false);
   }, [teacherId]);
+
+  const studentById = new Map<string, Student>(students.map((s) => [s.id, s]));
+  const slotStudent = (lessonId: string, pairNumber: number, performer: Performer) => {
+    const slot = pairSlots.find(
+      (p) => p.lessonId === lessonId && p.pairNumber === pairNumber && p.performer === performer
+    );
+    return slot ? studentById.get(slot.studentId) : undefined;
+  };
+  const namedCounts = pairSlots.reduce<Record<string, number>>((acc, p) => {
+    acc[p.lessonId] = (acc[p.lessonId] ?? 0) + 1;
+    return acc;
+  }, {});
 
   // Review Tray shows every lesson by default so older work can still be marked
   const [reviewLessonFilter, setReviewLessonFilter] = useState<string>('ALL');
@@ -276,6 +310,52 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   const [feedbackSent, setFeedbackSent] = useState(false);
 
+  // The copies of the open submission's analyses in the pupils' own records
+  const [subGradings, setSubGradings] = useState<Partial<Record<Performer, SkillAnalysis>>>({});
+  useEffect(() => {
+    setSubGradings({});
+    if (activeReviewSub && teacherId) fetchSubmissionGradings(activeReviewSub.id).then(setSubGradings);
+  }, [activeReviewSub?.id, teacherId]);
+
+  // Name (or re-name) a pupil straight from the tray; the database then files
+  // this pair's analysis under them, so re-read the gradings afterwards.
+  const assignFromTray = async (sub: PairSubmissionRecord, performer: Performer, studentId: string | null) => {
+    await setPairSlot(sub.lessonId, sub.pairNumber, performer, studentId);
+    await loadPairSlots();
+    setSubGradings(await fetchSubmissionGradings(sub.id));
+  };
+
+  const pupilPicker = (sub: PairSubmissionRecord, performer: Performer) => {
+    const planned = lessons.find((l) => l.id === sub.lessonId);
+    if (!planned) return null; // older submissions have no lesson to attach pairs to
+    const current = slotStudent(sub.lessonId, sub.pairNumber, performer);
+    const inClass = students.filter((st) => sameClass(st.class, planned.className));
+    const rest = students.filter((st) => !sameClass(st.class, planned.className));
+    const opt = (st: Student) => (
+      <option key={st.id} value={st.id}>
+        #{st.indexNumber} {st.name}
+      </option>
+    );
+    return (
+      <label className="flex items-center gap-2 mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+        <span className="shrink-0 font-bold">Pupil:</span>
+        <select
+          value={current?.id ?? ''}
+          onChange={(e) => assignFromTray(sub, performer, e.target.value || null)}
+          className={`flex-1 min-w-0 px-2 py-1 rounded-lg border text-xs font-semibold bg-white dark:bg-zinc-900 ${
+            current
+              ? 'border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-slate-200'
+              : 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+          }`}
+        >
+          <option value="">Not named — pick who this is</option>
+          {inClass.length > 0 && <optgroup label={`Class ${planned.className}`}>{inClass.map(opt)}</optgroup>}
+          {rest.length > 0 && <optgroup label="Other classes">{rest.map(opt)}</optgroup>}
+        </select>
+      </label>
+    );
+  };
+
   // Send just the teacher's comment back to the pair — no status change, no modal close.
   const handleSendFeedback = async (sub: PairSubmissionRecord) => {
     const text = teacherFeedbackText.trim();
@@ -327,7 +407,10 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     reviewLessonFilter === 'ALL' ? submissions : submissions.filter((s) => s.lessonId === reviewLessonFilter);
 
   const handleDelete = async (sub: PairSubmissionRecord) => {
-    if (!confirm(`Delete Pair #${sub.pairNumber} — ${sub.skillName}? This cannot be undone.`)) return;
+    if (!confirm(
+      `Delete Pair #${sub.pairNumber} — ${sub.skillName}? This cannot be undone.\n\n` +
+      `Any grading already filed under a pupil's student record stays there, but its video will be gone.`
+    )) return;
 
     // 1. Register ID immediately so the 3s polling loop skips it going forward
     deletedIdsRef.current.add(sub.id);
@@ -378,7 +461,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
           <button
             onClick={() => setViewMode('LESSONS')}
             className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              viewMode === 'LESSONS' || viewMode === 'PLAN_LESSON'
+              viewMode === 'LESSONS' || viewMode === 'PLAN_LESSON' || viewMode === 'PAIRS'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
             }`}
@@ -404,13 +487,6 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
         {/* Quick Launch Buttons */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => (lessonLink ? onOpenStudentSession(lessonLink) : setViewMode('LESSONS'))}
-            title={lessonLink ? 'Join the lesson on the projector as a pupil' : 'Put a lesson on the projector first'}
-            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1 cursor-pointer"
-          >
-            <span>📱 Test iPad Flow</span>
-          </button>
           <button
             onClick={onOpenChat}
             className="px-3 py-2 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200"
@@ -632,10 +708,31 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               onPlan={() => setViewMode('PLAN_LESSON')}
               onShow={(l) => showLessonOnProjector(l.id)}
               onDelete={handleDeleteLesson}
+              onPairs={(l) => {
+                setPairsLessonId(l.id);
+                setViewMode('PAIRS');
+              }}
+              namedCounts={namedCounts}
             />
           ) : (
             <p className="text-sm text-slate-500">Sign in to plan and save lessons.</p>
           )}
+        </div>
+      )}
+
+      {/* VIEW: NAME THE PUPILS IN EACH PAIR */}
+      {viewMode === 'PAIRS' && pairsLesson && (
+        <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-3xl mx-auto w-full">
+          <PairAssignment
+            lesson={pairsLesson}
+            lessons={lessons}
+            students={students}
+            slots={pairSlots}
+            teacherId={teacherId}
+            onSlotsChanged={loadPairSlots}
+            onStudentAdded={(s) => setStudents((prev) => (prev.some((p) => p.id === s.id) ? prev : [...prev, s]))}
+            onBack={() => setViewMode('LESSONS')}
+          />
         </div>
       )}
 
@@ -714,6 +811,13 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                       <div>
                         <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">
                           Pair #{sub.pairNumber}
+                          {(slotStudent(sub.lessonId, sub.pairNumber, 'apple') || slotStudent(sub.lessonId, sub.pairNumber, 'banana')) && (
+                            <span className="font-semibold text-slate-500 dark:text-slate-400">
+                              {' · '}
+                              {[slotStudent(sub.lessonId, sub.pairNumber, 'apple')?.name ?? 'Apple',
+                                slotStudent(sub.lessonId, sub.pairNumber, 'banana')?.name ?? 'Banana'].join(' & ')}
+                            </span>
+                          )}
                         </h4>
                         <span className="text-[10px] text-slate-400">{sub.skillName}</span>
                         <span className="block text-[10px] text-slate-400 truncate">
@@ -745,14 +849,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
                   <div className="p-4 space-y-2 text-xs">
                     <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                      <span>🍌 Banana Performed:</span>
+                      <span>🍌 {slotStudent(sub.lessonId, sub.pairNumber, 'banana')?.name ?? 'Banana'} performed:</span>
                       <span className="font-bold text-indigo-600">
                         {sub.appleRole.cues.filter((c) => c.isObserved).length} / {sub.appleRole.cues.length} Cues Met
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                      <span>🍎 Apple Performed:</span>
+                      <span>🍎 {slotStudent(sub.lessonId, sub.pairNumber, 'apple')?.name ?? 'Apple'} performed:</span>
                       <span className="font-bold text-indigo-600">
                         {sub.bananaRole.cues.filter((c) => c.isObserved).length} / {sub.bananaRole.cues.length} Cues Met
                       </span>
@@ -836,9 +940,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               {/* Turn 1: Banana Performed */}
               <div className="p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-2xl border border-slate-200 dark:border-zinc-700">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-amber-600">Turn 1: Banana Performing</span>
-                  <span className="text-[10px] text-slate-400">Evaluator: Apple</span>
+                  <span className="text-xs font-bold text-amber-600">
+                    Turn 1: 🍌 {slotStudent(activeReviewSub.lessonId, activeReviewSub.pairNumber, 'banana')?.name ?? 'Banana'} performing
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Evaluator: {slotStudent(activeReviewSub.lessonId, activeReviewSub.pairNumber, 'apple')?.name ?? 'Apple'}
+                  </span>
                 </div>
+                {pupilPicker(activeReviewSub, 'banana')}
                 <VideoBlobPlayer
                   blob={activeReviewSub.appleRole.videoBlob}
                   videoUrl={activeReviewSub.appleRole.videoUrl}
@@ -859,9 +968,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               {/* Turn 2: Apple Performed */}
               <div className="p-4 bg-slate-50 dark:bg-zinc-800/60 rounded-2xl border border-slate-200 dark:border-zinc-700">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-red-600">Turn 2: Apple Performing</span>
-                  <span className="text-[10px] text-slate-400">Evaluator: Banana</span>
+                  <span className="text-xs font-bold text-red-600">
+                    Turn 2: 🍎 {slotStudent(activeReviewSub.lessonId, activeReviewSub.pairNumber, 'apple')?.name ?? 'Apple'} performing
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Evaluator: {slotStudent(activeReviewSub.lessonId, activeReviewSub.pairNumber, 'banana')?.name ?? 'Banana'}
+                  </span>
                 </div>
+                {pupilPicker(activeReviewSub, 'apple')}
                 <VideoBlobPlayer
                   blob={activeReviewSub.bananaRole.videoBlob}
                   videoUrl={activeReviewSub.bananaRole.videoUrl}
@@ -966,7 +1080,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                       <div className="bg-emerald-950/80 dark:bg-emerald-950 px-4 py-2.5 flex items-center gap-2">
                         <span className="text-lg">{who === 'apple' ? '🍎' : '🍌'}</span>
                         <span className="font-black text-white text-sm">
-                          AI Assessment Checklist — {entry.studentLabel}
+                          AI Assessment Checklist — {slotStudent(activeReviewSub.lessonId, activeReviewSub.pairNumber, who)?.name ?? entry.studentLabel}
                         </span>
                         <span className="ml-auto text-[10px] text-emerald-300">
                           {entry.modelUsed} · {new Date(entry.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -977,6 +1091,18 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
                           {entry.analysisText}
                         </p>
+                        {/* Same review as the Student Dashboard: it is the same record */}
+                        {subGradings[who] ? (
+                          <TeacherReviewPanel
+                            key={subGradings[who]!.id}
+                            analysis={subGradings[who]!}
+                            onSaved={(updated) => setSubGradings((prev) => ({ ...prev, [who]: updated }))}
+                          />
+                        ) : (
+                          <p className="mt-3 text-[11px] text-amber-700 dark:text-amber-400">
+                            Name this pupil above to add this analysis to their student record and review it.
+                          </p>
+                        )}
                       </div>
                     </div>
                   );

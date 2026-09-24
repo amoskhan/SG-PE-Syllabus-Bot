@@ -69,6 +69,15 @@ export interface SkillAnalysis {
   tokenUsage?: number;
   summarised: boolean;
   createdAt: Date;
+  // Teacher's corrections to the AI grading (supabase_teacher_review.sql)
+  teacherCriteria?: Record<string, 'met' | 'missed'>;
+  teacherLevel?: string;
+  teacherReviewedAt?: Date;
+  // Practice Station work filed under this student (supabase_lesson_pairs.sql)
+  source: 'chat' | 'practice_station';
+  lessonId?: string;
+  submissionId?: string;
+  performer?: 'apple' | 'banana';
 }
 
 export interface ChatState {

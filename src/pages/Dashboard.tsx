@@ -64,6 +64,14 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
         student={selectedStudent}
         onBack={() => setSelectedStudent(null)}
         onOpenChat={onOpenChat}
+        onUpdated={s => {
+          setStudents(prev => prev.map(p => (p.id === s.id ? s : p)));
+          setSelectedStudent(s);
+        }}
+        onDeleted={id => {
+          setStudents(prev => prev.filter(p => p.id !== id));
+          setSelectedStudent(null);
+        }}
       />
     );
   }
@@ -201,15 +209,22 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
 
 import { SkillAnalysis } from '../types';
 import { getAnalysisHistory, getSignedVideoUrl } from '../services/studentService';
+import StudentProgressOverview from '../components/dashboard/StudentProgressOverview';
+import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
+import { EditStudentModal, DeleteStudentModal } from '../components/dashboard/StudentManageDialogs';
+import { effectiveLevel } from '../utils/gradingReview';
 
 interface ProfileProps {
   student: Student;
   onBack: () => void;
   onOpenChat: () => void;
+  onUpdated: (s: Student) => void;
+  onDeleted: (id: string) => void;
 }
 
-const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat }) => {
+const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat, onUpdated, onDeleted }) => {
   const [analyses, setAnalyses] = useState<SkillAnalysis[]>([]);
+  const [dialog, setDialog] = useState<'edit' | 'delete' | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -220,8 +235,6 @@ const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat })
       setLoading(false);
     });
   }, [student.id]);
-
-  const skills = Object.keys(student.progressSummary ?? {});
 
   const gradeColor = (level?: string) => {
     switch (level?.toLowerCase()) {
@@ -317,30 +330,46 @@ const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat })
           Back to Dashboard
         </button>
 
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">{student.name}</h1>
-          <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">
-            #{student.indexNumber}{student.class ? ` · ${student.class}` : ''}
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">{student.name}</h1>
+            <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">
+              #{student.indexNumber}{student.class ? ` · ${student.class}` : ''}
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => setDialog('edit')}
+              className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => setDialog('delete')}
+              className="px-3 py-1.5 text-sm rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
         </div>
 
-        {skills.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-              AI Progress Summary
-            </h2>
-            <div className="space-y-3">
-              {skills.map(skill => (
-                <div key={skill} className="border border-slate-200 dark:border-zinc-800 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">{skill}</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {student.progressSummary[skill]}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+        {dialog === 'edit' && (
+          <EditStudentModal
+            student={student}
+            onClose={() => setDialog(null)}
+            onSaved={s => { setDialog(null); onUpdated(s); }}
+          />
         )}
+        {dialog === 'delete' && (
+          <DeleteStudentModal
+            student={student}
+            gradingCount={analyses.length}
+            onClose={() => setDialog(null)}
+            onDeleted={onDeleted}
+          />
+        )}
+
+        <StudentProgressOverview student={student} analyses={analyses} loading={loading} />
 
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
@@ -364,9 +393,10 @@ const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat })
                         const next = isOpen ? null : a.id;
                         setExpandedId(next);
                         // Fetch signed URL once when first opened
-                        if (next && a.videoUrl && !signedUrls[a.id]) {
+                        if (next && a.videoUrl && !(a.id in signedUrls)) {
                           const url = await getSignedVideoUrl(a.videoUrl);
-                          if (url) setSignedUrls(prev => ({ ...prev, [a.id]: url }));
+                          // '' = the file is gone (e.g. deleted from the Review Tray)
+                          setSignedUrls(prev => ({ ...prev, [a.id]: url ?? '' }));
                         }
                       }}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors text-left"
@@ -380,13 +410,20 @@ const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat })
                       {/* Skill */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-slate-700 dark:text-slate-200 truncate">{a.skillName}</p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">{a.modelId ?? '—'}</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                          {a.source === 'practice_station' ? 'Practice Station · ' : ''}{a.modelId ?? '—'}
+                        </p>
                       </div>
 
-                      {/* Grade badge */}
-                      {a.proficiencyLevel && (
-                        <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${gradeColor(a.proficiencyLevel)}`}>
-                          {a.proficiencyLevel}
+                      {/* Grade badge — the teacher's level once they've reviewed it */}
+                      {a.teacherReviewedAt ? (
+                        <span className="hidden sm:inline flex-shrink-0 text-xs text-emerald-600 dark:text-emerald-400">✓ Checked</span>
+                      ) : a.source === 'practice_station' && (
+                        <span className="hidden sm:inline flex-shrink-0 text-xs text-amber-600 dark:text-amber-400">Not checked</span>
+                      )}
+                      {effectiveLevel(a) && (
+                        <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${gradeColor(effectiveLevel(a))}`}>
+                          {effectiveLevel(a)}
                         </span>
                       )}
 
@@ -414,12 +451,20 @@ const StudentProfile: React.FC<ProfileProps> = ({ student, onBack, onOpenChat })
                               />
                             ) : (
                               <div className="w-full h-24 rounded-lg bg-slate-200 dark:bg-zinc-700 flex items-center justify-center text-xs text-slate-400">
-                                Loading video…
+                                {signedUrls[a.id] === '' ? 'Video no longer available' : 'Loading video…'}
                               </div>
                             )}
                           </div>
                         )}
-                        <div className="pt-2 space-y-1">
+                        <TeacherReviewPanel
+                          key={a.id}
+                          analysis={a}
+                          onSaved={updated => setAnalyses(prev => prev.map(x => (x.id === updated.id ? updated : x)))}
+                        />
+                        <p className="mt-4 mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          AI’s original grading
+                        </p>
+                        <div className="space-y-1">
                           {renderAnalysis(a.analysisText)}
                         </div>
                       </div>
