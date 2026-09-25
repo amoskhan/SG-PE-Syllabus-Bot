@@ -23,7 +23,7 @@ Three-tier intent classification routes vague queries to clickable choices and s
 ### FMS Motion Analysis
 Upload a video or record from your camera to get graded feedback on Fundamental Movement Skills.
 
-1. **Pose extraction** — MediaPipe Pose Landmarker tracks 33 landmarks per frame and builds a biomechanics report: camera orientation, throwing arm, arm trajectory, wind-up, backswing height (underhand roll/throw), stepping foot, arm–foot coordination, stance width, knee bend and step detection. See [BIOMECHANICS.md](BIOMECHANICS.md) for how each measure maps to the movement.
+1. **Pose extraction** — MediaPipe Pose Landmarker tracks 33 landmarks per frame and builds a biomechanics report: camera orientation, throwing arm, arm trajectory, wind-up, backswing height (underhand roll/throw), stepping foot, arm–foot coordination, stance width, knee bend and step detection. See [BIOMECHANICS.md](docs/BIOMECHANICS.md) for how each measure maps to the movement.
 2. **Skill identification** — the AI suggests the most likely skills as clickable chips (skip this step by typing the skill name).
 3. **Grading** — each checklist criterion is graded ✅ / ❌ / ⚠️ with frame-level evidence. Proficiency is reported as Beginning / Developing / Competent / Excellent.
 
@@ -88,7 +88,7 @@ yarn test           # Run unit tests (Vitest)
 yarn typecheck:api  # Type-check the api/ functions
 ```
 
-CI runs the tests on every pull request to `main`. Before merging anything big, also run the manual checks in [SMOKE_TEST.md](SMOKE_TEST.md).
+CI runs the tests on every pull request to `main`. Before merging anything big, also run the manual checks in [SMOKE_TEST.md](docs/SMOKE_TEST.md).
 
 ### Environment Variables
 
@@ -98,7 +98,7 @@ CI runs the tests on every pull request to `main`. Before merging anything big, 
 
 ### Database
 
-The Supabase schema lives in the `supabase_*.sql` files at the repo root (tables, RLS policies, pupil functions, lesson pass, AI usage limits).
+The Supabase schema lives in the [`supabase/`](supabase) folder (tables, RLS policies, pupil functions, lesson pass, AI usage limits).
 
 ---
 
@@ -142,8 +142,8 @@ api/
 
 - [MOE PE Syllabus (2024)](https://www.moe.gov.sg/primary/curriculum/syllabus)
 - [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker)
-- [BIOMECHANICS.md](BIOMECHANICS.md) — how the pose measures work
-- [SMOKE_TEST.md](SMOKE_TEST.md) — manual release checks
+- [BIOMECHANICS.md](docs/BIOMECHANICS.md) — how the pose measures work
+- [SMOKE_TEST.md](docs/SMOKE_TEST.md) — manual release checks
 
 <div align="center">
   <sub>Created by Amos Khan</sub>

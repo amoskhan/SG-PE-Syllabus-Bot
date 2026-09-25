@@ -112,7 +112,7 @@ Webcam/Video → MediaPipe (poseDetectionService.ts) → 33 landmarks/frame
 
 **Tables:** `teacher_profiles`, `chat_sessions`, `chat_logs`, `document_chunks` (pgvector)
 
-Full schema + RLS policies: `supabase_teacher_profiles.sql`
+Full schema + RLS policies: `supabase/*.sql` (start with `supabase/supabase_teacher_profiles.sql`)
 
 **Dual-write pattern:** localStorage (instant) + Supabase (cloud). On load: localStorage first, then merge with Supabase (Supabase wins for authenticated users).
 
@@ -164,7 +164,7 @@ Edit `api/upload-pdf.ts` or `api/rag-search.ts` for pipeline changes.
 | `src/services/vision/poseDetectionService.ts` | MediaPipe wrapper |
 | `src/components/video/VideoAnalysisPlayer.tsx` | Video player + skeleton overlay |
 | `src/components/chat/ChatMessage.tsx` | Renders messages, parses `[[SKILL_CHOICES]]` chips |
-| `supabase_teacher_profiles.sql` | Full DB schema + RLS |
+| `supabase/*.sql` | DB schema + RLS |
 
 ---
 
