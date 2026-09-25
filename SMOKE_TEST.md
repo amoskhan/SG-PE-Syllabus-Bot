@@ -29,8 +29,8 @@ Covers: build output, Supabase Auth, `useAuth.ts`.
       Sec 1 games and sports"). Expect **TIER C**: full outcomes
 - [ ] Answer cites real syllabus content, not invented content
 
-Covers: `syllabusRouter.ts` section routing, `[[SYLLABUS_CONTEXT]]`
-injection, `/api/gemini`, `[[SKILL_CHOICES]]` parsing in `ChatMessage.tsx`.
+Covers: `syllabusContext.ts` section extraction, TIER A/B/C prompt rules,
+`/api/gemini`, `[[SKILL_CHOICES]]` parsing in `ChatMessage.tsx`.
 
 ## 3. Motion analysis, both phases — 4 min
 
