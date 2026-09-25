@@ -40,9 +40,9 @@ Follow these steps **in order**:
 ## 2. Updating the PE Syllabus
 
 - Full syllabus text lives in **`src/data/syllabusData.ts`**.
-- Section boundary definitions (for chunking/routing) are in **`src/data/syllabusRouter.ts`**.
-- After editing `syllabusData.ts`, check `syllabusRouter.ts` section boundaries still map correctly — they use string offsets / keyword anchors.
-- The three-tier intent router (TIER A/B/C) logic is also in `syllabusRouter.ts`; update it if new syllabus areas are added.
+- Section extraction (which parts of the syllabus are sent to the AI) is in **`src/data/syllabusContext.ts`**.
+- After editing `syllabusData.ts`, check the start/end patterns in `syllabusContext.ts` still match — they search for heading text.
+- The three-tier intent rules (TIER A/B/C) are in the system prompts of `geminiService.ts` and `claudeService.ts`; update both if new syllabus areas are added.
 
 ---
 
@@ -158,7 +158,7 @@ Edit `api/upload-pdf.ts` or `api/rag-search.ts` for pipeline changes.
 | `src/types.ts` | All TypeScript interfaces |
 | `src/services/ai/aiServiceRegistry.ts` | LLM service factory |
 | `src/data/syllabusData.ts` | Full 2024 MOE PE Syllabus text |
-| `src/data/syllabusRouter.ts` | Three-tier intent classification + section chunking |
+| `src/data/syllabusContext.ts` | Syllabus section extraction for the AI |
 | `src/data/fundamentalMovementSkillsData.ts` | FMS checklists, proficiency rubric, reference image paths |
 | `src/data/skillExamples.ts` | Few-shot grading examples |
 | `src/services/vision/poseDetectionService.ts` | MediaPipe wrapper |

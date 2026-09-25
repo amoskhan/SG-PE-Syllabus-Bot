@@ -57,12 +57,12 @@ Dual-write pattern: localStorage (instant UX) + Supabase (cloud sync). On page l
 
 ### Syllabus Q&A System
 
-Three-tier intent classification in `src/data/syllabusRouter.ts`:
+Three-tier intent classification, written into the system prompts in `geminiService.ts` and `claudeService.ts`:
 - **TIER A** (vague queries): Offer level + area choices
 - **TIER B** (semi-specific): Offer sub-category choices  
 - **TIER C** (specific): Return full outcomes + follow-up suggestions
 
-The entire 2024 PE Syllabus is stored as text in `src/data/syllabusData.ts`. Section routing chunks relevant sections (max 80KB) and injects via `[[SYLLABUS_CONTEXT]]` placeholder in the system instruction. The FMS database with 10 skills and proficiency rubrics is in `src/data/fundamentalMovementSkillsData.ts`.
+The entire 2024 PE Syllabus is stored as text in `src/data/syllabusData.ts`. `src/data/syllabusContext.ts` (`getSyllabusContextMessage()`) pulls out the relevant sections and sends them with the conversation. The FMS database with 10 skills and proficiency rubrics is in `src/data/fundamentalMovementSkillsData.ts`.
 
 **Special response tags** the frontend parses:
 - `[[SKILL_CHOICES: Option1, Option2]]` → rendered as clickable chip buttons
@@ -171,7 +171,7 @@ Y-axis convention: **0 = top of frame, 1 = bottom**. So a smaller Y value = high
 | `src/components/chat/ChatMessage.tsx` | Renders a single message — parses `[[SKILL_CHOICES]]` into chip buttons |
 | `src/data/fundamentalMovementSkillsData.ts` | FMS skill checklists, proficiency rubric, reference image paths |
 | `src/data/syllabusData.ts` | Full 2024 MOE PE Syllabus as plain text |
-| `src/data/syllabusRouter.ts` | Section boundary definitions for syllabus context chunking |
+| `src/data/syllabusContext.ts` | Pulls syllabus sections out of `syllabusData.ts` for the AI (`getSyllabusContextMessage()`) |
 | `src/data/skillExamples.ts` | Few-shot grading examples injected into Phase 2 prompts |
 | `src/hooks/useAuth.ts` | Supabase Auth with Google OAuth |
 | `supabase_teacher_profiles.sql` | Full DB schema including RLS policies |
