@@ -20,16 +20,31 @@ Ask natural-language questions about the 2024 MOE PE Syllabus:
 
 Three-tier intent classification routes vague queries to clickable choices and specific queries to full outcomes, grounded in the syllabus text. Semantic search over uploaded documents is powered by Gemini embeddings + Supabase pgvector.
 
-### FMS Motion Analysis
-Upload a video or record from your camera to get graded feedback on Fundamental Movement Skills.
+### Motion Analysis: FMS & Gymnastics
+Upload a video or record from your camera to get graded feedback. Switch between **FMS** and **Gymnastics** mode in the chat box.
 
 1. **Pose extraction** — MediaPipe Pose Landmarker tracks 33 landmarks per frame and builds a biomechanics report: camera orientation, throwing arm, arm trajectory, wind-up, backswing height (underhand roll/throw), stepping foot, arm–foot coordination, stance width, knee bend and step detection. See [BIOMECHANICS.md](docs/BIOMECHANICS.md) for how each measure maps to the movement.
 2. **Skill identification** — the AI suggests the most likely skills as clickable chips (skip this step by typing the skill name).
 3. **Grading** — each checklist criterion is graded ✅ / ❌ / ⚠️ with frame-level evidence. Proficiency is reported as Beginning / Developing / Competent / Excellent.
 
-10 skills supported: Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble with Hands, Dribble with Feet, Chest Pass, Catch Above Waist, Bounce Pass, Bounce.
+#### Fundamental Movement Skills (10)
+Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble with Hands, Dribble with Feet, Chest Pass, Catch Above Waist, Bounce Pass, Bounce.
 
-Teachers can save a custom rubric per skill; it replaces the standard checklist.
+#### Gymnastics (35)
+Before analysing, the AI asks whether the clip is a **single skill** or a **sequence** of linked skills. For a sequence, it names every skill it sees, then grades each one against its critical elements.
+
+| Group | Skills |
+|---|---|
+| Locomotor | Hopping, Galloping, Sliding, Running, Skipping, Jumping (vertical), Jumping (horizontal), Leaping |
+| Jump Shapes | Tuck, Straddle, Stretch, Pike, Star Jump |
+| Upright Balance | 1-, 2- and 3-Point Balance, Patch Balance |
+| Inverted Balance | Shoulder Stand, Headstand, Wall-supported Handstand, Handstand (Free) |
+| Partner Balance | Partner Counterbalance, Partner Counter-tension |
+| Rolling | Rocking, Egg Roll, Straddle Roll, Log Roll, Forward Roll, Backward Roll |
+| Spinning & Turning | Spinning, Jump Turn, Cartwheel |
+| Vaulting | Forward Straddle Vault, Forward Tuck Vault, Side Flank Vault |
+
+Teachers can save a custom rubric for any FMS or gymnastics skill; it replaces the standard checklist. Lessons can be planned around either an FMS or a gymnastics skill.
 
 ### Classroom: Lessons, Pairs & Practice Station
 - **Lesson planning** — plan each lesson ahead (date, class, level, objective, skill, pairs). Each lesson gets its own class QR code.
