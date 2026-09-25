@@ -108,7 +108,7 @@ Two-phase analysis flow:
 
 #### Biomechanics Report Fields
 
-> For a plain-language explanation of how each field maps to physical movement and known limitations per skill, see [BIOMECHANICS.md](BIOMECHANICS.md).
+> For a plain-language explanation of how each field maps to physical movement and known limitations per skill, see [BIOMECHANICS.md](docs/BIOMECHANICS.md).
 
 Computed independently in `geminiService.ts` and `claudeService.ts`, injected into the LLM prompt before Phase 1:
 
@@ -174,7 +174,7 @@ Y-axis convention: **0 = top of frame, 1 = bottom**. So a smaller Y value = high
 | `src/data/syllabusContext.ts` | Pulls syllabus sections out of `syllabusData.ts` for the AI (`getSyllabusContextMessage()`) |
 | `src/data/skillExamples.ts` | Few-shot grading examples injected into Phase 2 prompts |
 | `src/hooks/useAuth.ts` | Supabase Auth with Google OAuth |
-| `supabase_teacher_profiles.sql` | Full DB schema including RLS policies |
+| `supabase/*.sql` | Database schema, RLS policies and `pupil_*` functions (run in the Supabase SQL editor) |
 
 #### `videoDataCacheRef` — Video Re-hydration
 
