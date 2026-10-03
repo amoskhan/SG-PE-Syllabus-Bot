@@ -135,8 +135,11 @@ export default async function handler(req: any, res: any) {
         }
         const response = (result as any).response || result;
 
-        const text = typeof response.text === 'function' ? response.text() :
-            (response.candidates?.[0]?.content?.parts?.[0]?.text || '');
+        // Gemini 3 sends a longer answer in several parts: join them all (not
+        // just the first), leaving out any "thought" parts
+        const parts: any[] = response.candidates?.[0]?.content?.parts ?? [];
+        const text = parts.filter((part) => !part.thought).map((part) => part.text ?? '').join('')
+            || (typeof response.text === 'string' ? response.text : '');
 
         const usage = response.usageMetadata?.totalTokenCount;
         const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];

@@ -3,7 +3,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Only the connection to Google is faked: each test scripts what Gemini
 // replies, per model, and the route is called as Vercel calls it.
-type Reply = { text: string } | { error: number; retryDelay?: string };
+// A reply's text may come in several parts, as Gemini 3 sends a longer answer
+type Reply = { text: string | string[] } | { error: number; retryDelay?: string };
 const script: Record<string, Reply[]> = {};
 const sent: { model: string; config: any }[] = [];
 
@@ -27,8 +28,9 @@ vi.mock('@google/genai', () => ({
           sent.push({ model, config });
           const reply = script[model]?.shift() ?? { error: 500 };
           if ('error' in reply) throw new FakeApiError(reply.error, reply.retryDelay);
-          // The SDK's reply: the text, and the same text inside its candidate
-          return { text: reply.text, candidates: [{ content: { parts: [{ text: reply.text }] }, finishReason: 'STOP' }] };
+          // The SDK's reply: the whole text, and its parts inside the candidate
+          const parts = ([] as string[]).concat(reply.text);
+          return { text: parts.join(''), candidates: [{ content: { parts: parts.map((text) => ({ text })) }, finishReason: 'STOP' }] };
         },
       }),
     };
@@ -58,6 +60,12 @@ const ask = async (body: Record<string, unknown> = {}) => {
 };
 
 describe('/api/gemini', () => {
+  it('returns the whole answer when Gemini sends it in several parts', async () => {
+    script['gemini-flash-latest'] = [{ text: ['**Travelling**\n1. Hang momentarily', ' on overhead apparatus.\n\n**Balancing**\n1. Balance on hands.'] }];
+    const res = await ask();
+    expect(res.body.text).toBe('**Travelling**\n1. Hang momentarily on overhead apparatus.\n\n**Balancing**\n1. Balance on hands.');
+  });
+
   it('retries a moment of "high demand" (503) and still answers', async () => {
     script['gemini-flash-latest'] = [{ error: 503 }, { text: 'P4 outcomes…' }];
     const res = await ask();
