@@ -2073,6 +2073,9 @@ const App: React.FC = () => {
       // The server's own words to pupils (Practice Station limits, lesson pass) read best as they are
       if (/^You've |ask your teacher/i.test(rawError)) {
         errorText = `⚠️ ${rawError}`;
+      } else if (/Coach Bot is busy/.test(rawError)) {
+        // Every Gemini model's free quota is used up: the server says when to try again
+        errorText = `⚠️ ${rawError.replace(/^\d+:\s*/, '')}`;
       } else if (failedPerformer) {
         errorText = `⚠️ Coach Bot can't analyse ${failedPerformer} right now. You can still tap 📤 Submit final, and your teacher will grade it.`;
       } else if (lower.includes('429') || lower.includes('rate') && lower.includes('limit')) {
