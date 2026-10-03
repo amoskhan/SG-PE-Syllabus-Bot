@@ -17,6 +17,8 @@ const PDF_PAGE_OFFSET = 5;
 export interface SyllabusSection {
   id: string;
   title: string;
+  /** A short name for the chat list, e.g. "P5/6 Net-barrier" */
+  topic: string;
   printedPage: number;
   pdfPage: number;
   /** The section in the syllabus's own words, page footers and stamps removed */
@@ -87,6 +89,20 @@ const AREA_NAMES: Record<Area, string> = {
   pedagogy: 'Pedagogy',
   assessment: 'Assessment',
   glossary: 'Glossary',
+};
+
+/** Shorter area names for the chat list */
+const AREA_SHORT: Record<Area, string> = {
+  ...AREA_NAMES,
+  games: 'Games',
+  outdoor: 'Outdoor Ed',
+  phs: 'PHS',
+  cce: 'CCE',
+};
+const FOCUS_SHORT: Record<string, string> = {
+  'net-barrier': 'Net-barrier',
+  'striking-fielding': 'Striking-fielding',
+  'territorial-invasion': 'Invasion games',
 };
 
 /** The learning areas each stage has, in the syllabus's order */
@@ -200,9 +216,9 @@ const REFERENCES_START = lineStart('8.\n\nREFERENCES\n', GLOSSARY_START);
  * area introductions below), so cut points come from the headings themselves
  * and nothing is measured by hand.
  */
-const STARTS: { id: string; index: number; title: string }[] = [];
-const start = (id: string, index: number, title: string) => {
-  if (index !== -1) STARTS.push({ id, index, title });
+const STARTS: { id: string; index: number; title: string; topic: string }[] = [];
+const start = (id: string, index: number, title: string, topic: string) => {
+  if (index !== -1) STARTS.push({ id, index, title, topic });
 };
 const levelId = (area: Area, level: number) => `p${level}-${area}`;
 const focusId = (focus: Focus) => `p5-6-${focus}`;
@@ -211,15 +227,15 @@ const focusId = (focus: Focus) => `p5-6-${focus}`;
 for (const [area, heading] of Object.entries(LEVEL_HEADINGS) as [Area, string][]) {
   for (let level = 1; level <= 6; level++) {
     const index = lineIndex(`PRIMARY ${level}${DASH}${heading}`, PRIMARY_START);
-    if (index < SECONDARY_START) start(levelId(area, level), index, `Primary ${level} – ${AREA_NAMES[area]}: learning outcomes`);
+    if (index < SECONDARY_START) start(levelId(area, level), index, `Primary ${level} – ${AREA_NAMES[area]}: learning outcomes`, `P${level} ${AREA_SHORT[area]}`);
   }
 }
 for (const [focus, heading] of Object.entries(FOCUS_HEADINGS) as [Focus, string][]) {
-  start(focusId(focus), lineIndex(`PRIMARY 5 AND 6: LEARNING OUTCOMES - ${heading} CATEGORY`, PRIMARY_START), `Primary 5 and 6 – ${FOCUS_NAMES[focus]}: learning outcomes`);
+  start(focusId(focus), lineIndex(`PRIMARY 5 AND 6: LEARNING OUTCOMES - ${heading} CATEGORY`, PRIMARY_START), `Primary 5 and 6 – ${FOCUS_NAMES[focus]}: learning outcomes`, `P5/6 ${FOCUS_SHORT[focus]}`);
 }
-start('primary-swimming', lineIndex(`BY END OF PRIMARY 6${DASH}SWIMMING`, PRIMARY_START), 'Swimming: learning outcomes by the end of Primary 6');
-start('primary-games-overview', lineStart('Games and Sports\nGames and Sports ', PRIMARY_START), 'Games and Sports (Primary): overview, progression and games concepts');
-start('primary-cce', TEXT.indexOf('2.3 Character and Citizenship Education', PRIMARY_START), 'Character and Citizenship Education: developmental milestones (Primary)');
+start('primary-swimming', lineIndex(`BY END OF PRIMARY 6${DASH}SWIMMING`, PRIMARY_START), 'Swimming: learning outcomes by the end of Primary 6', 'Primary Swimming');
+start('primary-games-overview', lineStart('Games and Sports\nGames and Sports ', PRIMARY_START), 'Games and Sports (Primary): overview, progression and games concepts', 'P5/6 Games');
+start('primary-cce', TEXT.indexOf('2.3 Character and Citizenship Education', PRIMARY_START), 'Character and Citizenship Education: developmental milestones (Primary)', 'Primary CCE');
 
 // Secondary and Pre-U physical activities: each one's name sits on its own line
 // above its description (Pre-U games carry a *)
@@ -229,34 +245,34 @@ const sportStart = (heading: string, from: number): number => {
 };
 for (const [prefix, from, stageTitle] of [['sec', SECONDARY_START, 'Secondary'], ['preu', PREU_START, 'Pre-University']] as const) {
   for (const [id, name, heading] of SPORTS) {
-    start(`${prefix}-${id}`, sportStart(heading, from), `${stageTitle} – ${name}: learning outcomes`);
+    start(`${prefix}-${id}`, sportStart(heading, from), `${stageTitle} – ${name}: learning outcomes`, `${prefix === 'sec' ? 'Sec' : 'Pre-U'} ${name}`);
   }
 }
-start('sec-pa-overview', lineStart('PHYSICAL ACTIVITIES GUIDELINES\n', SECONDARY_START), 'Physical Activities (Secondary): guidelines, games categories and concepts');
-start('preu-pa-overview', lineStart('PHYSICAL ACTIVITIES OFFERINGS\n', PREU_START), 'Physical Activities (Pre-University): offerings, guidelines and games concepts');
+start('sec-pa-overview', lineStart('PHYSICAL ACTIVITIES GUIDELINES\n', SECONDARY_START), 'Physical Activities (Secondary): guidelines, games categories and concepts', 'Sec Physical Activities');
+start('preu-pa-overview', lineStart('PHYSICAL ACTIVITIES OFFERINGS\n', PREU_START), 'Physical Activities (Pre-University): offerings, guidelines and games concepts', 'Pre-U Physical Activities');
 
 // Secondary Outdoor Education: an introduction, then four modules (Sec 1, then Sec 2 and/or 3)
-start('sec-oe-overview', lineStart('Outdoor Education\nOutdoor Education ', SECONDARY_START), 'Outdoor Education (Secondary): strands, lesson design and modules');
+start('sec-oe-overview', lineStart('Outdoor Education\nOutdoor Education ', SECONDARY_START), 'Outdoor Education (Secondary): strands, lesson design and modules', 'Sec Outdoor Ed');
 for (const [module, heading] of OE_MODULES) {
-  start(moduleId(module), lineIndex(`SECONDARY 1${DASH}${heading}`, SECONDARY_START), `Secondary – Outdoor Education, ${module}: learning outcomes (Sec 1, Sec 2 and/or 3)`);
+  start(moduleId(module), lineIndex(`SECONDARY 1${DASH}${heading}`, SECONDARY_START), `Secondary – Outdoor Education, ${module}: learning outcomes (Sec 1, Sec 2 and/or 3)`, `Sec OE · ${module}`);
 }
 
 // Physical Health and Safety and CCE
-start('sec-phs-lower', lineIndex(`SECONDARY 1${DASH}PHYSICAL HEALTH AND SAFETY`, SECONDARY_START), 'Lower Secondary (Sec 1–2) – Physical Health and Safety: learning outcomes');
-start('sec-phs-upper', lineIndex(`SECONDARY 3${DASH}PHYSICAL HEALTH AND SAFETY`, SECONDARY_START), 'Upper Secondary (Sec 3–4) – Physical Health and Safety: learning outcomes');
-start('sec-cce', TEXT.indexOf('3.3 Character and Citizenship Education', SECONDARY_START), 'Character and Citizenship Education: developmental milestones (Secondary)');
-start('preu-phs', lineStart('LEARNING OUTCOMES\n', lineStart('Physical Health and Safety\nPhysical Health and Safety ', PREU_START)), 'Pre-University – Physical Health and Safety: learning outcomes');
-start('preu-cce', TEXT.indexOf('4.3 Character and Citizenship Education', PREU_START), 'Character and Citizenship Education: developmental milestones (Pre-University)');
+start('sec-phs-lower', lineIndex(`SECONDARY 1${DASH}PHYSICAL HEALTH AND SAFETY`, SECONDARY_START), 'Lower Secondary (Sec 1–2) – Physical Health and Safety: learning outcomes', 'Lower Sec PHS');
+start('sec-phs-upper', lineIndex(`SECONDARY 3${DASH}PHYSICAL HEALTH AND SAFETY`, SECONDARY_START), 'Upper Secondary (Sec 3–4) – Physical Health and Safety: learning outcomes', 'Upper Sec PHS');
+start('sec-cce', TEXT.indexOf('3.3 Character and Citizenship Education', SECONDARY_START), 'Character and Citizenship Education: developmental milestones (Secondary)', 'Sec CCE');
+start('preu-phs', lineStart('LEARNING OUTCOMES\n', lineStart('Physical Health and Safety\nPhysical Health and Safety ', PREU_START)), 'Pre-University – Physical Health and Safety: learning outcomes', 'Pre-U PHS');
+start('preu-cce', TEXT.indexOf('4.3 Character and Citizenship Education', PREU_START), 'Character and Citizenship Education: developmental milestones (Pre-University)', 'Pre-U CCE');
 
 // Teaching & Assessment: the pedagogy chapter in parts, then assessment and the glossary
 for (const [part, heading] of PEDAGOGY_PARTS) {
-  start(pedagogyId(part), part === 'Teaching practices' ? PEDAGOGY_START : lineStart(`${heading}\n`, PEDAGOGY_START), `Pedagogy: ${part}`);
+  start(pedagogyId(part), part === 'Teaching practices' ? PEDAGOGY_START : lineStart(`${heading}\n`, PEDAGOGY_START), `Pedagogy: ${part}`, `Pedagogy · ${part}`);
 }
-start('ta-assessment', ASSESSMENT_START, 'Assessment in PE: purpose, principles, the four-stage process and reporting');
-start('ta-glossary', GLOSSARY_START, 'Glossary of terms');
+start('ta-assessment', ASSESSMENT_START, 'Assessment in PE: purpose, principles, the four-stage process and reporting', 'Assessment in PE');
+start('ta-glossary', GLOSSARY_START, 'Glossary of terms', 'Glossary');
 
 // The syllabus's introduction answers a question with nothing chosen yet
-start('syllabus-overview', TEXT.indexOf('1. INTRODUCTION\n1.1 Curriculum Framework'), 'Introduction: the PE curriculum framework');
+start('syllabus-overview', TEXT.indexOf('1. INTRODUCTION\n1.1 Curriculum Framework'), 'Introduction: the PE curriculum framework', 'Syllabus overview');
 
 /**
  * Each area opens with its name as a heading, then a sentence starting with
@@ -269,10 +285,10 @@ const CUTS = [...STARTS.map((s) => s.index), ...AREA_INTROS, PRIMARY_START, SECO
   .sort((a, b) => a - b);
 
 const SECTIONS = new Map<string, SyllabusSection>(
-  STARTS.map(({ id, index, title }) => {
+  STARTS.map(({ id, index, title, topic }) => {
     const end = CUTS.find((c) => c > index) ?? REFERENCES_START;
     const printedPage = printedPageAt(index);
-    return [id, { id, title, printedPage, pdfPage: printedPage + PDF_PAGE_OFFSET, text: cleanText(index, end) }];
+    return [id, { id, title, topic, printedPage, pdfPage: printedPage + PDF_PAGE_OFFSET, text: cleanText(index, end) }];
   }),
 );
 

@@ -1,5 +1,10 @@
 import React from 'react';
 import { ChatSession } from '../../types';
+import { CHAT_ICONS, chatKind, displayTitle, hasTeacherMessage, shortChatDate } from '../../utils/chatTitles';
+import { getSyllabusSection } from '../../data/syllabusGuide';
+
+const titleOf = (session: ChatSession) =>
+    displayTitle(session.title, session.messages ?? [], (id) => getSyllabusSection(id)?.topic);
 
 interface SessionSidebarProps {
     sessions: ChatSession[];
@@ -35,22 +40,23 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
 }) => {
     const [searchQuery, setSearchQuery] = React.useState('');
 
-    // Sort and filter sessions by title or message contents
+    // Sort and filter sessions by title or message contents. Chats nobody has
+    // typed in are hidden, except the one that's open.
     const filteredSessions = React.useMemo(() => {
-        const sorted = [...sessions].sort((a, b) =>
+        const sorted = sessions.filter(s => s.id === currentSessionId || hasTeacherMessage(s.messages ?? [])).sort((a, b) =>
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         );
         if (!searchQuery.trim()) return sorted;
 
         const query = searchQuery.toLowerCase().trim();
         return sorted.filter(session => {
-            const titleMatch = (session.title || 'New Chat').toLowerCase().includes(query);
+            const titleMatch = titleOf(session).toLowerCase().includes(query);
             const messagesMatch = session.messages?.some(msg =>
                 msg.text && msg.text.toLowerCase().includes(query)
             );
             return titleMatch || messagesMatch;
         });
-    }, [sessions, searchQuery]);
+    }, [sessions, searchQuery, currentSessionId]);
 
     // Lock body scroll when sidebar is open on mobile
     React.useEffect(() => {
@@ -179,17 +185,18 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
                                         }
                       `}
                                 >
-                                    <div className={`p-1 rounded-lg shrink-0 flex items-center justify-center transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-100/50 dark:bg-indigo-900/20' : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-zinc-900 group-hover:text-slate-500'}`}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                                        </svg>
+                                    <div
+                                        className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center text-sm transition-colors ${isActive ? 'bg-indigo-100/60 dark:bg-indigo-900/25' : 'bg-slate-100 dark:bg-zinc-900'}`}
+                                        aria-hidden="true"
+                                    >
+                                        {CHAT_ICONS[chatKind(session.messages ?? [])]}
                                     </div>
 
                                     <div className="flex-1 min-w-0">
                                         <h3 className={`text-sm font-medium truncate ${isActive ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                                            {session.title || 'New Chat'}
+                                            {titleOf(session)}
                                         </h3>
-                                        {searchQuery.trim() && !session.title?.toLowerCase().includes(searchQuery.toLowerCase().trim()) && (() => {
+                                        {searchQuery.trim() && !titleOf(session).toLowerCase().includes(searchQuery.toLowerCase().trim()) && (() => {
                                             const matchingMsg = session.messages?.find(msg => msg.text?.toLowerCase().includes(searchQuery.toLowerCase().trim()));
                                             if (matchingMsg) {
                                                 const text = matchingMsg.text;
@@ -209,14 +216,14 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({
                                             return null;
                                         })()}
                                         <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
-                                            {new Date(session.updatedAt).toLocaleDateString()} • {new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            {shortChatDate(new Date(session.updatedAt))}
                                         </p>
                                     </div>
 
                                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                         {/* Rename Button */}
                                         <div
-                                            onClick={(e) => handleRenameClick(session.id, session.title || 'New Chat', e)}
+                                            onClick={(e) => handleRenameClick(session.id, titleOf(session), e)}
                                             className="p-1 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/80 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                                             title="Rename Chat"
                                         >
