@@ -200,3 +200,17 @@ Supabase fires `TOKEN_REFRESHED` on `onAuthStateChange` creating a new `user` ob
 ### Path Aliases
 
 `@/*` resolves to `./src/*` (configured in both `tsconfig.json` and `vite.config.ts`).
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues on amoskhan/SG-PE-Syllabus-Bot (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
