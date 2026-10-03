@@ -1,6 +1,7 @@
 import React from 'react';
-import { AssessmentMethod, LessonProblem, LessonStep, StepKind, canUseAiAnalysis, newStepId } from '../../utils/lessonFlow';
+import { AssessmentMethod, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, newStepId } from '../../utils/lessonFlow';
 import { referenceImageFor } from '../../utils/teachPages';
+import { TeachMediaEditor, UploadMedia } from './TeachMediaEditor';
 
 // The teacher builds a lesson from Teach, Practise and Assess steps (#87, #88;
 // GLOSSARY.md: Lesson Step, ADR 0002): add, reorder, edit and remove them.
@@ -12,6 +13,9 @@ interface StepBuilderProps {
   mainSkill: string;
   problems: LessonProblem[]; // from validateLesson
   onChange: (steps: LessonStep[]) => void;
+  // A Teach step's own videos and pictures (#89), changed against the latest steps
+  onStepMediaChange: (stepId: string, change: (media: TeachMedia[]) => TeachMedia[]) => void;
+  onUploadMedia?: UploadMedia;
 }
 
 const inputClass =
@@ -26,7 +30,7 @@ const KIND_STYLE: Record<StepKind, { icon: string; name: string; tone: string }>
 
 const METHODS: { value: AssessmentMethod; label: string }[] = [
   { value: 'peer_assessment', label: 'Peer assessment (film + partner ticks cues)' },
-  { value: 'ai_analysis', label: 'AI analysis (Practice Station)' },
+  { value: 'ai_analysis', label: 'Peer assessment + AI analysis (Practice Station)' },
 ];
 
 export const blankStep = (kind: StepKind, skillName: string): LessonStep =>
@@ -36,7 +40,7 @@ export const blankStep = (kind: StepKind, skillName: string): LessonStep =>
       ? { id: newStepId(), kind, skillName, practise: { films: false } }
       : { id: newStepId(), kind, skillName, assess: { method: 'peer_assessment' } };
 
-export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSkill, problems, onChange }) => {
+export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSkill, problems, onChange, onStepMediaChange, onUploadMedia }) => {
   const update = (i: number, patch: Partial<LessonStep>) =>
     onChange(steps.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const move = (i: number, by: -1 | 1) => {
@@ -157,6 +161,14 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                   </label>
                 )}
               </div>
+
+              {step.kind === 'teach' && (
+                <TeachMediaEditor
+                  media={step.teach?.media ?? []}
+                  onChange={(change) => onStepMediaChange(step.id, change)}
+                  onUpload={onUploadMedia}
+                />
+              )}
 
               {step.kind === 'assess' && !ai.ok && (
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">ℹ️ {ai.reason}</p>

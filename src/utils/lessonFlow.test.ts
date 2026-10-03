@@ -103,10 +103,9 @@ describe('nextScreen', () => {
 });
 
 describe('defaults', () => {
-    it('a new lesson is Practise → peer assessment → AI analysis, on the main skill', () => {
+    it('a new lesson is Practise → AI analysis (which includes the peer assessment), on the main skill', () => {
         expect(defaultSteps('Kick').map(s => [s.kind, s.assess?.method, s.skillName])).toEqual([
             ['practise', undefined, 'Kick'],
-            ['assess', 'peer_assessment', 'Kick'],
             ['assess', 'ai_analysis', 'Kick'],
         ]);
     });

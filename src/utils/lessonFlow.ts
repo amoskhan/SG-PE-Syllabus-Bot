@@ -31,11 +31,14 @@ export interface LessonStep {
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
-/** A new lesson starts as Practise → Assess by peer assessment → Assess by AI analysis. */
+/**
+ * A new lesson starts as Practise → Assess by AI analysis. An AI analysis
+ * step includes the peer assessment (film, assessor ticks, swap) before the
+ * Practice Station, unless the pair already filmed in an earlier step.
+ */
 export const defaultSteps = (mainSkill: string): LessonStep[] => [
   { id: 'step-1', kind: 'practise', skillName: mainSkill, practise: { films: false } },
-  { id: 'step-2', kind: 'assess', skillName: mainSkill, assess: { method: 'peer_assessment' } },
-  { id: 'step-3', kind: 'assess', skillName: mainSkill, assess: { method: 'ai_analysis' } },
+  { id: 'step-2', kind: 'assess', skillName: mainSkill, assess: { method: 'ai_analysis' } },
 ];
 
 /**
@@ -162,7 +165,7 @@ export const stepLabel = (step: LessonStep): string => {
   if (step.kind === 'teach') return 'Learn';
   if (step.kind === 'practise') return 'Practise';
   switch (step.assess?.method) {
-    case 'ai_analysis': return 'Practice Station';
+    case 'ai_analysis': return 'Peer assessment + Coach Bot';
     case 'peer_assessment': return 'Peer assessment';
     case 'teacher_alone': return 'Teacher assessment';
     default: return 'Assess';

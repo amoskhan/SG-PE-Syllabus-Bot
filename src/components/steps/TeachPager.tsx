@@ -1,10 +1,31 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TeachPage } from '../../utils/teachPages';
+import { signTeachMedia } from '../../services/teachMediaService';
 
-// A Teach step's pages (#88): swipe, or tap the arrows/dots, one page at a
-// time. A picture opens full screen when tapped.
+// A Teach step's pages (#88, #89): swipe, or tap the arrows/dots, one page at
+// a time. A picture opens full screen when tapped. The teacher's own videos
+// and pictures play from short-lived signed links.
 
-const PageBody: React.FC<{ page: TeachPage; onZoom: (src: string) => void }> = ({ page, onZoom }) => {
+const PageBody: React.FC<{ page: TeachPage; links: Record<string, string> | null; onZoom: (src: string) => void }> = ({ page, links, onZoom }) => {
+  if (page.kind === 'media') {
+    const src = links?.[page.path];
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+        {!src ? (
+          <div className="w-full aspect-video rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-sm text-slate-400 text-center px-4">
+            {links ? "This video or picture can't be opened. Ask your teacher." : 'Loading…'}
+          </div>
+        ) : page.type === 'video' ? (
+          <video src={src} controls playsInline preload="metadata" className="max-w-full max-h-full rounded-2xl bg-black object-contain" />
+        ) : (
+          <button type="button" onClick={() => onZoom(src)} className="max-w-full max-h-full flex items-center justify-center cursor-zoom-in">
+            <img src={src} alt={page.caption || 'From your teacher'} className="max-w-full max-h-full rounded-2xl bg-white object-contain" />
+          </button>
+        )}
+        {page.caption && <p className="shrink-0 text-sm font-bold text-white text-center">{page.caption}</p>}
+      </div>
+    );
+  }
   if (page.kind === 'reference') {
     return (
       <button type="button" onClick={() => onZoom(page.src)} className="w-full h-full flex flex-col items-center justify-center gap-2 cursor-zoom-in">
@@ -36,12 +57,30 @@ export const TeachPager: React.FC<{ pages: TeachPage[] }> = ({ pages }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(0);
   const [zoom, setZoom] = useState<string | null>(null);
+  // Signed links for the teacher's media (null while loading)
+  const mediaKey = pages.map(p => (p.kind === 'media' ? p.path : '')).join('|');
+  const [links, setLinks] = useState<Record<string, string> | null>(null);
+  useEffect(() => {
+    const paths = pages.flatMap(p => (p.kind === 'media' ? [p.path] : []));
+    let cancelled = false;
+    setLinks(paths.length ? null : {});
+    if (paths.length) signTeachMedia(paths).then(l => { if (!cancelled) setLinks(l); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaKey]);
 
   const goTo = (i: number) => {
     const track = trackRef.current;
     if (!track) return;
     track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
   };
+
+  // A video stops when its page is swiped away
+  useEffect(() => {
+    trackRef.current?.querySelectorAll<HTMLElement>('[data-page]').forEach(el => {
+      if (Number(el.dataset.page) !== at) el.querySelectorAll('video').forEach(v => v.pause());
+    });
+  }, [at]);
 
   if (pages.length === 0) return null;
   return (
@@ -55,8 +94,8 @@ export const TeachPager: React.FC<{ pages: TeachPage[] }> = ({ pages }) => {
         className="flex-1 min-h-0 flex overflow-x-auto snap-x snap-mandatory [&::-webkit-scrollbar]:hidden"
       >
         {pages.map((page, i) => (
-          <div key={i} className="w-full shrink-0 snap-center px-0.5">
-            <PageBody page={page} onZoom={setZoom} />
+          <div key={i} data-page={i} className="w-full shrink-0 snap-center px-0.5">
+            <PageBody page={page} links={links} onZoom={setZoom} />
           </div>
         ))}
       </div>

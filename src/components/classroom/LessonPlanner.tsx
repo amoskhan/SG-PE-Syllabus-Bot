@@ -1,18 +1,22 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import { ALL_GYMNASTICS_SKILLS } from '../../data/gymnasticsSkillsData';
 import {
   Lesson,
   LessonDraft,
+  LessonKeys,
   SkillArea,
+  makeLessonKeys,
   LEVELS,
   DEFAULT_PAIR_COUNT,
   MAX_PAIR_COUNT,
   lessonTitle,
   todayIso,
 } from '../../services/lessonService';
-import { LessonStep, defaultSteps, followMainSkill, validateLesson } from '../../utils/lessonFlow';
+import { LessonStep, TeachMedia, defaultSteps, followMainSkill, validateLesson } from '../../utils/lessonFlow';
 import { StepBuilder } from './StepBuilder';
+import { mediaPaths, removeTeachMedia, uploadTeachMedia } from '../../services/teachMediaService';
+import type { UploadMedia } from './TeachMediaEditor';
 
 const SKILLS_BY_AREA: Record<SkillArea, string[]> = {
   FMS: ALL_FMS_SKILLS,
@@ -27,11 +31,13 @@ const labelClass = 'text-xs font-bold text-slate-500 dark:text-slate-400';
 
 interface LessonPlanFormProps {
   lesson?: Lesson; // editing this lesson; omitted for a new one
-  onSave: (draft: LessonDraft, showNow: boolean) => Promise<void>;
+  teacherId?: string; // needed to upload teach media
+  // keys: the id and pass a new lesson was given for its first upload (#89)
+  onSave: (draft: LessonDraft, showNow: boolean, keys?: LessonKeys) => Promise<void>;
   onCancel: () => void;
 }
 
-export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, onSave, onCancel }) => {
+export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherId, onSave, onCancel }) => {
   const [lessonDate, setLessonDate] = useState(lesson?.lessonDate ?? todayIso());
   const [className, setClassName] = useState(lesson?.className ?? '');
   const [level, setLevel] = useState(lesson?.level ?? '');
@@ -45,6 +51,32 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, onSave, 
   const [error, setError] = useState<string | null>(null);
 
   const problems = validateLesson({ mainSkill: skillName, skillArea, steps });
+
+  // ── Teach media (#89) ──
+  // Files live in the lesson's folder, which needs its id and pass: an edited
+  // lesson has them; a new one gets them on its first upload.
+  const newKeysRef = useRef<LessonKeys | null>(null);
+  const uploadedRef = useRef<string[]>([]); // uploaded while this form is open
+  const draft = (): LessonDraft => ({ lessonDate, className, level, objective, skillArea, skillName, pairCount, steps });
+  const uploadMedia: UploadMedia | undefined = teacherId
+    ? async (file, onProgress) => {
+        const keys = lesson ? { id: lesson.id, pupilPass: lesson.pupilPass } : (newKeysRef.current ??= makeLessonKeys(draft()));
+        const item = await uploadTeachMedia(file, teacherId, keys, onProgress);
+        uploadedRef.current.push(item.path);
+        return item;
+      }
+    : undefined;
+  const changeStepMedia = (stepId: string, change: (media: TeachMedia[]) => TeachMedia[]) =>
+    setSteps(prev => prev.map(s => (s.id === stepId && s.teach ? { ...s, teach: { ...s.teach, media: change(s.teach.media ?? []) } } : s)));
+  /** Files no longer in the lesson: removed, or uploaded and then dropped. */
+  const unusedFiles = (kept: LessonStep[]) => {
+    const keep = new Set(mediaPaths(kept));
+    return [...new Set([...mediaPaths(lesson?.steps ?? []), ...uploadedRef.current])].filter(p => !keep.has(p));
+  };
+  const cancel = () => {
+    removeTeachMedia(unusedFiles(lesson?.steps ?? []));
+    onCancel();
+  };
 
   // Steps on the main skill follow it when it changes
   const changeMainSkill = (next: string, area: SkillArea = skillArea) => {
@@ -69,7 +101,8 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, onSave, 
     setSaving(true);
     setError(null);
     try {
-      await onSave({ lessonDate, className, level, objective, skillArea, skillName, pairCount, steps }, showNow);
+      await onSave(draft(), showNow, newKeysRef.current ?? undefined);
+      removeTeachMedia(unusedFiles(steps));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the lesson.');
       setSaving(false);
@@ -178,7 +211,15 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, onSave, 
         </label>
       </div>
 
-      <StepBuilder steps={steps} skills={SKILLS_BY_AREA[skillArea]} mainSkill={skillName} problems={problems} onChange={setSteps} />
+      <StepBuilder
+        steps={steps}
+        skills={SKILLS_BY_AREA[skillArea]}
+        mainSkill={skillName}
+        problems={problems}
+        onChange={setSteps}
+        onStepMediaChange={changeStepMedia}
+        onUploadMedia={uploadMedia}
+      />
 
       {error && (
         <p role="alert" className="text-sm font-semibold text-red-600 dark:text-red-400">
@@ -204,7 +245,7 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, onSave, 
         </button>
         <button
           type="button"
-          onClick={onCancel}
+          onClick={cancel}
           className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer"
         >
           Cancel

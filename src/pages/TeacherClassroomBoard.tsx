@@ -20,6 +20,7 @@ import {
 import {
   Lesson,
   LessonDraft,
+  LessonKeys,
   fetchLessons,
   createLesson,
   updateLesson,
@@ -30,6 +31,7 @@ import {
   getLocalLessonNames,
 } from '../services/lessonService';
 import { LessonPlanForm, LessonList } from '../components/classroom/LessonPlanner';
+import { mediaPaths, removeTeachMedia } from '../services/teachMediaService';
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
 import { effectiveLevel, normaliseLevel } from '../utils/gradingReview';
@@ -246,9 +248,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   // The lesson being edited in the planner; null = planning a new one
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
 
-  const handleSaveLesson = async (draft: LessonDraft, showNow: boolean) => {
+  const handleSaveLesson = async (draft: LessonDraft, showNow: boolean, keys?: LessonKeys) => {
     const editing = editingLesson;
-    const saved = editing ? await updateLesson(editing.id, draft) : await createLesson(draft);
+    const saved = editing ? await updateLesson(editing.id, draft) : await createLesson(draft, keys);
     setLessons((prev) => (editing ? prev.map((l) => (l.id === saved.id ? saved : l)) : [saved, ...prev]));
     setEditingLesson(null);
     if (showNow) showLessonOnProjector(saved.id);
@@ -263,6 +265,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     if (!confirm(warning)) return;
     try {
       await deleteLesson(l.id);
+      removeTeachMedia(mediaPaths(l.steps)); // its Teach step videos and pictures
       setLessons((prev) => prev.filter((x) => x.id !== l.id));
       if (l.id === currentLessonId) {
         setCurrentLessonId(teacherId, null);
@@ -784,6 +787,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
           <LessonPlanForm
             key={editingLesson?.id ?? 'new'}
             lesson={editingLesson ?? undefined}
+            teacherId={teacherId}
             onSave={handleSaveLesson}
             onCancel={() => { setEditingLesson(null); setViewMode('LESSONS'); }}
           />

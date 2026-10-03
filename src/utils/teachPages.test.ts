@@ -35,6 +35,17 @@ describe('teachPages', () => {
         expect(teachPages(teach('Forward Roll')).map(p => p.kind)).toEqual(['cues']);
     });
 
+    it("puts the teacher's own videos and pictures first, in their order", () => {
+        const step = teach('Kick');
+        step.teach!.media = [
+            { type: 'video', path: 't/l/p/demo.mp4', caption: 'Watch my plant foot' },
+            { type: 'image', path: 't/l/p/rubric.jpg' },
+        ];
+        expect(teachPages(step).map(p => p.kind === 'media' ? p.path : p.kind))
+            .toEqual(['t/l/p/demo.mp4', 't/l/p/rubric.jpg', 'reference', 'cues']);
+        expect(teachPages(step)[0]).toMatchObject({ type: 'video', caption: 'Watch my plant foot' });
+    });
+
     it('has no pages for other kinds of step', () => {
         expect(teachPages({ id: 'p', kind: 'practise', skillName: 'Kick' })).toEqual([]);
     });

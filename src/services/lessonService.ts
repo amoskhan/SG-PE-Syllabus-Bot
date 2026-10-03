@@ -71,6 +71,24 @@ export const toRow = (d: LessonDraft) => ({
 });
 
 /** Only [a-z0-9-]: the id is also a Storage folder name and part of pair ids. */
+/**
+ * A lesson's id and pupil pass, made before it is first saved when the
+ * teacher uploads teach media while planning it: the media's folder needs
+ * both (supabase_teach_media.sql).
+ */
+export interface LessonKeys {
+  id: string;
+  pupilPass: string;
+}
+
+export const makeLessonKeys = (d: LessonDraft): LessonKeys => ({
+  id: makeLessonId(d),
+  pupilPass: (typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+  ).replace(/-/g, ""),
+});
+
 const makeLessonId = (d: LessonDraft) => {
   const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const suffix = Math.random().toString(36).slice(2, 6);
@@ -99,10 +117,14 @@ export async function fetchLessons(): Promise<Lesson[]> {
   return (data as LessonRow[]).map(fromRow);
 }
 
-export async function createLesson(draft: LessonDraft): Promise<Lesson> {
+export async function createLesson(draft: LessonDraft, keys?: LessonKeys): Promise<Lesson> {
   const { data, error } = await supabase
     .from("lessons")
-    .insert({ id: makeLessonId(draft), ...toRow(draft) })
+    .insert({
+      id: keys?.id ?? makeLessonId(draft),
+      ...(keys ? { pupil_pass: keys.pupilPass } : {}),
+      ...toRow(draft),
+    })
     .select()
     .single();
   if (error) throw new Error(error.message);
