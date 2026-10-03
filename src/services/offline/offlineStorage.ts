@@ -1,4 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { decodeBlobs, encodeBlobs, stripBlobs } from './storedBlobs';
 
 export interface PeerCueResult {
   cueIndex: number;
@@ -12,6 +13,16 @@ export interface AiChatAnalysisEntry {
   studentLabel: 'Apple' | 'Banana';
   modelUsed: string;      // 'gemini' | 'claude' | ...
   submittedAt: string;
+  // The clip the AI analysed, when the performer filmed again afterwards: the
+  // teacher sees this first attempt as well as the final one (#94).
+  analysedClip?: { videoUrl?: string; cues: PeerCueResult[] };
+}
+
+/** One recorded attempt by a performer, kept on this device. */
+export interface AttemptSnapshot {
+  videoBlob?: Blob;
+  videoUrl?: string;
+  cues: PeerCueResult[];
 }
 
 export interface PairSubmissionRecord {
@@ -70,6 +81,17 @@ export interface PairSubmissionRecord {
   aiChatAnalysis?: {
     apple?: AiChatAnalysisEntry;
     banana?: AiChatAnalysisEntry;
+  };
+  // Kept on this device until the performer's final submission (#94): the AI
+  // analysis made in the Practice Station, and the first attempt once they've
+  // used their one re-film.
+  pendingAnalysis?: {
+    apple?: AiChatAnalysisEntry;
+    banana?: AiChatAnalysisEntry;
+  };
+  firstAttempt?: {
+    apple?: AttemptSnapshot;
+    banana?: AttemptSnapshot;
   };
   status: 'pending_sync' | 'synced' | 'approved' | 'needs_redo' | 'resubmitted';
   teacherFeedback?: string;
@@ -217,20 +239,43 @@ export const clearPairClaimToken = (lessonId: string): void => {
 
 // ─── Offline Queue Submissions ────────────────────────────────────────────────
 
-export const queuePairSubmission = async (submission: PairSubmissionRecord): Promise<void> => {
+// Always read and write submissions through these: clips are stored as raw
+// bytes because some phones refuse to store videos as Blobs (storedBlobs.ts).
+
+export const getSubmission = async (id: string): Promise<PairSubmissionRecord | undefined> => {
   const db = await getDB();
-  await db.put('submissions', submission);
+  const raw = await db.get('submissions', id);
+  return raw ? decodeBlobs(raw) : undefined;
 };
+
+/**
+ * Save a pair's record on this device. If the device won't hold the clips at
+ * all (e.g. it's full), the record is saved without them so the ticks,
+ * analyses and cloud links are kept. Returns whether the clips were kept.
+ */
+export const putSubmission = async (submission: PairSubmissionRecord): Promise<{ videosKept: boolean }> => {
+  const db = await getDB();
+  try {
+    await db.put('submissions', await encodeBlobs(submission));
+    return { videosKept: true };
+  } catch (e) {
+    console.warn('[Offline] Could not store the clips on this device; saving the rest:', e);
+    await db.put('submissions', stripBlobs(submission));
+    return { videosKept: false };
+  }
+};
+
+export const queuePairSubmission = putSubmission;
 
 export const getAllSubmissions = async (): Promise<PairSubmissionRecord[]> => {
   const db = await getDB();
-  return db.getAll('submissions');
+  return Promise.all((await db.getAll('submissions')).map(r => decodeBlobs(r)));
 };
 
 export const getPendingSubmissions = async (): Promise<PairSubmissionRecord[]> => {
   const db = await getDB();
   const index = db.transaction('submissions').store.index('by_status');
-  return index.getAll('pending_sync');
+  return Promise.all((await index.getAll('pending_sync')).map(r => decodeBlobs(r)));
 };
 
 export const updateSubmissionStatus = async (
@@ -239,14 +284,13 @@ export const updateSubmissionStatus = async (
   feedback?: string,
   star?: boolean
 ): Promise<void> => {
-  const db = await getDB();
-  const record = await db.get('submissions', id);
+  const record = await getSubmission(id);
   if (record) {
     record.status = status;
     if (feedback !== undefined) record.teacherFeedback = feedback;
     if (star !== undefined) record.teacherStar = star;
     if (status === 'synced') record.syncedAt = new Date().toISOString();
-    await db.put('submissions', record);
+    await putSubmission(record);
   }
 };
 

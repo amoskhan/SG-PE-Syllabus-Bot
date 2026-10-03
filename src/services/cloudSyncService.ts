@@ -1,5 +1,5 @@
 import { supabase } from "./db/supabaseClient";
-import { PairSubmissionRecord, getDB, getLessonPass } from "./offline/offlineStorage";
+import { PairSubmissionRecord, getSubmission, putSubmission, getLessonPass } from "./offline/offlineStorage";
 
 export async function backupSubmissionToSupabase(
   submission: PairSubmissionRecord,
@@ -14,6 +14,9 @@ export async function backupSubmissionToSupabase(
   let bananaVideoUrl: string | undefined = submission.appleRole.videoUrl;
   let appleVideoUrl: string | undefined = submission.bananaRole.videoUrl;
 
+  // A clip is uploaded once; after that its stored link is re-sent. Uploading
+  // again would make a new link, which the lock counts as changing that
+  // performer's work (supabase_submission_lock.sql).
   const timestamp = Date.now();
   // If teacherId provided (from QR), nest under teacher folder so it appears in their dashboard
   const base = teacherId
@@ -21,7 +24,7 @@ export async function backupSubmissionToSupabase(
     : `pair_submissions/lesson_${submission.lessonId}`;
   const folder = `${base}/pair_${submission.pairNumber}_${timestamp}`;
 
-  if (submission.appleRole.videoBlob) {
+  if (submission.appleRole.videoBlob && !submission.appleRole.videoUrl) {
     try {
       const path = `${folder}/banana_performer.mp4`;
       const { error } = await supabase.storage
@@ -37,7 +40,7 @@ export async function backupSubmissionToSupabase(
     }
   }
 
-  if (submission.bananaRole.videoBlob) {
+  if (submission.bananaRole.videoBlob && !submission.bananaRole.videoUrl) {
     try {
       const path = `${folder}/apple_performer.mp4`;
       const { error } = await supabase.storage
@@ -55,13 +58,12 @@ export async function backupSubmissionToSupabase(
 
   if (bananaVideoUrl || appleVideoUrl) {
     try {
-      const db = await getDB();
-      const record = await db.get("submissions", submission.id);
+      const record = await getSubmission(submission.id);
       if (record) {
         if (bananaVideoUrl) record.appleRole.videoUrl = bananaVideoUrl;
         if (appleVideoUrl) record.bananaRole.videoUrl = appleVideoUrl;
         record.syncedAt = new Date().toISOString();
-        await db.put("submissions", record);
+        await putSubmission(record);
         console.log("[CloudBackup] Submission record updated with Supabase video URLs ✓");
       }
     } catch (e) {
@@ -100,6 +102,29 @@ export async function backupSubmissionToSupabase(
   }
 
   return { bananaVideoUrl, appleVideoUrl };
+}
+
+/**
+ * Upload one pupil clip into today's lesson folder and return its stored link,
+ * without touching the submission row. Used to keep a performer's first attempt
+ * when they film again (#94).
+ */
+export async function uploadPupilClip(
+  blob: Blob,
+  teacherId: string,
+  lessonId: string,
+  pairNumber: number,
+  label: string,
+): Promise<string | undefined> {
+  const path = `${teacherId}/pair_submissions/lesson_${lessonId}/pair_${pairNumber}_${Date.now()}/${label}.mp4`;
+  const { error } = await supabase.storage
+    .from("student-videos")
+    .upload(path, blob, { cacheControl: "3600", upsert: false, contentType: "video/mp4" });
+  if (error) {
+    console.warn("[CloudSync] uploadPupilClip failed:", error.message);
+    return undefined;
+  }
+  return supabase.storage.from("student-videos").getPublicUrl(path).data.publicUrl;
 }
 
 export function mapRowToSubmission(row: any): PairSubmissionRecord {

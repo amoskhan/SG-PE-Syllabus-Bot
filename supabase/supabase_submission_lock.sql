@@ -220,6 +220,9 @@ as $$
     'banana_cues', banana_cues,
     'apple_cues', apple_cues,
     'ai_student_feedback', ai_student_feedback,
+    'ai_chat_analysis', ai_chat_analysis,  -- the pair's own sent analyses, for "Our work" (#94)
+    'apple_video_url', apple_video_url,    -- so "Our work" knows a video was saved; not playable
+    'banana_video_url', banana_video_url,  --   without the teacher's signed link (private bucket)
     'created_at', created_at,
     'redo_requested_at', redo_requested_at,
     'apple_sent_at', apple_sent_at,
