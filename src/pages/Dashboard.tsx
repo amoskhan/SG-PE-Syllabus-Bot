@@ -110,7 +110,7 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
             <p className="text-sm">Add a student or fill in the Student fields during a grading session.</p>
           </div>
         ) : (
-          Object.entries(grouped)
+          (Object.entries(grouped) as [string, Student[]][])
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([cls, clsStudents]) => (
               <div key={cls} className="mb-8">

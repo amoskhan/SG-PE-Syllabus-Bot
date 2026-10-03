@@ -327,14 +327,6 @@ export const getOrCreatePairClaimToken = (lessonId: string): string => {
   }
 };
 
-export const clearPairClaimToken = (lessonId: string): void => {
-  try {
-    localStorage.removeItem(claimTokenKey(lessonId));
-  } catch {
-    /* ignore */
-  }
-};
-
 // ─── Offline Queue Submissions ────────────────────────────────────────────────
 
 // Always read and write submissions through these: clips are stored as raw
@@ -370,12 +362,6 @@ export const getAllSubmissions = async (): Promise<PairSubmissionRecord[]> => {
   return Promise.all((await db.getAll('submissions')).map(r => decodeBlobs(r)));
 };
 
-export const getPendingSubmissions = async (): Promise<PairSubmissionRecord[]> => {
-  const db = await getDB();
-  const index = db.transaction('submissions').store.index('by_status');
-  return Promise.all((await index.getAll('pending_sync')).map(r => decodeBlobs(r)));
-};
-
 export const updateSubmissionStatus = async (
   id: string,
   status: PairSubmissionRecord['status'],
@@ -393,21 +379,6 @@ export const updateSubmissionStatus = async (
 };
 
 // ─── Lesson Cache ─────────────────────────────────────────────────────────────
-
-export const cacheLessonConfig = async (config: {
-  lessonId: string;
-  title: string;
-  skillName: string;
-  teacherPin: string;
-}): Promise<void> => {
-  const db = await getDB();
-  await db.put('lesson_cache', { ...config, updatedAt: new Date().toISOString() }, 'active_lesson');
-};
-
-export const getCachedLessonConfig = async () => {
-  const db = await getDB();
-  return db.get('lesson_cache', 'active_lesson');
-};
 
 export const deleteSubmission = async (id: string): Promise<void> => {
   const db = await getDB();
