@@ -107,7 +107,7 @@ describe('asking before answering', () => {
   it('asks a vague syllabus question for the level first, then the area, then what is needed', () => {
     const level = asks(guideStep('What are the learning outcomes?'));
     expect(level.step).toBe('level');
-    expect(level.choices).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', JUST_ANSWER]);
+    expect(level.choices).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'Lower Sec', 'Upper Sec', 'Pre-U', JUST_ANSWER]);
 
     const { asked, step } = conversation('What should I teach?', 'P2', 'Dance', 'Teaching cues');
     expect(asked).toEqual(['level', 'area', 'need']);
@@ -120,7 +120,7 @@ describe('asking before answering', () => {
   });
 
   it('offers only P4–P6 for athletics', () => {
-    expect(asks(guideStep('athletics lesson ideas')).choices).toEqual(['P4', 'P5', 'P6', JUST_ANSWER]);
+    expect(asks(guideStep('athletics lesson ideas')).choices).toEqual(['P4', 'P5', 'P6', 'Secondary', 'Pre-U', JUST_ANSWER]);
   });
 
   it('asks the games category at P5/6, and the skills at P1–4', () => {
@@ -232,10 +232,101 @@ describe('questions it leaves to the rest of the app', () => {
   it.each([
     'hello',
     'critical elements of the overhand throw',
-    'Sec 2 badminton outcomes',
     'P4 dance and gymnastics',
   ])('"%s"', (question) => {
     expect(guideStep(question).kind).toBe('unplaced');
+  });
+});
+
+describe('Secondary and Pre-U', () => {
+  // Printed pages read off the 2024 PDF
+  it.each([
+    ['Sec 2 badminton outcomes', 116, 'Badminton'],
+    ['Sec 3 mini tennis', 118, 'Mini/Paddle Tennis'],
+    ['secondary table tennis', 120, 'Table Tennis'],
+    ['S1 football', 133, 'Football'],
+    ['upper sec ultimate frisbee', 139, 'Ultimate Frisbee'],
+    ['secondary track and field', 142, 'Track and Field'],
+    ['Sec 1 navigation', 150, 'SECONDARY 1 – NAVIGATION'],
+    ['lower sec PHS', 157, 'SECONDARY 1 – PHYSICAL HEALTH AND SAFETY'],
+    ['Sec 4 CCE', 161, 'Character and Citizenship'],
+    ['JC badminton', 175, 'Badminton'],
+    ['pre-u ultimate frisbee', 198, 'Ultimate Frisbee'],
+    ['JC PHS', 206, 'LEARNING OUTCOMES'],
+    ['pre-u CCE', 207, 'Character and Citizenship'],
+  ])('"%s" → printed p. %i', (question, printedPage, heading) => {
+    const s = section(question);
+    expect(s.printedPage).toBe(printedPage);
+    expect(s.pdfPage).toBe(printedPage + 5);
+    expect(s.text).toContain(heading);
+  });
+
+  it.each([
+    ['upper sec ultimate frisbee', 'Track and Field'],
+    ['secondary track and field', 'Outdoor Education engages'],
+    ['Sec 1 navigation', 'COOKING'],
+    ['Sec 1 trip planning', 'Physical Health and Safety support'],
+    ['lower sec PHS', 'SECONDARY 3'],
+    ['Sec 4 CCE', 'PRE-UNIVERSITY'],
+    ['JC track and field', 'Physical Health and Safety stimulates'],
+    ['pre-u CCE', 'PEDAGOGY'],
+  ])('ends %s before the next section', (question, next) => {
+    expect(section(question).text).not.toContain(next);
+  });
+
+  it('keeps both Sec 1 and Sec 2/3 in an Outdoor Education module', () => {
+    const s = section('Sec 2 shelter building');
+    expect(s.text).toContain('SECONDARY 1 – SHELTER BUILDING');
+    expect(s.text).toContain('SECONDARY 2 AND/OR 3 – SHELTER BUILDING');
+  });
+
+  it('asks the physical activity for secondary games, and the module for secondary OE', () => {
+    const sport = asks(guideStep('Sec 2 games lesson ideas'));
+    expect(sport.prompt).toBe('Which physical activity?');
+    expect(sport.choices).toContain('Netball');
+    expect(asks(guideStep('Sec 2 outdoor education')).choices).toEqual([
+      'Navigation', 'Outdoor cooking', 'Shelter building', 'Trip planning', JUST_ANSWER,
+    ]);
+  });
+
+  it('asks only the levels that change the answer', () => {
+    // One section per sport for all of secondary, and one at P5/6
+    expect(asks(guideStep('badminton outcomes')).choices).toEqual(['P5/6', 'Secondary', 'Pre-U', JUST_ANSWER]);
+    // PHS differs between lower and upper secondary
+    expect(asks(guideStep('secondary PHS')).choices).toEqual(['Lower Sec', 'Upper Sec', JUST_ANSWER]);
+    // One CCE section per stage
+    expect(asks(guideStep('CCE outcomes')).choices).toEqual(['Primary', 'Secondary', 'Pre-U', JUST_ANSWER]);
+  });
+
+  it('answers secondary badminton from the badminton section and P5 badminton from Net-barrier games', () => {
+    expect(section('Sec 2 badminton outcomes').id).toBe('sec-badminton');
+    expect(section('P5 badminton outcomes').id).toBe('p5-6-net-barrier');
+  });
+
+  it('asks the learning area again when the stage does not have the one named', () => {
+    expect(asks(guideStep('Pre-U outdoor education')).choices).toEqual([
+      'Physical Activities', 'Physical Health and Safety', 'Character and Citizenship Education', JUST_ANSWER,
+    ]);
+  });
+
+  it('explains that badminton at P3 is taught through net-barrier games from P5', () => {
+    const r = guideStep('P3 badminton');
+    expect(r).toMatchObject({ kind: 'mismatch', choices: ['P5/6 Net-barrier games', 'P3 Games and Sports'] });
+    if (r.kind === 'mismatch') expect(r.message).toMatch(/^Badminton is part of net-barrier games/);
+  });
+
+  it('carries on from a chat saved when levels were numbers', () => {
+    const saved = { level: 5, area: 'games', focus: 'net-barrier', need: 'Outcomes', asked: 0, sectionId: 'p5-6-net-barrier' } as unknown as GuideState;
+    expect(guideStep('and how do I assess that?', saved)).toMatchObject({
+      kind: 'section',
+      request: { need: 'Assessment', section: { id: 'p5-6-net-barrier' } },
+    });
+  });
+
+  it('follows up from a primary answer to the same sport at secondary', () => {
+    const p5 = guideStep('P5 basketball outcomes');
+    if (p5.kind !== 'section') throw new Error(p5.kind);
+    expect(guideStep('and for Sec 3?', p5.state)).toMatchObject({ kind: 'section', request: { section: { id: 'sec-basketball' } } });
   });
 });
 
