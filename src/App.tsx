@@ -1376,7 +1376,12 @@ const App: React.FC = () => {
     
     // 3. Compute the new state strictly once
     const updatedSession = updater(sessionToUpdate);
-    
+
+    // Keep the ref current now, not on the next render: an update straight
+    // after this one (the syllabus guide's question right after the teacher's
+    // message) must build on it, or it overwrites the teacher's message
+    sessionsRef.current = currentSessions.map(s => s.id === resolvedId ? updatedSession : s);
+
     // 4. Update the React UI
     setSessions(prev => prev.map(s => s.id === resolvedId ? updatedSession : s));
     
