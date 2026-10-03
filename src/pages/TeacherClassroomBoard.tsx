@@ -22,6 +22,7 @@ import {
   LessonDraft,
   fetchLessons,
   createLesson,
+  updateLesson,
   deleteLesson,
   lessonTitle,
   getCurrentLessonId,
@@ -242,9 +243,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     setViewMode('PROJECTOR');
   };
 
+  // The lesson being edited in the planner; null = planning a new one
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
+
   const handleSaveLesson = async (draft: LessonDraft, showNow: boolean) => {
-    const saved = await createLesson(draft);
-    setLessons((prev) => [saved, ...prev]);
+    const editing = editingLesson;
+    const saved = editing ? await updateLesson(editing.id, draft) : await createLesson(draft);
+    setLessons((prev) => (editing ? prev.map((l) => (l.id === saved.id ? saved : l)) : [saved, ...prev]));
+    setEditingLesson(null);
     if (showNow) showLessonOnProjector(saved.id);
     else setViewMode('LESSONS');
   };
@@ -740,7 +746,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               currentLessonId={currentLessonId}
               loading={lessonsLoading}
               error={lessonsError}
-              onPlan={() => setViewMode('PLAN_LESSON')}
+              onPlan={() => { setEditingLesson(null); setViewMode('PLAN_LESSON'); }}
+              onEdit={(l) => { setEditingLesson(l); setViewMode('PLAN_LESSON'); }}
               onShow={(l) => showLessonOnProjector(l.id)}
               onDelete={handleDeleteLesson}
               onPairs={(l) => {
@@ -774,7 +781,12 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
       {/* VIEW: PLAN A LESSON */}
       {viewMode === 'PLAN_LESSON' && (
         <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-3xl mx-auto w-full">
-          <LessonPlanForm onSave={handleSaveLesson} onCancel={() => setViewMode('LESSONS')} />
+          <LessonPlanForm
+            key={editingLesson?.id ?? 'new'}
+            lesson={editingLesson ?? undefined}
+            onSave={handleSaveLesson}
+            onCancel={() => { setEditingLesson(null); setViewMode('LESSONS'); }}
+          />
         </div>
       )}
 
@@ -1172,7 +1184,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                         )}
                         {entry.teacherGrades && (
                           <p className="mb-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900 text-[11px] font-bold text-amber-800 dark:text-amber-300">
-                            Coach Bot couldn't analyse this, so there's no AI analysis. Grade it below.
+                            No AI analysis for this attempt ({/no ai analysis step/i.test(entry.analysisText) ? 'this lesson has no AI step' : "Coach Bot couldn't analyse it"}). Grade it below.
                           </p>
                         )}
                         {/* Re-filmed after a redo request (#93): the AI analysis below is of the earlier attempt */}

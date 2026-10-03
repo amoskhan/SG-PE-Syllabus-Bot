@@ -164,3 +164,19 @@ export const stepLabel = (step: LessonStep): string => {
     default: return 'Assess';
   }
 };
+
+// ── Editing steps ───────────────────────────────────────────────────────────
+
+/** A fresh id for a step the teacher adds (unique within the lesson). */
+export const newStepId = () => `step-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+/**
+ * The teacher changed the lesson's main skill: steps that were on the old
+ * main skill move with it; a step deliberately on another skill (a warm-up)
+ * keeps it, unless that skill isn't in the lesson's learning area any more.
+ */
+export const followMainSkill = (steps: LessonStep[], oldMain: string, newMain: string, areaSkills: readonly string[]) =>
+  steps.map(s => (s.skillName === oldMain || !areaSkills.includes(s.skillName) ? { ...s, skillName: newMain } : s));
+
+/** Whether the lesson has a Practice Station: without one it makes no AI calls at all. */
+export const hasAiAnalysis = (steps: LessonStep[]) => runsAiPeerFeedback(steps);

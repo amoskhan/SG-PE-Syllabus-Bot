@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LessonStep } from '../../utils/lessonFlow';
 import { StepBar } from './StepBar';
 
 // The pupil screen for a step that isn't peer assessment or the Practice
 // Station (those have their own screens): Teach, Practise, and an Assess step
-// done by the teacher alone. Kept simple here (#85); later tickets fill in
-// teach media and filming.
+// done by the teacher alone. A Practise step can let pupils film each other to
+// watch back (#87); that video stays on the device and is never sent.
 //
 // The page body doesn't scroll (index.html), so the middle of this screen does.
 
@@ -27,6 +27,38 @@ const COPY = (step: LessonStep): { icon: string; title: string; hint: string; ne
     return { icon: '🏃', title: `Practise: ${step.skillName}`, hint: 'Take turns. Help each other remember the cues.', next: "We're done practising ➔" };
   }
   return { icon: '🧑‍🏫', title: 'Your teacher is assessing you', hint: `Show your teacher your best ${step.skillName}. Wait for your teacher before moving on.`, next: 'Next ➔' };
+};
+
+/** Film a go and watch it back. Nothing is uploaded. */
+const PractiseFilm: React.FC = () => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  return (
+    <div className="w-full flex flex-col gap-3">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) setUrl(URL.createObjectURL(file));
+          e.target.value = '';
+        }}
+      />
+      {url && <video src={url} controls playsInline className="w-full aspect-video rounded-2xl bg-black object-contain" />}
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="h-12 rounded-2xl bg-slate-800 border border-slate-700 text-base font-black active:scale-[0.98]"
+      >
+        {url ? '📹 Film another go' : '📹 Film your partner'}
+      </button>
+      <p className="text-xs text-slate-400">Watch it back together. This video stays on this device and isn't sent to your teacher.</p>
+    </div>
+  );
 };
 
 export const LessonStepScreen: React.FC<LessonStepScreenProps> = ({ step, number, total, pairNumber, onNext, onBack, onHome }) => {
@@ -53,6 +85,7 @@ export const LessonStepScreen: React.FC<LessonStepScreenProps> = ({ step, number
             </p>
           )}
           <p className="text-sm text-slate-300">{copy.hint}</p>
+          {step.kind === 'practise' && step.practise?.films && <PractiseFilm key={step.id} />}
         </div>
       </div>
 

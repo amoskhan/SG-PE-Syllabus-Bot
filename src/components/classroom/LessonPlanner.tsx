@@ -11,6 +11,8 @@ import {
   lessonTitle,
   todayIso,
 } from '../../services/lessonService';
+import { LessonStep, defaultSteps, followMainSkill, validateLesson } from '../../utils/lessonFlow';
+import { StepBuilder } from './StepBuilder';
 
 const SKILLS_BY_AREA: Record<SkillArea, string[]> = {
   FMS: ALL_FMS_SKILLS,
@@ -24,24 +26,35 @@ const labelClass = 'text-xs font-bold text-slate-500 dark:text-slate-400';
 // ── Plan a lesson ────────────────────────────────────────────────────────────
 
 interface LessonPlanFormProps {
+  lesson?: Lesson; // editing this lesson; omitted for a new one
   onSave: (draft: LessonDraft, showNow: boolean) => Promise<void>;
   onCancel: () => void;
 }
 
-export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ onSave, onCancel }) => {
-  const [lessonDate, setLessonDate] = useState(todayIso());
-  const [className, setClassName] = useState('');
-  const [level, setLevel] = useState('');
-  const [objective, setObjective] = useState('');
-  const [skillArea, setSkillArea] = useState<SkillArea>('FMS');
-  const [skillName, setSkillName] = useState(SKILLS_BY_AREA.FMS[0]);
-  const [pairCount, setPairCount] = useState(DEFAULT_PAIR_COUNT);
+export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, onSave, onCancel }) => {
+  const [lessonDate, setLessonDate] = useState(lesson?.lessonDate ?? todayIso());
+  const [className, setClassName] = useState(lesson?.className ?? '');
+  const [level, setLevel] = useState(lesson?.level ?? '');
+  const [objective, setObjective] = useState(lesson?.objective ?? '');
+  const [skillArea, setSkillArea] = useState<SkillArea>(lesson?.skillArea ?? 'FMS');
+  const [skillName, setSkillName] = useState(lesson?.skillName ?? SKILLS_BY_AREA.FMS[0]);
+  const [pairCount, setPairCount] = useState(lesson?.pairCount ?? DEFAULT_PAIR_COUNT);
+  // A new lesson starts with the default steps (lessonFlow.ts)
+  const [steps, setSteps] = useState<LessonStep[]>(lesson?.steps ?? defaultSteps(lesson?.skillName ?? SKILLS_BY_AREA.FMS[0]));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const problems = validateLesson({ mainSkill: skillName, skillArea, steps });
+
+  // Steps on the main skill follow it when it changes
+  const changeMainSkill = (next: string, area: SkillArea = skillArea) => {
+    setSteps(prev => followMainSkill(prev, skillName, next, SKILLS_BY_AREA[area]));
+    setSkillName(next);
+  };
+
   const changeArea = (area: SkillArea) => {
     setSkillArea(area);
-    setSkillName(SKILLS_BY_AREA[area][0]);
+    changeMainSkill(SKILLS_BY_AREA[area][0], area);
   };
 
   const submit = async (showNow: boolean) => {
@@ -49,10 +62,14 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ onSave, onCancel
       setError('Enter the class, e.g. 4B.');
       return;
     }
+    if (problems.length) {
+      setError(problems[0].message);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await onSave({ lessonDate, className, level, objective, skillArea, skillName, pairCount }, showNow);
+      await onSave({ lessonDate, className, level, objective, skillArea, skillName, pairCount, steps }, showNow);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the lesson.');
       setSaving(false);
@@ -68,9 +85,11 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ onSave, onCancel
       className="bg-white dark:bg-zinc-900 rounded-3xl p-6 md:p-8 shadow-xl border border-slate-200 dark:border-zinc-800 flex flex-col gap-5"
     >
       <div>
-        <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">Plan a lesson</h2>
+        <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">{lesson ? 'Edit lesson' : 'Plan a lesson'}</h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Each lesson gets its own QR code. Pupils' check-ins and videos are kept under it.
+          {lesson
+            ? 'Changes to the steps reach pupils when they move to their next step.'
+            : "Each lesson gets its own QR code. Pupils' check-ins and videos are kept under it."}
         </p>
       </div>
 
@@ -136,8 +155,8 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ onSave, onCancel
           </div>
         </div>
         <label className="flex flex-col gap-1.5">
-          <span className={labelClass}>Skill</span>
-          <select value={skillName} onChange={(e) => setSkillName(e.target.value)} className={inputClass}>
+          <span className={labelClass}>Main skill</span>
+          <select value={skillName} onChange={(e) => changeMainSkill(e.target.value)} className={inputClass}>
             {SKILLS_BY_AREA[skillArea].map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -159,6 +178,8 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ onSave, onCancel
         </label>
       </div>
 
+      <StepBuilder steps={steps} skills={SKILLS_BY_AREA[skillArea]} mainSkill={skillName} problems={problems} onChange={setSteps} />
+
       {error && (
         <p role="alert" className="text-sm font-semibold text-red-600 dark:text-red-400">
           {error}
@@ -179,7 +200,7 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ onSave, onCancel
           onClick={() => submit(false)}
           className="px-4 py-2.5 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-60 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
         >
-          Save for later
+          {lesson ? 'Save' : 'Save for later'}
         </button>
         <button
           type="button"
@@ -204,6 +225,7 @@ interface LessonListProps {
   onShow: (lesson: Lesson) => void;
   onDelete: (lesson: Lesson) => void;
   onPairs: (lesson: Lesson) => void;
+  onEdit: (lesson: Lesson) => void;
   namedCounts: Record<string, number>; // lesson id → pupils named in its pairs
 }
 
@@ -213,8 +235,9 @@ const LessonRow: React.FC<{
   onShow: () => void;
   onDelete: () => void;
   onPairs: () => void;
+  onEdit: () => void;
   named: number;
-}> = ({ lesson, isCurrent, onShow, onDelete, onPairs, named }) => (
+}> = ({ lesson, isCurrent, onShow, onDelete, onPairs, onEdit, named }) => (
   <li
     className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center gap-3 ${
       isCurrent
@@ -235,11 +258,19 @@ const LessonRow: React.FC<{
         )}
       </div>
       <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5">
-        {lesson.skillName} · {lesson.pairCount} pairs
+        {lesson.skillName} · {lesson.pairCount} pairs · {lesson.steps.length} step{lesson.steps.length === 1 ? '' : 's'}
       </p>
       {lesson.objective && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{lesson.objective}</p>}
     </div>
     <div className="flex gap-2 shrink-0">
+      <button
+        type="button"
+        onClick={onEdit}
+        title="Edit the lesson and its steps"
+        className="px-3 py-2 border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer"
+      >
+        ✏️ Edit
+      </button>
       <button
         type="button"
         onClick={onPairs}
@@ -282,6 +313,7 @@ export const LessonList: React.FC<LessonListProps> = ({
   onShow,
   onDelete,
   onPairs,
+  onEdit,
   namedCounts,
 }) => {
   const today = todayIso();
@@ -301,6 +333,7 @@ export const LessonList: React.FC<LessonListProps> = ({
               onShow={() => onShow(l)}
               onDelete={() => onDelete(l)}
               onPairs={() => onPairs(l)}
+              onEdit={() => onEdit(l)}
               named={namedCounts[l.id] ?? 0}
             />
           ))}

@@ -259,6 +259,33 @@ export const getPairProgress = (lessonId: string, pairNumber: number): PairProgr
   }
 };
 
+// The lesson's steps as last fetched (#87), so a reload or a dropped
+// connection keeps the teacher's plan instead of falling back to the default
+export interface CachedLessonSteps {
+  skillName: string;
+  steps: import('../../utils/lessonFlow').LessonStep[] | null;
+}
+
+const lessonStepsKey = (lessonId: string) => `pe_lesson_steps_${lessonId}`;
+
+export const getCachedLessonSteps = (lessonId: string): CachedLessonSteps | null => {
+  try {
+    const raw = localStorage.getItem(lessonStepsKey(lessonId));
+    const v = raw ? JSON.parse(raw) : null;
+    return v && typeof v.skillName === 'string' ? { skillName: v.skillName, steps: Array.isArray(v.steps) ? v.steps : null } : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveCachedLessonSteps = (lessonId: string, value: CachedLessonSteps): void => {
+  try {
+    localStorage.setItem(lessonStepsKey(lessonId), JSON.stringify(value));
+  } catch {
+    // Storage blocked — the steps are fetched again next time
+  }
+};
+
 export const savePairProgress = (lessonId: string, pairNumber: number, progress: PairProgress): void => {
   try {
     localStorage.setItem(pairStepKey(lessonId, pairNumber), JSON.stringify(progress));

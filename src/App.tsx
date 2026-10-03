@@ -24,11 +24,11 @@ import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress } from './services/offline/offlineStorage';
-import { LessonStep, PairProgress, findLessonStep, nextScreen, progressFor, stepsOrLegacy } from './utils/lessonFlow';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps } from './services/offline/offlineStorage';
+import { LessonStep, PairProgress, Screen, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
-import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork } from './services/cloudSyncService';
+import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
@@ -357,12 +357,31 @@ const App: React.FC = () => {
   const [refilmPerformer, setRefilmPerformer] = useState<Performer | null>(null);
   const [isPairReviewOpen, setIsPairReviewOpen] = useState(false);
 
-  // ── The pupil step runner (#85; lessonFlow.ts) ────────────────────────────
-  // A pair's device walks the lesson's steps in order. Pupil devices can't
-  // fetch a lesson's steps yet, so every lesson runs its legacy steps (peer
-  // assessment, then the Practice Station), which is today's flow.
+  // ── The pupil step runner (#85, #87; lessonFlow.ts) ───────────────────────
+  // A pair's device walks the teacher's steps in order. They're fetched with
+  // the lesson pass, and again each time the pair moves, so the teacher's
+  // edits arrive at the pair's next step. A lesson without stored steps runs
+  // the legacy flow (peer assessment, then the Practice Station).
   const pairSkillName = activePairSession?.skillName || scannedLessonData.skillName || 'Overhand Throw';
-  const lessonSteps: LessonStep[] = useMemo(() => stepsOrLegacy(null, pairSkillName), [pairSkillName]);
+  const [fetchedSteps, setFetchedSteps] = useState<(CachedLessonSteps & { lessonId: string }) | null>(null);
+  const lessonSteps: LessonStep[] = useMemo(
+    () => stepsOrLegacy(fetchedSteps?.lessonId === activePairSession?.lessonId ? fetchedSteps?.steps : null, fetchedSteps?.skillName || pairSkillName),
+    [fetchedSteps, activePairSession?.lessonId, pairSkillName],
+  );
+  /** Fetch the lesson's steps (falling back to the last ones this device had) and return them. */
+  const refreshLessonSteps = async (lessonId: string, fallbackSkill: string): Promise<LessonStep[]> => {
+    const fresh = await fetchPupilLessonSteps(lessonId).catch(() => null);
+    const got = fresh ?? getCachedLessonSteps(lessonId);
+    if (fresh) saveCachedLessonSteps(lessonId, fresh);
+    setFetchedSteps(got ? { ...got, lessonId } : null);
+    return stepsOrLegacy(got?.steps, got?.skillName || fallbackSkill);
+  };
+  useEffect(() => {
+    if (activePairSession) refreshLessonSteps(activePairSession.lessonId, pairSkillName);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePairSession?.lessonId]);
+  // No AI analysis step: the lesson makes no AI calls (no Practice Station, no automatic peer feedback)
+  const lessonUsesAi = hasAiAnalysis(lessonSteps);
   const [pairProgress, setPairProgressState] = useState<PairProgress | null>(null);
   useEffect(() => {
     setPairProgressState(activePairSession ? getPairProgress(activePairSession.lessonId, activePairSession.pairNumber) : null);
@@ -641,7 +660,8 @@ const App: React.FC = () => {
   );
   const stageFor = (p: Performer, record: PairSubmissionRecord | null = pairRecord ?? activePairSubmission) => {
     const lock = lockFor(p);
-    return { ...performerStage(performerWork(record, p, lock, activePairSubmission?.redoRequestedAt)), redo: lock === 'redo_requested' };
+    const work = { ...performerWork(record, p, lock, activePairSubmission?.redoRequestedAt), aiInLesson: lessonUsesAi };
+    return { ...performerStage(work), redo: lock === 'redo_requested' };
   };
 
   /** This pupil has had their one Practice Station analysis (#95). */
@@ -657,7 +677,7 @@ const App: React.FC = () => {
     submitted: "'s final recording is already with your teacher.",
   };
 
-  const addPracticeMessage = (text: string, isError = false) =>
+  const addPracticeMessage = (text: string, isError = false) => lessonUsesAi &&
     updateSessionAndSync(currentSessionIdRef.current, session => ({
       ...session,
       messages: [...session.messages, { id: `practice-${Date.now()}`, sender: Sender.BOT, timestamp: new Date(), text, isError }],
@@ -698,7 +718,7 @@ const App: React.FC = () => {
   // attempt so the teacher sees both. The new one becomes the current attempt.
   const handleRefilmDone = async (attempt: RefilmedAttempt) => {
     setRefilmPerformer(null);
-    setAppMode('chat');
+    backFromRefilm();
     const ctx = pairContext();
     if (!ctx || !attempt.videoBlob) return;
     const redoAt = lockFor(attempt.performer) === 'redo_requested' ? activePairSubmission?.redoRequestedAt : undefined;
@@ -790,11 +810,11 @@ const App: React.FC = () => {
         // A fresh time on every final submission is what the database counts as "sent"
         record.aiChatAnalysis = { ...record.aiChatAnalysis, [k]: { ...analysis, submittedAt: now } };
       } else {
-        // Coach Bot couldn't analyse it: the teacher grades it from a checklist
+        // No analysis (Coach Bot couldn't, or the lesson has no AI step): the teacher grades it from a checklist
         const criteria = getAllCuesForSkill(ctx.skillName).map(c => c.syllabusCriterion);
         record.aiChatAnalysis = {
           ...record.aiChatAnalysis,
-          [k]: { analysisText: noAnalysisChecklistText(criteria), skillName: ctx.skillName, studentLabel: performer, modelUsed: 'none', submittedAt: now, teacherGrades: true },
+          [k]: { analysisText: noAnalysisChecklistText(criteria, lessonUsesAi ? 'failed' : 'no_ai_in_lesson'), skillName: ctx.skillName, studentLabel: performer, modelUsed: 'none', submittedAt: now, teacherGrades: true },
         };
       }
     }
@@ -831,16 +851,28 @@ const App: React.FC = () => {
   // After a redo request, "Film again" from Our work: into the Practice Station, then the camera
   const handleRedoFilmAgain = async (performer: Performer) => {
     setIsPairReviewOpen(false);
-    await handleResumePracticeChat();
+    if (lessonUsesAi) await handleResumePracticeChat();
     setRefilmPerformer(performer);
     setAppMode('peer_coaching');
   };
 
+  /** Where a pupil lands after filming again. */
+  const backFromRefilm = () => {
+    if (lessonUsesAi) {
+      setAppMode('chat');
+    } else {
+      setAppMode('home_screen');
+      setIsPairReviewOpen(true);
+      loadPairRecord();
+    }
+  };
+
   // Show a step on the pair's device. A peer assessment that's already saved
   // opens "Our work" rather than recording again (#94).
-  const openStep = (step: LessonStep) => {
+  const openStep = (step: LessonStep, move: 'stay' | 'next' | 'back' = 'stay') => {
     if (step.kind === 'assess' && step.assess?.method === 'peer_assessment') {
-      if (pairRecord || activePairSubmission) {
+      // Moving on into a peer assessment records anew; going back to one shows what was saved
+      if (move !== 'next' && (pairRecord || activePairSubmission)) {
         setAppMode('home_screen');
         setIsPairReviewOpen(true);
       } else {
@@ -853,27 +885,36 @@ const App: React.FC = () => {
     }
   };
 
-  const goToStep = (move: 'stay' | 'next' | 'back') => {
-    const screen = nextScreen(lessonSteps, pairProgress, move);
-    setPairProgress(progressFor(screen, lessonSteps));
+  const goToStep = async (move: 'stay' | 'next' | 'back') => {
+    const steps = activePairSession ? await refreshLessonSteps(activePairSession.lessonId, pairSkillName) : lessonSteps;
+    const screen: Screen = nextScreen(steps, pairProgress, move);
+    setPairProgress(progressFor(screen, steps));
     if (screen.kind === 'complete') setAppMode('home_screen');
-    else openStep(screen.step);
+    else openStep(screen.step, move);
   };
 
   // A peer assessment is done: on to the next step. Into the Practice Station
   // straight away (with the automatic AI peer feedback) when that comes next.
   const handlePeerStepDone = async (data: CompletedPeerSession) => {
-    const next = nextScreen(lessonSteps, pairProgress, 'next');
+    const steps = activePairSession ? await refreshLessonSteps(activePairSession.lessonId, pairSkillName) : lessonSteps;
+    const next = nextScreen(steps, pairProgress, 'next');
     if (next.kind === 'step' && next.step.kind === 'assess' && next.step.assess?.method === 'ai_analysis') {
-      setPairProgress(progressFor(next, lessonSteps));
+      setPairProgress(progressFor(next, steps));
       await handlePeerSessionToChat(data);
       loadPairRecord();
+    } else if (next.kind === 'complete') {
+      // The last step: Our work, where each pupil submits their final recording
+      await loadPairRecord();
+      setAppMode('home_screen');
+      setIsPairReviewOpen(true);
     } else {
-      setActivePeerSessionData(data);
       await loadPairRecord();
       goToStep('next');
     }
   };
+
+  /** The step after this pair's current one, for "Next step" buttons. */
+  const hasNextStep = nextScreen(lessonSteps, pairProgress, 'next').kind === 'step';
 
   // While in a Practice Station, poll the pair's submission row for a teacher comment.
   useEffect(() => {
@@ -1038,7 +1079,7 @@ const App: React.FC = () => {
     setActivePairSession(merged);
     setIsPairCheckInOpen(false);
     // A fresh check-in starts at the first step (the pair's progress is keyed by lesson and pair)
-    const steps = stepsOrLegacy(null, merged.skillName || 'Overhand Throw');
+    const steps = await refreshLessonSteps(merged.lessonId, merged.skillName || 'Overhand Throw');
     const first = nextScreen(steps, null);
     if (first.kind === 'step') {
       savePairProgress(merged.lessonId, merged.pairNumber, progressFor(first, steps));
@@ -2060,7 +2101,10 @@ const App: React.FC = () => {
         stageFor={(p) => stageFor(p)}
         onKeep={handleKeep}
         onFilmAgain={handleRedoFilmAgain}
-        onOpenPracticeStation={() => { setIsPairReviewOpen(false); handleResumePracticeChat(); }}
+        actionsHere={!lessonUsesAi}
+        onSubmitFinal={handleSubmitFinal}
+        continueLabel={lessonUsesAi ? '💬 Go to the Practice Station' : hasNextStep ? 'Next step ➔' : null}
+        onOpenPracticeStation={() => { setIsPairReviewOpen(false); if (lessonUsesAi) handleResumePracticeChat(); else goToStep('next'); }}
         onStartRecording={() => { setIsPairReviewOpen(false); markStep('assess', 'peer_assessment'); setAppMode('peer_coaching'); }}
         onClose={() => setIsPairReviewOpen(false)}
       />
@@ -2134,7 +2178,8 @@ const App: React.FC = () => {
                     </button>
                   </div>
                   <div className="flex gap-2">
-                    {(pairRecord || activePairSubmission) && (
+                    {/* No Practice Station in a lesson without an AI analysis step (#87) */}
+                    {(pairRecord || activePairSubmission) && lessonUsesAi && (
                       <button
                         type="button"
                         onClick={handleResumePracticeChat}
@@ -2327,10 +2372,15 @@ const App: React.FC = () => {
             setAppMode('home_screen');
           }}
           onSendToCoachBot={handlePeerStepDone}
+          nextIsCoachBot={(() => {
+            const next = nextScreen(lessonSteps, pairProgress, 'next');
+            return next.kind === 'step' && next.step.kind === 'assess' && next.step.assess?.method === 'ai_analysis';
+          })()}
           onExit={() => {
             const wasRefilm = !!refilmPerformer;
             setRefilmPerformer(null);
-            setAppMode(wasRefilm ? 'chat' : 'home_screen');
+            if (wasRefilm) backFromRefilm();
+            else setAppMode('home_screen');
           }}
         />
         </div>

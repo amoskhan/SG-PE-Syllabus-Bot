@@ -40,3 +40,34 @@ create index if not exists lessons_teacher_date_idx
 alter table public.lessons
   add column if not exists steps jsonb
   check (steps is null or jsonb_typeof(steps) = 'array');
+
+-- ── Pupils read a lesson's steps (#87) ──────────────────────────────────────
+-- Pupils never read this table. Their device asks for the steps with the
+-- lesson pass from the class QR, and only on the lesson's date (Singapore
+-- time). Returns {"skill_name", "steps"} (steps null = the legacy flow), or
+-- null when refused. Needs pupil_pass from supabase_lesson_pass.sql; sg_today()
+-- is repeated here, unchanged, so the order the files are run in doesn't matter.
+create or replace function public.sg_today()
+returns date
+language sql
+stable
+as $$
+  select (now() at time zone 'Asia/Singapore')::date;
+$$;
+
+create or replace function public.pupil_lesson_steps(p_lesson_id text, p_pass text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object('skill_name', skill_name, 'steps', steps)
+  from public.lessons
+  where id = p_lesson_id
+    and pupil_pass = p_pass
+    and lesson_date = public.sg_today();
+$$;
+
+revoke all on function public.pupil_lesson_steps(text, text) from public;
+grant execute on function public.pupil_lesson_steps(text, text) to anon, authenticated;
