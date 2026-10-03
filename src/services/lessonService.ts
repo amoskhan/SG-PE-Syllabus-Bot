@@ -27,7 +27,6 @@ export interface Lesson {
 export type LessonDraft = Omit<Lesson, "id" | "createdAt" | "pupilPass" | "steps"> & { steps?: LessonStep[] };
 
 export const LEVELS = ["P1", "P2", "P3", "P4", "P5", "P6"];
-export const DEFAULT_PAIR_COUNT = 15;
 export const MAX_PAIR_COUNT = 30;
 
 export interface LessonRow {
