@@ -239,3 +239,48 @@ grant execute on function public.pupil_get_submission(text, text) to anon, authe
 
 -- An earlier version of this migration locked on the teacher's grading instead
 drop function if exists public.submission_locked(text);
+
+-- ── 5. Keep: after a redo request, a performer keeps the work already sent ──
+-- (#93) Nothing about their work changes; it is just marked as sent again, so
+-- it locks as before. Returns 'ok' | 'claimed' | 'invalid_lesson'.
+create or replace function public.pupil_keep_work(p jsonb)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id        text := p->>'id';
+  v_lesson    text := p->>'lesson_id';
+  v_token     text := nullif(p->>'claim_token', '');
+  v_performer text := p->>'performer';
+  v_row       public.pair_submissions%rowtype;
+begin
+  if v_performer not in ('apple', 'banana') or not exists (
+    select 1 from public.lessons
+    where id = v_lesson and pupil_pass = p->>'pass' and lesson_date = public.sg_today()
+  ) then
+    return 'invalid_lesson';
+  end if;
+
+  select * into v_row from public.pair_submissions where id = v_id and lesson_id = v_lesson;
+  if not found then return 'invalid_lesson'; end if;
+  if v_row.claim_token is null or v_token is null or v_row.claim_token <> v_token then
+    return 'claimed';
+  end if;
+
+  -- Only work that was sent before can be kept; locked work stays as it is
+  if not public.performer_locked(v_row, v_performer)
+     and (case when v_performer = 'apple' then v_row.apple_sent_at else v_row.banana_sent_at end) is not null then
+    update public.pair_submissions set
+      apple_sent_at  = case when v_performer = 'apple'  then now() else apple_sent_at end,
+      banana_sent_at = case when v_performer = 'banana' then now() else banana_sent_at end,
+      updated_at     = now()
+    where id = v_id;
+  end if;
+  return 'ok';
+end;
+$$;
+
+revoke all on function public.pupil_keep_work(jsonb) from public;
+grant execute on function public.pupil_keep_work(jsonb) to anon, authenticated;

@@ -15,6 +15,11 @@
 -- signed in and never see names. It runs when a pupil sends work, and again
 -- when the teacher assigns or changes a pair, so work sent before the pairs
 -- were set still reaches the right student.
+--
+-- A re-do (#93): when a performer films again after the teacher's redo
+-- request, their re-do gets a grading of its own (redo_of = that request), for
+-- the teacher to grade. The earlier grading and its teacher review stay, so
+-- the dashboard shows the progression.
 
 -- ── 1. Who is in each pair ──────────────────────────────────────────────────
 create table if not exists public.lesson_pairs (
@@ -52,8 +57,13 @@ alter table public.skill_analyses
   add column if not exists teacher_level       text,
   add column if not exists teacher_reviewed_at timestamptz;
 
-create unique index if not exists skill_analyses_submission_performer_idx
-  on public.skill_analyses (submission_id, performer);
+alter table public.skill_analyses
+  add column if not exists redo_of timestamptz;  -- the redo request this grading answers; null = first attempt
+
+-- One grading per attempt: the first, and one per redo request
+drop index if exists public.skill_analyses_submission_performer_idx;
+create unique index if not exists skill_analyses_submission_attempt_idx
+  on public.skill_analyses (submission_id, performer, coalesce(redo_of, '-infinity'::timestamptz));
 
 -- ── 3. Copy one pupil's Practice Station analysis into their record ─────────
 create or replace function public.sync_practice_analysis(p_submission_id text, p_performer text)
@@ -70,11 +80,14 @@ declare
   v_level    text;
   v_video    text;
   v_existing public.skill_analyses%rowtype;
+  v_redo     jsonb;
+  v_redo_of  timestamptz;
 begin
   select * into v_sub from public.pair_submissions where id = p_submission_id;
   if not found or v_sub.teacher_id is null then return; end if;
 
   v_entry := v_sub.ai_chat_analysis -> p_performer;
+  v_redo  := case when jsonb_typeof(v_entry -> 'redo') = 'object' then v_entry -> 'redo' end;
   select student_id into v_student from public.lesson_pairs
    where lesson_id = v_sub.lesson_id and pair_number = v_sub.pair_number and performer = p_performer;
 
@@ -94,8 +107,33 @@ begin
   v_video := case when p_performer = 'apple' then v_sub.apple_video_url else v_sub.banana_video_url end;
   v_video := nullif(split_part(regexp_replace(coalesce(v_video, ''), '^.*/student-videos/', ''), '?', 1), '');
 
+  -- The pupil may be named in a different slot now: every attempt moves with them
+  update public.skill_analyses set student_id = v_student, summarised = false
+   where submission_id = p_submission_id and performer = p_performer and student_id <> v_student;
+
+  -- After a re-do the stored video is the re-do's, so the first grading keeps its own
+  if v_redo is not null then
+    v_redo_of := (v_redo ->> 'requestedAt')::timestamptz;
+    select * into v_existing from public.skill_analyses
+     where submission_id = p_submission_id and performer = p_performer and redo_of = v_redo_of;
+    if not found then
+      insert into public.skill_analyses
+        (student_id, teacher_id, skill_name, video_url, proficiency_level, analysis_text,
+         model_id, summarised, source, lesson_id, submission_id, performer, redo_of, created_at)
+      values
+        (v_student, v_sub.teacher_id, coalesce(v_entry ->> 'skillName', v_sub.skill_name), v_video,
+         null,  -- no AI on a re-do: the level is the teacher's
+         coalesce(v_redo ->> 'checklistText', 'Re-do: graded by the teacher.'),
+         'teacher', false, 'practice_station', v_sub.lesson_id, p_submission_id, p_performer, v_redo_of,
+         coalesce((v_redo ->> 'submittedAt')::timestamptz, now()));
+    elsif v_existing.video_url is null and v_video is not null then
+      update public.skill_analyses set video_url = v_video, summarised = false where id = v_existing.id;
+    end if;
+    v_video := null;
+  end if;
+
   select * into v_existing from public.skill_analyses
-   where submission_id = p_submission_id and performer = p_performer;
+   where submission_id = p_submission_id and performer = p_performer and redo_of is null;
 
   if not found then
     insert into public.skill_analyses
@@ -116,11 +154,10 @@ begin
       teacher_criteria = null, teacher_level = null, teacher_reviewed_at = null,
       summarised = false
     where id = v_existing.id;
-  elsif v_existing.student_id <> v_student or v_existing.video_url is distinct from coalesce(v_video, v_existing.video_url) then
-    -- Same analysis: the teacher moved it to another pupil, or the video arrived.
-    -- The review stays — it's about the clip, not who was named.
-    update public.skill_analyses set
-      student_id = v_student, video_url = coalesce(v_video, video_url), summarised = false
+  elsif v_existing.video_url is null and v_video is not null then
+    -- Same analysis, and the video arrived. The review stays: it's about the
+    -- clip. A clip filmed later (a re-do) never replaces the one graded.
+    update public.skill_analyses set video_url = v_video, summarised = false
     where id = v_existing.id;
   end if;
 end;

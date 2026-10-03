@@ -31,7 +31,7 @@ import {
 import { LessonPlanForm, LessonList } from '../components/classroom/LessonPlanner';
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
-import { normaliseLevel } from '../utils/gradingReview';
+import { effectiveLevel, normaliseLevel } from '../utils/gradingReview';
 import { performerLock } from '../utils/submissionLock';
 import { Student, SkillAnalysis } from '../types';
 import { getStudents } from '../services/studentService';
@@ -312,12 +312,15 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
   const [feedbackSent, setFeedbackSent] = useState(false);
 
-  // The copies of the open submission's analyses in the pupils' own records
-  const [subGradings, setSubGradings] = useState<Partial<Record<Performer, SkillAnalysis>>>({});
+  // The copies of the open submission's analyses in the pupils' own records:
+  // per performer, oldest first (the last is a re-do's, once one is sent, #93)
+  const [subGradings, setSubGradings] = useState<Partial<Record<Performer, SkillAnalysis[]>>>({});
+  const redoSentKey = `${activeReviewSub?.aiChatAnalysis?.apple?.redo?.submittedAt}|${activeReviewSub?.aiChatAnalysis?.banana?.redo?.submittedAt}`;
   useEffect(() => {
     setSubGradings({});
     if (activeReviewSub && teacherId) fetchSubmissionGradings(activeReviewSub.id).then(setSubGradings);
-  }, [activeReviewSub?.id, teacherId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeReviewSub?.id, teacherId, redoSentKey]);
 
   // Name (or re-name) a pupil straight from the tray; the database then files
   // this pair's analysis under them, so re-read the gradings afterwards.
@@ -1077,6 +1080,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 {(['apple', 'banana'] as const).map((who) => {
                   const entry = activeReviewSub.aiChatAnalysis?.[who];
                   if (!entry) return null;
+                  const gradings = subGradings[who] ?? [];
+                  const current = gradings.at(-1);
+                  const earlier = gradings.slice(0, -1);
                   return (
                     <div key={who} className="border border-emerald-500/40 rounded-2xl overflow-hidden">
                       <div className="bg-emerald-950/80 dark:bg-emerald-950 px-4 py-2.5 flex items-center gap-2">
@@ -1104,15 +1110,36 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                             )}
                           </div>
                         )}
+                        {/* Re-filmed after a redo request (#93): the AI analysis below is of the earlier attempt */}
+                        {entry.redo && (
+                          <div className="mb-3 p-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-900">
+                            <p className="text-[11px] font-bold text-sky-800 dark:text-sky-300">
+                              🔄 Re-do sent {new Date(entry.redo.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. The video above is the re-do. No AI analysis on a re-do: grade it below.
+                            </p>
+                            {entry.redo.firstClip && (
+                              <>
+                                <p className="mt-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">Their first try in this re-do:</p>
+                                <VideoBlobPlayer videoUrl={entry.redo.firstClip.videoUrl} performer={entry.studentLabel} />
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {entry.redo && <p className="text-[11px] font-bold text-slate-400 mb-1">AI analysis of the earlier attempt</p>}
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
                           {entry.analysisText}
                         </p>
+                        {/* Earlier grades stay on the pupil's record as their progress */}
+                        {earlier.length > 0 && (
+                          <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                            Earlier: {earlier.map(g => `${effectiveLevel(g) ?? 'not graded'} (${g.createdAt.toLocaleDateString([], { day: 'numeric', month: 'short' })})`).join(' → ')}
+                          </p>
+                        )}
                         {/* Same review as the Student Dashboard: it is the same record */}
-                        {subGradings[who] ? (
+                        {current ? (
                           <TeacherReviewPanel
-                            key={subGradings[who]!.id}
-                            analysis={subGradings[who]!}
-                            onSaved={(updated) => setSubGradings((prev) => ({ ...prev, [who]: updated }))}
+                            key={current.id}
+                            analysis={current}
+                            onSaved={(updated) => setSubGradings((prev) => ({ ...prev, [who]: [...(prev[who] ?? []).slice(0, -1), updated] }))}
                           />
                         ) : (
                           <p className="mt-3 text-[11px] text-amber-700 dark:text-amber-400">

@@ -216,6 +216,26 @@ export async function savePupilSubmission(fields: {
   return data === "claimed" || data === "invalid_lesson" || data === "locked" ? data : "ok";
 }
 
+/**
+ * After a redo request: this performer keeps the work they already sent (#93).
+ * Nothing changes except that it is marked as sent again, so it locks again.
+ */
+export async function keepPupilWork(fields: {
+  id: string;
+  lesson_id: string;
+  claim_token: string;
+  performer: "apple" | "banana";
+}): Promise<PupilWriteResult> {
+  const { data, error } = await supabase.rpc("pupil_keep_work", {
+    p: { ...fields, pass: getLessonPass(fields.lesson_id) },
+  });
+  if (error) {
+    console.error("[CloudSync] pupil_keep_work error:", error);
+    return "error";
+  }
+  return data === "claimed" || data === "invalid_lesson" ? data : "ok";
+}
+
 /** A pair's own submission, proven by its claim token. Null if none or not theirs. */
 export async function fetchPupilSubmission(id: string, claimToken: string): Promise<PairSubmissionRecord | null> {
   const { data, error } = await supabase.rpc("pupil_get_submission", { p_id: id, p_claim_token: claimToken });
