@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { SkillAnalysis } from '../../types';
 import { saveTeacherReview } from '../../services/studentService';
 import {
-  LEVELS, CriterionResult, effectiveCriteria, effectiveLevel, levelFromCriteria, levelIndex,
+  LEVELS, CriterionResult, effectiveCriteria, effectiveLevel, levelFromCriteria, levelIndex, normaliseLevel,
 } from '../../utils/gradingReview';
 
 interface Props {
@@ -26,8 +26,9 @@ const TeacherReviewPanel: React.FC<Props> = ({ analysis, onSaved }) => {
   const [touched, setTouched] = useState(false);
   const [manualLevel, setManualLevel] = useState<string | null>(() => {
     if (!analysis.teacherLevel || !initial.length) return null;
+    const saved = normaliseLevel(analysis.teacherLevel) ?? analysis.teacherLevel;
     const fromTicks = levelFromCriteria(initial.map(c => c.result), analysis.proficiencyLevel);
-    return analysis.teacherLevel !== fromTicks ? analysis.teacherLevel : null;
+    return saved !== fromTicks ? saved : null;
   });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'saved' | 'error' | null>(null);

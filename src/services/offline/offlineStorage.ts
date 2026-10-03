@@ -53,8 +53,8 @@ export interface PairSubmissionRecord {
   aiTeacherReport?: {
     bananaAnalysis: string;
     appleAnalysis: string;
-    bananaProficiency: 'Beginning' | 'Developing' | 'Competent' | 'Excellent';
-    appleProficiency: 'Beginning' | 'Developing' | 'Competent' | 'Excellent';
+    bananaProficiency: 'Beginning' | 'Developing' | 'Competent' | 'Accomplished' | 'Excellent'; // 'Excellent': saved before the rename
+    appleProficiency: 'Beginning' | 'Developing' | 'Competent' | 'Accomplished' | 'Excellent'; // 'Excellent': saved before the rename
     teacherRecommendations: string;
     discrepancies: Array<{
       criterion: string;

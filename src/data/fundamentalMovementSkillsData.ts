@@ -144,7 +144,7 @@ export const PROFICIENCY_RUBRIC = `
 - **Characteristics**: Text-book execution. Fluid, coordinated, and correct biomechanics.
 - **Feedback Focus**: Maintaining consistency.
 
-**4. Excellent**
+**4. Accomplished**
 - **Criteria**: Meets all criteria **AND** demonstrates superior quality.
 - **Characteristics**: "Wow" factor. Exceptional smoothness, power, dynamic balance, or consistency. Looks natural and effortless.
 - **Feedback Focus**: Advanced refinements or variations.

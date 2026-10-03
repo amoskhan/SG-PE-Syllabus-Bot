@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAiCriteria } from './gradingReview';
+import { parseAiCriteria, normaliseLevel, levelFromCriteria } from './gradingReview';
 
 describe('parseAiCriteria', () => {
     it('reads a table checklist', () => {
@@ -23,5 +23,30 @@ describe('parseAiCriteria', () => {
             { name: 'Swing dominant hand back at least to waist level', result: 'missed' },
             { name: 'Lower body by bending at knees and waist', result: 'unsure' },
         ]);
+    });
+});
+
+describe('normaliseLevel', () => {
+    it('reads gradings saved before the rename as Accomplished', () => {
+        expect(normaliseLevel('Excellent')).toBe('Accomplished');
+        expect(normaliseLevel('excellent')).toBe('Accomplished');
+    });
+
+    it('returns the canonical name for any case', () => {
+        expect(normaliseLevel('competent')).toBe('Competent');
+        expect(normaliseLevel('Accomplished')).toBe('Accomplished');
+    });
+
+    it('returns undefined for anything else', () => {
+        expect(normaliseLevel('Proficient')).toBeUndefined();
+        expect(normaliseLevel(undefined)).toBeUndefined();
+    });
+});
+
+describe('levelFromCriteria', () => {
+    it('keeps Accomplished, including an old Excellent, when every cue is met', () => {
+        expect(levelFromCriteria(['met', 'met'], 'Excellent')).toBe('Accomplished');
+        expect(levelFromCriteria(['met', 'met'], 'Accomplished')).toBe('Accomplished');
+        expect(levelFromCriteria(['met', 'met'], 'Developing')).toBe('Competent');
     });
 });

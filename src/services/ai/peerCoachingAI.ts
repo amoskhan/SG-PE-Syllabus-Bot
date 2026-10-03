@@ -1,5 +1,6 @@
 import { OFFICIAL_FMS_PEER_CUES } from "../../data/peerSyllabusCues";
 import { claudeAccessHeaders, PupilAiRequest } from "./aiAccess";
+import { Level, normaliseLevel } from "../../utils/gradingReview";
 
 // Matches claudeService.ts. Haiku is enough here: four short, tightly
 // formatted calls over 4 frames each, not a full rubric grading.
@@ -17,8 +18,8 @@ export interface PeerCoachingAIResult {
   teacherReport: {
     bananaAnalysis: string;
     appleAnalysis: string;
-    bananaProficiency: "Beginning" | "Developing" | "Competent" | "Excellent";
-    appleProficiency: "Beginning" | "Developing" | "Competent" | "Excellent";
+    bananaProficiency: Level;
+    appleProficiency: Level;
     teacherRecommendations: string;
     discrepancies: Array<{
       criterion: string;
@@ -113,9 +114,7 @@ async function callClaude(blocks: ClaudeBlock[], access?: PupilAiRequest): Promi
   return data.text || "";
 }
 
-const VALID_PROFICIENCIES = ["Beginning", "Developing", "Competent", "Excellent"];
-const cleanProficiency = (p: string): "Beginning" | "Developing" | "Competent" | "Excellent" =>
-  (VALID_PROFICIENCIES.includes(p) ? p : "Developing") as "Beginning" | "Developing" | "Competent" | "Excellent";
+const cleanProficiency = (p: string): Level => normaliseLevel(p) ?? "Developing";
 
 const parseTeacherReport = (rawText: string) => {
   try {
@@ -155,47 +154,50 @@ export async function runPeerCoachingAnalysis(
     appleVideoBlob ? extractFramesFromBlob(appleVideoBlob, 4).catch(() => []) : Promise.resolve([]),
   ]);
 
-  const bananaPeerSummary = cues.map(c => `${c.syllabusCriterion}: ${bananaCues[c.id] ? "YES" : "NO"}`).join(", ");
-  const applePeerSummary = cues.map(c => `${c.syllabusCriterion}: ${appleCues[c.id] ? "YES" : "NO"}`).join(", ");
-
-  const buildStudentParts = (performer: "Apple" | "Banana", frames: string[], peerSummary: string): ClaudeBlock[] => [
+  // The AI judges from the video alone and never sees the pupils' ticks
+  // (docs/adr/0001-ai-never-sees-peer-ticks.md). The ticks are compared with
+  // its verdict afterwards, below, to show the teacher where they disagree.
+  const buildStudentParts = (performer: "Apple" | "Banana", frames: string[]): ClaudeBlock[] => [
     ...frames.map(frameToClaudeBlock).filter((b): b is ClaudeBlock => b !== null),
     {
       type: "text",
       text: `You are a super encouraging PE coach for Singapore primary school students (age 8-12).
-Skill: ${skillName}. Peer partner said about ${performer}: ${peerSummary}
-${frames.length > 0 ? `You can see ${performer}'s movement frames above.` : ""}
+Skill: ${skillName}. You can see ${performer}'s movement frames above.
 
 Give ${performer} exactly 1 PRAISE and 1 TIP. Max 2 sentences. Simple words. End with 1 emoji. No rubrics or jargon.
 Format: [praise]. [tip] [emoji]`
     }
   ];
 
-  const buildTeacherParts = (performer: "Apple" | "Banana", frames: string[], peerSummary: string): ClaudeBlock[] => [
+  const buildTeacherParts = (performer: "Apple" | "Banana", frames: string[]): ClaudeBlock[] => [
     ...frames.map(frameToClaudeBlock).filter((b): b is ClaudeBlock => b !== null),
     {
       type: "text",
       text: `You are an expert Singapore MOE PE assessor.
-Skill: ${skillName}. Performer: ${performer}. Peer observed: ${peerSummary}
-${frames.length > 0 ? "Movement frames shown above." : "No frames � use peer data only."}
+Skill: ${skillName}. Performer: ${performer}. Judge only from the movement frames above.
 
 MOE 2024 Criteria:
 ${criteriaList || "Standard FMS criteria."}
 
 Respond ONLY in raw JSON (no markdown):
 {"criteriaScores":[{"criterion":"Face Target","met":true}],"proficiency":"Developing","teacherNotes":"2-3 specific teaching recommendations"}
-Proficiency: Beginning(0-30%), Developing(31-60%), Competent(61-85%), Excellent(86-100%).`
+Proficiency: Beginning(0-30%), Developing(31-60%), Competent(61-85%), Accomplished(86-100%).`
     }
   ];
 
   onProgress?.("AI is watching your movements...");
 
+  // No frames means nothing to judge, so that call is skipped and the
+  // fallback text below is used.
+  const ask = (frames: string[], parts: ClaudeBlock[]) =>
+    frames.length > 0 ? callClaude(parts, access) : Promise.resolve("");
+
   const [bananaStudentResult, appleStudentResult, bananaTeacherResult, appleTeacherResult] =
     await Promise.allSettled([
-      callClaude(buildStudentParts("Banana", bananaFrames, bananaPeerSummary), access),
-      callClaude(buildStudentParts("Apple", appleFrames, applePeerSummary), access),
-      callClaude(buildTeacherParts("Banana", bananaFrames, bananaPeerSummary), access),
-      callClaude(buildTeacherParts("Apple", appleFrames, applePeerSummary), access),
+      ask(bananaFrames, buildStudentParts("Banana", bananaFrames)),
+      ask(appleFrames, buildStudentParts("Apple", appleFrames)),
+      ask(bananaFrames, buildTeacherParts("Banana", bananaFrames)),
+      ask(appleFrames, buildTeacherParts("Apple", appleFrames)),
     ]);
 
   onProgress?.("Building your coaching report...");
