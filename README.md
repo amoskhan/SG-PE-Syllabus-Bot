@@ -25,7 +25,7 @@ Upload a video or record from your camera to get graded feedback. Switch between
 
 1. **Pose extraction** — MediaPipe Pose Landmarker tracks 33 landmarks per frame and builds a biomechanics report: camera orientation, throwing arm, arm trajectory, wind-up, backswing height (underhand roll/throw), stepping foot, arm–foot coordination, stance width, knee bend and step detection. See [BIOMECHANICS.md](docs/BIOMECHANICS.md) for how each measure maps to the movement.
 2. **Skill identification** — the AI suggests the most likely skills as clickable chips (skip this step by typing the skill name).
-3. **Grading** — each checklist criterion is graded ✅ / ❌ / ⚠️ with frame-level evidence. Proficiency is reported as Beginning / Developing / Competent / Excellent.
+3. **Grading** — each checklist criterion is graded ✅ / ❌ / ⚠️ with frame-level evidence. Proficiency is reported as Beginning / Developing / Competent / Accomplished.
 
 #### Fundamental Movement Skills (10)
 Underhand Throw, Underhand Roll, Overhand Throw, Kick, Dribble with Hands, Dribble with Feet, Chest Pass, Catch Above Waist, Bounce Pass, Bounce.

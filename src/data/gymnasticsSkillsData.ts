@@ -318,7 +318,7 @@ The student performs at least half of the critical elements. Movement shows basi
 Competent
 The student performs all critical elements consistently. Movement is coordinated and controlled throughout; flight phase is clear where required (both feet off ground); landing is balanced with knee bend to absorb force; smooth, rhythmic motion is evident.
 
-Excellent
+Accomplished
 The student performs all critical elements with exceptional quality. Movement is fluid, powerful, and well-coordinated; maximum flight phase with full body extension where appropriate; landing is athletic — controlled, balanced, and ready to continue; smooth rhythmic motion performed with ease and confidence.
 
 GYMNASTICS JUMP SHAPES PROFICIENCY RUBRIC
@@ -332,7 +332,7 @@ The student performs at least half of the critical elements. A partial shape is 
 Competent
 The student performs all critical elements consistently. The correct shape is clearly formed at the peak of flight; take-off is from two feet; landing is controlled with knees bent.
 
-Excellent
+Accomplished
 The student performs all critical elements with exceptional quality. The shape is perfectly held at maximum height with full body extension where required; landing is athletic and ready for the next movement; clear body tension and pointed toes.
 
 GYMNASTICS BALANCE SKILLS PROFICIENCY RUBRIC
@@ -346,7 +346,7 @@ The student demonstrates at least half of the critical elements. The balance is 
 Competent
 The student demonstrates all critical elements consistently. The balance is held still for at least 3 seconds with minimal wobble; the correct base of support is used; a clear body shape is maintained throughout.
 
-Excellent
+Accomplished
 The student demonstrates all critical elements with exceptional quality. The balance is held with full stillness for 3+ seconds; the body shape is clear, intentional and aesthetically presented; transitions into and out of the balance are smooth and controlled.
 
 GYMNASTICS INVERTED BALANCE PROFICIENCY RUBRIC
@@ -360,7 +360,7 @@ At least half of the critical elements are demonstrated. The inverted position i
 Competent
 All critical elements are demonstrated consistently. The correct base is used with straight arms (where required); the inverted position is held still for at least 3 seconds; a clear stretched body shape is maintained.
 
-Excellent
+Accomplished
 All critical elements are demonstrated with exceptional quality. The inverted balance is held with full stillness and body tension; entry and exit are smooth; clean shape — straight legs, pointed toes, engaged core.
 
 GYMNASTICS PARTNER BALANCE PROFICIENCY RUBRIC
@@ -374,7 +374,7 @@ At least half of the critical elements are demonstrated. A shared balance is bri
 Competent
 All critical elements are demonstrated consistently. Shared balance is held for at least 3 seconds; both partners equally contribute to the counterbalance or counter-tension; clear shapes are displayed.
 
-Excellent
+Accomplished
 All critical elements are demonstrated with exceptional quality. The shared balance is held with stillness and mutual control; shapes are clear, intentional, and aesthetically presented; transitions in and out are seamless.
 
 GYMNASTICS ROLLING SKILLS PROFICIENCY RUBRIC
@@ -388,7 +388,7 @@ The student performs at least half of the critical elements. A partial shape is 
 Competent
 The student performs all critical elements consistently. The correct roll shape (round-tuck, narrow-stretch, or wide-stretch) is maintained throughout; the movement is smooth and continuous; entry and exit positions are controlled.
 
-Excellent
+Accomplished
 The student performs all critical elements with exceptional quality. The roll shape is perfectly maintained with clear body tension; the movement flows effortlessly with no loss of momentum; entry and exit are seamless, ready for the next skill in a sequence.
 
 GYMNASTICS SPINNING AND TURNING PROFICIENCY RUBRIC
@@ -402,7 +402,7 @@ At least half of the critical elements are demonstrated. At least ½ circle of r
 Competent
 All critical elements are demonstrated consistently. At least ½ circle (180°) of rotation is completed; balance is maintained before, during, and after; a clear body shape is sustained.
 
-Excellent
+Accomplished
 All critical elements are demonstrated with exceptional quality. Rotation is smooth, controlled, and exceeds the minimum angle; the shape is clear and tight; the finish is balanced and poised.
 
 GYMNASTICS CARTWHEEL PROFICIENCY RUBRIC
@@ -416,7 +416,7 @@ At least half of the critical elements are demonstrated. Weight transfers onto t
 Competent
 All critical elements are demonstrated consistently. Weight transfers smoothly foot–hand–hand–foot; the body passes near-vertical with legs apart and straight arms; landing is controlled side-on.
 
-Excellent
+Accomplished
 All critical elements are demonstrated with exceptional quality. Clear vertical height; legs fully straight and wide at the apex; the movement is fluent with no hesitation; the finish is athletic and poised.
 
 GYMNASTICS VAULTING PROFICIENCY RUBRIC
@@ -430,7 +430,7 @@ At least half of the critical elements are demonstrated. The apparatus is cleare
 Competent
 All critical elements are demonstrated consistently. The run-up, springboard take-off, straight-arm hand support, required shape during flight, and two-foot controlled landing are all present.
 
-Excellent
+Accomplished
 All critical elements are demonstrated with exceptional quality. The vault has clear height and distance; the shape is fully achieved with body tension; the landing is athletic — balanced, two-footed, upright, and ready.
 `;
 

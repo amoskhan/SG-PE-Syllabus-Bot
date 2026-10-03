@@ -28,6 +28,7 @@ import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers,
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest } from './services/ai/aiAccess';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
+import { normaliseLevel } from './utils/gradingReview';
 
 type ModelId = 'gemini' | 'claude';
 
@@ -1640,8 +1641,8 @@ const App: React.FC = () => {
       // Use proficiency level detection — not isVerifying — as the Phase 2 signal.
       // isVerifying is false when Target Skill is pre-filled (AI runs Phase 2 directly
       // without a chip click), so relying on it causes saves to be silently skipped.
-      const proficiencyMatch = response.text.match(/\b(Beginning|Developing|Competent|Excellent)\b/i);
-      const proficiencyLevel = proficiencyMatch ? proficiencyMatch[1] : undefined;
+      const proficiencyMatch = response.text.match(/\b(Beginning|Developing|Competent|Accomplished|Excellent)\b/i);
+      const proficiencyLevel = proficiencyMatch ? normaliseLevel(proficiencyMatch[1]) : undefined;
       if (studentId && skillContext && proficiencyLevel) {
         console.log('[Save] Saving analysis for', studentId, skillContext, proficiencyLevel);
         (async () => {

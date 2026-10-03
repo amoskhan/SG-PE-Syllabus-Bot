@@ -41,7 +41,7 @@ The user demonstrates competent form. The step forward is wide and distinct (Lef
 CHECKLIST ASSESSMENT
 - 1. Face Target: ✅ Observed
 - 2. Place feet shoulder width apart: ✅ Observed
-- 3. Keep knees slightly bent: ✅ Observed (Excellent deep knee bend to 70°)
+- 3. Keep knees slightly bent: ✅ Observed (Good deep knee bend to 70°)
 - 4. Hold ball with dominant hand in front: ✅ Observed
 - 5. Swing dominant hand back at least to waist: ✅ Observed (Arm moves back in frames 1-4)
 - 6. Step with non-dominant foot toward target: ✅ Observed (Left foot step detected)
@@ -53,7 +53,7 @@ PROFICIENCY LEVEL: Competent
 You met ALL critical features. The deep knee bend is particularly good for this skill.
 
 FEEDBACK
-Excellent execution. The low release point was achieved through good knee flexion.`
+Strong execution. The low release point was achieved through good knee flexion.`
     },
     {
         skillName: "Underhand Roll",
@@ -234,7 +234,7 @@ PROFICIENCY LEVEL: Competent
 All criteria are met. The deep pre-jump knee bend and full arm swing contribute to a strong vertical jump.
 
 FEEDBACK
-Excellent execution. The arm swing is full and timed well with the leg drive. Maintain the knee bend on landing to protect joints.`
+Strong execution. The arm swing is full and timed well with the leg drive. Maintain the knee bend on landing to protect joints.`
     },
     {
         skillName: "Jumping (vertical)",
@@ -319,7 +319,7 @@ PROFICIENCY LEVEL: Competent
 All five criteria are met. The opposite-arm reach and stride split in flight are particularly well-executed.
 
 FEEDBACK
-Excellent leap. The arm-leg opposition in flight shows good coordination. To progress toward Excellent, focus on maximising the flight phase duration and achieving a longer, more dramatic stride split.`
+Great leap. The arm-leg opposition in flight shows good coordination. To progress toward Accomplished, focus on maximising the flight phase duration and achieving a longer, more dramatic stride split.`
     },
     {
         skillName: "Leaping",
@@ -404,7 +404,7 @@ PROFICIENCY LEVEL: Competent
 All criteria are met. The consistent foot pattern, coordinated arm-leg opposition, and smooth rhythm demonstrate solid hopping technique.
 
 FEEDBACK
-Excellent hopping. The knee bend on landing and controlled arm action are particularly good. To progress to Excellent, try increasing the height of the hop while maintaining the same smooth rhythm.`
+Great hopping. The knee bend on landing and controlled arm action are particularly good. To progress to Accomplished, try increasing the height of the hop while maintaining the same smooth rhythm.`
     },
     // ============================================================================
     // SKILL: SKIPPING (GYMNASTICS)
@@ -498,7 +498,7 @@ PROFICIENCY LEVEL: Competent
 Both components are well-executed individually, and the transition between them is smooth and controlled. The user demonstrates good spatial awareness and body control throughout the sequence.
 
 FEEDBACK
-Excellent combination! Your leap has good height and the stride split is clear. The transition into the roll is smooth—your head tuck comes right on cue and you maintain momentum through the entire sequence. To progress to Excellent, focus on extending the flight phase of the leap slightly and maintaining an even, slower roll to show better control.`
+Great combination! Your leap has good height and the stride split is clear. The transition into the roll is smooth—your head tuck comes right on cue and you maintain momentum through the entire sequence. To progress to Accomplished, focus on extending the flight phase of the leap slightly and maintaining an even, slower roll to show better control.`
     },
     // ============================================================================
     // SKILL: GALLOPING (GYMNASTICS)
@@ -540,7 +540,7 @@ PROFICIENCY LEVEL: Competent
 All criteria are met. The consistent lead foot, clear flight phase, and rhythmic arm action demonstrate solid galloping technique.
 
 FEEDBACK
-Good gallop! The step-close pattern is consistent and the flight phase is clear. To progress to Excellent, focus on maximizing the height of the flight phase while keeping the rhythm even.`
+Good gallop! The step-close pattern is consistent and the flight phase is clear. To progress to Accomplished, focus on maximizing the height of the flight phase while keeping the rhythm even.`
     },
     // ============================================================================
     // SKILL: SLIDING (GYMNASTICS)
@@ -581,7 +581,7 @@ PROFICIENCY LEVEL: Competent
 All criteria are met. The parallel foot position and consistent flight phase are particularly well-executed.
 
 FEEDBACK
-Well done! Your feet stay parallel throughout and the flight is clear on each cycle. To progress to Excellent, try to increase the lateral distance covered per step while maintaining the smooth rhythm.`
+Well done! Your feet stay parallel throughout and the flight is clear on each cycle. To progress to Accomplished, try to increase the lateral distance covered per step while maintaining the smooth rhythm.`
     },
     // ============================================================================
     // SKILL: RUNNING (GYMNASTICS)
@@ -622,7 +622,7 @@ PROFICIENCY LEVEL: Competent
 All criteria are met. The heel-to-toe landing and high knee drive are particularly good.
 
 FEEDBACK
-Strong running form! Your arm action is clean and your heel pulls up well behind you. To progress to Excellent, focus on driving the knee higher on each stride and increasing stride length while keeping the rhythm smooth.`
+Strong running form! Your arm action is clean and your heel pulls up well behind you. To progress to Accomplished, focus on driving the knee higher on each stride and increasing stride length while keeping the rhythm smooth.`
     },
     // ============================================================================
     // SKILL: JUMPING (HORIZONTAL) (GYMNASTICS)
@@ -667,7 +667,7 @@ PROFICIENCY LEVEL: Competent
 All criteria are met. The forward body lean and arm drive in the direction of travel are particularly well-executed for horizontal distance.
 
 FEEDBACK
-Excellent horizontal jump! The arm swing and forward lean work together well to generate distance. To progress to Excellent, focus on fully extending the hips and knees during flight to maximize your body stretch in the air.`
+Great horizontal jump! The arm swing and forward lean work together well to generate distance. To progress to Accomplished, focus on fully extending the hips and knees during flight to maximize your body stretch in the air.`
     },
 ];
 

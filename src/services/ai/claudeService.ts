@@ -185,7 +185,7 @@ IF a Reference Image is provided (labeled "Gold Standard"):
   - Mistake in >50% of items? → **Beginning**
   - Missed 1-2 items? → **Developing**
   - Hit ALL items? → **Competent**
-  - Hit ALL items + Exceptional quality? → **Excellent**
+  - Hit ALL items + Exceptional quality? → **Accomplished**
 
 **OUTPUT FORMAT — be concise. Teachers are busy. No padding.**
 

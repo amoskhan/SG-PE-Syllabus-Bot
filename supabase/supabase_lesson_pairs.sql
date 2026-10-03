@@ -79,8 +79,10 @@ begin
    where lesson_id = v_sub.lesson_id and pair_number = v_sub.pair_number and performer = p_performer;
 
   v_text  := v_entry ->> 'analysisText';
-  -- Same rule as the chat save: the first level named in the grading
-  v_level := initcap(substring(lower(coalesce(v_text, '')) from '(beginning|developing|competent|excellent)'));
+  -- Same rule as the chat save: the first level named in the grading.
+  -- "Excellent" is the old name for Accomplished.
+  v_level := initcap(substring(lower(coalesce(v_text, '')) from '(beginning|developing|competent|accomplished|excellent)'));
+  if v_level = 'Excellent' then v_level := 'Accomplished'; end if;
 
   -- Nobody assigned to this slot, or nothing gradable sent: no record for it
   if v_student is null or v_text is null or v_level is null then

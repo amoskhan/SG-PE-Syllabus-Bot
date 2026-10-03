@@ -186,7 +186,7 @@ IF a Reference Image is provided (labeled "Gold Standard"):
   - Mistake in >50% of items? → **Beginning**
   - Missed 1-2 items? → **Developing**
   - Hit ALL items? → **Competent**
-  - Hit ALL items + Exceptional quality? → **Excellent**
+  - Hit ALL items + Exceptional quality? → **Accomplished**
 
 - Provide a detailed assessment in this format:
 
@@ -198,7 +198,7 @@ IF a Reference Image is provided (labeled "Gold Standard"):
   - ❌ [Feature 3]: NOT Observed (Evidence: e.g. "Did not step with opposite foot")
   - ... (List all relevant features)
 
-  **Proficiency Level: [Beginning / Developing / Competent / Excellent]**
+  **Proficiency Level: [Beginning / Developing / Competent / Accomplished]**
   *(Reason: You met X out of Y criteria...)*
 
   **Feedback for Improvement:**

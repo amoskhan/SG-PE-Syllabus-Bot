@@ -86,7 +86,7 @@ Two-phase analysis flow:
 **Phase 2 — Grading** (`isVerified = true`, triggered when user clicks a skill chip)
 - LLM grades each checklist criterion as ✅/❌/⚠️ with frame evidence
 - Applies the smoothness rule: all ✅ but robotic movement → downgrade to Developing
-- Proficiency: Beginning (<50% criteria) / Developing (50–80%) / Competent (all criteria) / Excellent (all + exceptional quality)
+- Proficiency: Beginning (<50% criteria) / Developing (50–80%) / Competent (all criteria) / Accomplished (all + exceptional quality). Gradings saved before the rename say "Excellent"; `normaliseLevel()` in `src/utils/gradingReview.ts` reads them as Accomplished
 - If the teacher has saved a custom rubric for the skill (`TeacherProfile.customRubrics[skillName]`), it replaces the standard checklist entirely
 
 #### FMS Skills Reference

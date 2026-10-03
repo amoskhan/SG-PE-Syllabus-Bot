@@ -4,11 +4,22 @@ import { SkillAnalysis } from '../types';
 // the AI's verdict. Everything that shows a result uses these helpers, so a
 // teacher's review wins everywhere at once.
 
-export const LEVELS = ['Beginning', 'Developing', 'Competent', 'Excellent'] as const;
+export const LEVELS = ['Beginning', 'Developing', 'Competent', 'Accomplished'] as const;
 export type Level = typeof LEVELS[number];
 
-export const levelIndex = (level?: string) =>
-  LEVELS.findIndex(l => l.toLowerCase() === level?.toLowerCase());
+/**
+ * A level as written anywhere (any case) → its name in LEVELS. Gradings saved
+ * before the top level was renamed say "Excellent"; they read as Accomplished.
+ */
+export const normaliseLevel = (level?: string): Level | undefined => {
+  const name = level?.trim().toLowerCase() === 'excellent' ? 'accomplished' : level?.trim().toLowerCase();
+  return LEVELS.find(l => l.toLowerCase() === name);
+};
+
+export const levelIndex = (level?: string) => {
+  const name = normaliseLevel(level);
+  return name ? LEVELS.indexOf(name) : -1;
+};
 
 export type CriterionResult = 'met' | 'missed' | 'unsure';
 export interface Criterion {
@@ -54,7 +65,10 @@ export const effectiveCriteria = (a: SkillAnalysis): Criterion[] =>
   });
 
 /** Teacher's level if reviewed, else the AI's. */
-export const effectiveLevel = (a: SkillAnalysis): string | undefined => a.teacherLevel ?? a.proficiencyLevel;
+export const effectiveLevel = (a: SkillAnalysis): string | undefined => {
+  const level = a.teacherLevel ?? a.proficiencyLevel;
+  return normaliseLevel(level) ?? level;
+};
 
 /** [met, total], or null if the grading has no checklist to count. */
 export const effectiveScore = (a: SkillAnalysis): [number, number] | null => {
@@ -71,12 +85,12 @@ export const effectiveScore = (a: SkillAnalysis): [number, number] | null => {
 /**
  * The FMS rubric the grader uses: all cues → Competent; fewer than half →
  * Beginning; anything in between → Developing. An unresolved ⚠️ counts as not
- * met. Excellent is a quality judgement on top of Competent, so it's kept only
- * when every cue is met and the level was already Excellent.
+ * met. Accomplished is a quality judgement on top of Competent, so it's kept
+ * only when every cue is met and the level was already Accomplished.
  */
 export const levelFromCriteria = (results: CriterionResult[], currentLevel?: string): Level => {
   const met = results.filter(r => r === 'met').length;
-  if (met === results.length) return levelIndex(currentLevel) === 3 ? 'Excellent' : 'Competent';
+  if (met === results.length) return levelIndex(currentLevel) === 3 ? 'Accomplished' : 'Competent';
   if (met / results.length < 0.5) return 'Beginning';
   return 'Developing';
 };

@@ -31,6 +31,7 @@ import {
 import { LessonPlanForm, LessonList } from '../components/classroom/LessonPlanner';
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
+import { normaliseLevel } from '../utils/gradingReview';
 import { Student, SkillAnalysis } from '../types';
 import { getStudents } from '../services/studentService';
 import {
@@ -1011,23 +1012,23 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   <div className="bg-slate-900/60 rounded-xl p-3">
                     <p className="text-xs font-bold text-amber-400 mb-2">🍌 Banana — Proficiency</p>
                     <span className={`px-3 py-1 rounded-full text-xs font-black ${
-                      activeReviewSub.aiTeacherReport.bananaProficiency === 'Excellent' ? 'bg-emerald-500/30 text-emerald-300' :
+                      normaliseLevel(activeReviewSub.aiTeacherReport.bananaProficiency) === 'Accomplished' ? 'bg-emerald-500/30 text-emerald-300' :
                       activeReviewSub.aiTeacherReport.bananaProficiency === 'Competent' ? 'bg-blue-500/30 text-blue-300' :
                       activeReviewSub.aiTeacherReport.bananaProficiency === 'Developing' ? 'bg-amber-500/30 text-amber-300' :
                       'bg-red-500/30 text-red-300'
                     }`}>
-                      {activeReviewSub.aiTeacherReport.bananaProficiency}
+                      {normaliseLevel(activeReviewSub.aiTeacherReport.bananaProficiency) ?? activeReviewSub.aiTeacherReport.bananaProficiency}
                     </span>
                   </div>
                   <div className="bg-slate-900/60 rounded-xl p-3">
                     <p className="text-xs font-bold text-red-400 mb-2">🍎 Apple — Proficiency</p>
                     <span className={`px-3 py-1 rounded-full text-xs font-black ${
-                      activeReviewSub.aiTeacherReport.appleProficiency === 'Excellent' ? 'bg-emerald-500/30 text-emerald-300' :
+                      normaliseLevel(activeReviewSub.aiTeacherReport.appleProficiency) === 'Accomplished' ? 'bg-emerald-500/30 text-emerald-300' :
                       activeReviewSub.aiTeacherReport.appleProficiency === 'Competent' ? 'bg-blue-500/30 text-blue-300' :
                       activeReviewSub.aiTeacherReport.appleProficiency === 'Developing' ? 'bg-amber-500/30 text-amber-300' :
                       'bg-red-500/30 text-red-300'
                     }`}>
-                      {activeReviewSub.aiTeacherReport.appleProficiency}
+                      {normaliseLevel(activeReviewSub.aiTeacherReport.appleProficiency) ?? activeReviewSub.aiTeacherReport.appleProficiency}
                     </span>
                   </div>
                 </div>
