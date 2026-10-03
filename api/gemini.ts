@@ -13,6 +13,26 @@ const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 const MAX_OUTPUT_TOKENS = 2000;
 const MAX_HISTORY = 60;
 
+// Flash first; Flash-Lite has its own free quota, so it answers when Flash's
+// is used up (429) or Flash stays busy (503).
+const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+
+// Google's servers have moments of "high demand" (503) that pass within a
+// second or two, so a 503 is tried again before giving up.
+const RETRY_503_DELAYS_MS = [400, 1200];
+const statusOf = (error: any): number | undefined => error?.status || error?.response?.status;
+/** Google's own "retry in 40s" from a quota error, in whole seconds. */
+const retryAfterSeconds = (error: any): number | undefined => {
+    try {
+        const details = JSON.parse(error?.message)?.error?.details ?? [];
+        const delay = details.find((d: any) => typeof d?.retryDelay === 'string')?.retryDelay;
+        return delay ? Math.ceil(parseFloat(delay)) : undefined;
+    } catch {
+        return undefined;
+    }
+};
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /** Only the app's own site (and local dev) may call this from a browser. */
 function applyCors(req: any, res: any) {
     const allowed = [process.env.ALLOWED_ORIGIN, 'https://localhost:5173', 'http://localhost:5174'].filter(Boolean);
@@ -60,23 +80,50 @@ export default async function handler(req: any, res: any) {
         // Initialize GenAI
         const ai = new GoogleGenAI({ apiKey });
 
-        // Create chat session
-        const chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
+        // Gemini 2.5 "thinks" first, and the thinking counts against
+        // maxOutputTokens: a syllabus answer could come back cut short or empty.
+        // Text questions don't need it; motion analysis (video frames) keeps it.
+        const hasImages = Array.isArray(message) && message.some((part: any) => part?.inlineData);
+
+        const send = (model: string) => ai.chats.create({
+            model,
             config: {
                 systemInstruction: systemInstruction,
                 tools: onlySearchTool(tools),
                 temperature: 0.3,
+                thinkingConfig: hasImages ? undefined : { thinkingBudget: 0 },
                 // 1200 default for syllabus text Q&A (clarifications are short; full section
         // dumps for a single sub-category need ~600-900 tokens, so 1200 gives headroom).
         // Motion analysis overrides this with 1500 from the client.
         maxOutputTokens: typeof maxOutputTokens === 'number' ? Math.min(Math.max(maxOutputTokens, 1), MAX_OUTPUT_TOKENS) : 1200,
             },
             history: history || []
-        });
+        }).sendMessage({ message }); // text, or multipart for images
 
-        // Send message (supports text or multipart for images)
-        const result = await chat.sendMessage({ message: message });
+        const sendWithRetry = async (model: string) => {
+            for (let attempt = 0; ; attempt++) {
+                try {
+                    return await send(model);
+                } catch (error) {
+                    if (statusOf(error) !== 503 || attempt >= RETRY_503_DELAYS_MS.length) throw error;
+                    await wait(RETRY_503_DELAYS_MS[attempt]);
+                }
+            }
+        };
+
+        let result;
+        let model = MODELS[0];
+        for (let i = 0; ; i++) {
+            model = MODELS[i];
+            try {
+                result = await sendWithRetry(model);
+                break;
+            } catch (error) {
+                const busy = statusOf(error) === 429 || statusOf(error) === 503;
+                if (!busy || i === MODELS.length - 1) throw error;
+                console.warn(`[gemini] ${model} busy (${statusOf(error)}), trying ${MODELS[i + 1]}`);
+            }
+        }
         const response = (result as any).response || result;
 
         const text = typeof response.text === 'function' ? response.text() :
@@ -90,6 +137,7 @@ export default async function handler(req: any, res: any) {
 
         return res.status(200).json({
             text,
+            model,
             tokenUsage: usage,
             groundingChunks,
             finishReason
@@ -105,7 +153,14 @@ export default async function handler(req: any, res: any) {
         }));
 
         // Forward the real HTTP status from Gemini if available (e.g. 429, 401)
-        const geminiStatus = error?.status || error?.response?.status;
+        const geminiStatus = statusOf(error);
+        if (geminiStatus === 429) {
+            const seconds = retryAfterSeconds(error);
+            return res.status(429).json({
+                error: `Coach Bot is busy right now. Try again in ${seconds ? `about ${seconds} seconds` : 'a minute'}.`,
+                retryAfterSeconds: seconds,
+            });
+        }
         const httpStatus = geminiStatus === 429 ? 429
             : geminiStatus === 401 || geminiStatus === 403 ? 401
             : 500;
