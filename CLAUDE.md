@@ -57,7 +57,7 @@ Dual-write pattern: localStorage (instant UX) + Supabase (cloud sync). On page l
 
 ### Syllabus Q&A System
 
-The **syllabus guide** (`src/data/syllabusGuide.ts`, `guideStep()`) asks up to 4 chip questions (Level → Area → Focus → Need, each with "Just answer"), built by the app with no AI call, then sends the AI one section plus the last 6 messages. Its state rides on bot messages (`Message.guide`), so a reply or follow-up carries on from it. Questions it can't place still get the whole syllabus. Primary only so far.
+The **syllabus guide** (`src/data/syllabusGuide.ts`, `guideStep()`) asks up to 4 chip questions (Level → Area → Focus → Need, each with "Just answer"), built by the app with no AI call, then sends the AI one section plus the last 6 messages. Its state rides on bot messages (`Message.guide`), so a reply or follow-up carries on from it. Questions it can't place (e.g. pedagogy and assessment, until #117) still get the whole syllabus. Covers Primary, Secondary and Pre-U.
 
 The entire 2024 PE Syllabus is stored as text in `src/data/syllabusData.ts`. `src/data/syllabusContext.ts` (`getSyllabusContextMessage()`) pulls out the relevant sections and sends them with the conversation. The FMS database with 10 skills and proficiency rubrics is in `src/data/fundamentalMovementSkillsData.ts`.
 
