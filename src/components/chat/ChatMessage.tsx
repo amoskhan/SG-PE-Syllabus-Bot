@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Message, Sender, SkillMode } from '../../types';
 import MarkdownRenderer from './MarkdownRenderer';
+import SyllabusSource from './SyllabusSource';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 import { generatePDF } from '../../services/pdfService';
 import { ALL_FMS_SKILLS } from '@/data/fundamentalMovementSkillsData';
@@ -539,6 +540,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                 )}
               </div>
             )}
+
+            {isBot && message.syllabusSectionId && <SyllabusSource sectionId={message.syllabusSectionId} />}
 
             {/* Grounding Sources */}
             {isBot && message.groundingChunks && message.groundingChunks.length > 0 && (

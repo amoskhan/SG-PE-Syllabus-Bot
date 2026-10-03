@@ -38,6 +38,7 @@ export interface Message {
   isAmbiguous?: boolean; // Flag if AI is unsure and needs teacher review
   tokenUsage?: number; // Estimated tokens used for this response
   modelId?: string; // ID of the AI model that generated this message
+  syllabusSectionId?: string; // Syllabus section the answer came from (shown with its text and PDF link)
   hasMedia?: boolean; // Flag if the message/conversation context includes media
   studentId?: string; // Student this analysis belongs to
   performer?: 'Apple' | 'Banana'; // Practice Station: whose performance this analysis grades

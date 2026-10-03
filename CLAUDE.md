@@ -172,6 +172,7 @@ Y-axis convention: **0 = top of frame, 1 = bottom**. So a smaller Y value = high
 | `src/data/fundamentalMovementSkillsData.ts` | FMS skill checklists, proficiency rubric, reference image paths |
 | `src/data/syllabusData.ts` | Full 2024 MOE PE Syllabus as plain text |
 | `src/data/syllabusContext.ts` | Pulls syllabus sections out of `syllabusData.ts` for the AI (`getSyllabusContextMessage()`) |
+| `src/data/syllabusGuide.ts` | Places a typed syllabus question in ONE section (text, printed/PDF page) so only that section goes to the AI; the hosted PDF is `public/syllabus/pe-syllabus-2024.pdf` (PDF page = printed + 5) |
 | `src/data/skillExamples.ts` | Few-shot grading examples injected into Phase 2 prompts |
 | `src/hooks/useAuth.ts` | Supabase Auth with Google OAuth |
 | `supabase/*.sql` | Database schema, RLS policies and `pupil_*` functions (run in the Supabase SQL editor) |

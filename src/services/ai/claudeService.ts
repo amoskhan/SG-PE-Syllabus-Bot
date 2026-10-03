@@ -5,6 +5,7 @@
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
+import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusSection } from '../../data/syllabusGuide';
 import { getFewShotExamples } from '../../data/skillExamples';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 import { supabase } from '../db/supabaseClient';
@@ -230,7 +231,9 @@ export const sendMessageToClaudeAPI = async (
     teacherProfile?: import('../../types').TeacherProfile | null,
     studentMemory?: string,
     userId?: string,
-    skillMode: import('../../types').SkillMode = 'fms'
+    skillMode: import('../../types').SkillMode = 'fms',
+    // A question the syllabus guide placed: send this section, not the whole syllabus
+    syllabusSection?: SyllabusSection
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         let enhancedMessage = currentMessage;
@@ -629,13 +632,16 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
             ? `**${skillsBlockLabel} CONTENT START**\n${specificChecklistText}\n**${skillsBlockLabel} CONTENT END**`
             : '';
 
+        const sectionOnly = !!syllabusSection && !(poseData && poseData.length > 0);
         let systemInstruction = poseData && poseData.length > 0
             ? MOTION_ANALYSIS_INSTRUCTION
                 .replace(FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, specificChecklistText)
                 .replace(PROFICIENCY_RUBRIC, activeRubric)
                 .replace('Valid names: ' + Object.keys(SKILL_REFERENCE_IMAGES).join(', '), 'Valid names: ' + Object.keys(activeReferenceImages).join(', '))
-            : FULL_SYSTEM_INSTRUCTION_TEMPLATE.replace('{{FMS_CONTEXT}}', fmsBlock)
-                .replace('Valid names: ' + Object.keys(SKILL_REFERENCE_IMAGES).join(', '), 'Valid names: ' + Object.keys(activeReferenceImages).join(', '));
+            : sectionOnly
+                ? SECTION_SYSTEM_INSTRUCTION
+                : FULL_SYSTEM_INSTRUCTION_TEMPLATE.replace('{{FMS_CONTEXT}}', fmsBlock)
+                    .replace('Valid names: ' + Object.keys(SKILL_REFERENCE_IMAGES).join(', '), 'Valid names: ' + Object.keys(activeReferenceImages).join(', '));
 
         if (skillMode === 'gymnastics') {
             systemInstruction = systemInstruction
@@ -656,7 +662,7 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
         const lastBotText = [...history].reverse().find(m => m.role === 'assistant')?.content || '';
         const isRoutingResponse = currentMessage.trim().length < 50 && lastBotText.includes('[[SKILL_CHOICES');
         try {
-            if (!isRoutingResponse && currentMessage && currentMessage.trim().length > 3) {
+            if (!sectionOnly && !isRoutingResponse && currentMessage && currentMessage.trim().length > 3) {
                 const ragController = new AbortController();
                 const ragTimeout = setTimeout(() => ragController.abort(), 30_000);
                 const ragResponse = await fetch('/api/rag-search', {
@@ -887,7 +893,8 @@ ${BACKSWING_ITEM5_RULE}
         }
 
         // ── Build messages array ─────────────────────────────────────────────
-        // Inject syllabus context for text-only queries (mirrors Gemini syllabusContextPair).
+        // Inject syllabus context for text-only queries (mirrors Gemini syllabusContextPair):
+        // one section when the syllabus guide placed the question, else the whole syllabus.
         // The large syllabus message (~80K tokens) is marked for prompt caching so repeated
         // requests read from cache rather than re-tokenising, staying within rate limits.
         type MessageWithContent = { role: string; content: string | AnthropicContentBlock[] };
@@ -897,16 +904,21 @@ ${BACKSWING_ITEM5_RULE}
                 content: [
                     {
                         type: 'text' as const,
-                        text: getSyllabusContextMessage(),
+                        text: sectionOnly ? sectionContextMessage(syllabusSection!) : getSyllabusContextMessage(),
                         cache_control: { type: 'ephemeral' as const },
                     },
                 ],
             },
-            { role: 'assistant', content: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' },
+            {
+                role: 'assistant',
+                content: sectionOnly
+                    ? `I have read ${syllabusSection!.title} and will answer from it.`
+                    : 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.',
+            },
         ];
 
         // Tier 1: cap history to the last SHORT_TERM_CONTEXT_WINDOW messages
-        const trimmedHistory = history.slice(-SHORT_TERM_CONTEXT_WINDOW);
+        const trimmedHistory = sectionOnly ? recentHistory(history) : history.slice(-SHORT_TERM_CONTEXT_WINDOW);
 
         const anthropicMessages: MessageWithContent[] = [
             ...syllabusPrefix,
