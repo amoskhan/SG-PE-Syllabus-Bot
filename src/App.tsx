@@ -28,7 +28,7 @@ import { getActivePairSession, saveActivePairSession, clearActivePairSession, Pa
 import { LessonStep, PairProgress, Screen, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
-import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps } from './services/cloudSyncService';
+import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
@@ -388,7 +388,11 @@ const App: React.FC = () => {
   }, [activePairSession?.lessonId, activePairSession?.pairNumber]);
   const setPairProgress = (progress: PairProgress) => {
     setPairProgressState(progress);
-    if (activePairSession) savePairProgress(activePairSession.lessonId, activePairSession.pairNumber, progress);
+    if (!activePairSession) return;
+    const { lessonId, pairNumber } = activePairSession;
+    savePairProgress(lessonId, pairNumber, progress);
+    // The teacher's board shows where every pair is (#91)
+    reportPairStep(lessonId, pairNumber, getOrCreatePairClaimToken(lessonId), progress).catch(() => { /* best effort */ });
   };
   const stepScreen = nextScreen(lessonSteps, pairProgress);
   /** Mark the pair as on the first step of this kind (when a screen is opened directly). */
@@ -1098,6 +1102,7 @@ const App: React.FC = () => {
     if (first.kind === 'step') {
       savePairProgress(merged.lessonId, merged.pairNumber, progressFor(first, steps));
       setPairProgressState(progressFor(first, steps));
+      reportPairStep(merged.lessonId, merged.pairNumber, claimToken, progressFor(first, steps)).catch(() => { /* best effort */ });
     }
     setAppMode(first.kind === 'step' && first.step.kind !== 'assess' ? 'pupil_step' : 'peer_coaching');
   };
