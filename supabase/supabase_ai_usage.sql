@@ -8,8 +8,10 @@
 -- call. Per lesson:
 --   * automatic feedback after a pair sends (purpose 'peer_feedback'):
 --       Haiku, 12 calls per pair (each send makes 4 calls → 3 sends)
---   * 'analysis' (Analyse Apple / Banana) and 'question' (Practice Station chat):
---       5 calls per pupil; the pupil's first analysis uses Sonnet, the rest Haiku
+--   * 'analysis' (Analyse Apple / Banana): 1 per pupil, on Sonnet (#95). A
+--       teacher's redo request doesn't add another: the teacher grades a re-do.
+--   * 'question' (Practice Station chat): 5 per pupil, on Haiku, counted
+--       separately from the analysis
 -- Both functions are callable only with the service role key (the server),
 -- never from a browser.
 -- ============================================================================
@@ -24,6 +26,11 @@ create table if not exists public.ai_usage (
   primary key (lesson_id, pair_number, performer)
 );
 
+-- Per pupil counts (#95); `calls` is now used only for the pair's peer feedback
+alter table public.ai_usage
+  add column if not exists analyses  integer not null default 0,
+  add column if not exists questions integer not null default 0;
+
 alter table public.ai_usage enable row level security;
 
 -- Teachers can see usage for their own lessons (e.g. a future Dashboard view)
@@ -34,8 +41,8 @@ create policy "Teachers read own lesson AI usage" on public.ai_usage
   );
 
 
--- Returns {"ok": true, "model": "sonnet"|"haiku"}
---      or {"ok": false, "reason": "invalid_lesson"|"budget"}
+-- Returns {"ok": true, "model": "sonnet"|"haiku", "questions_left": n (questions only)}
+--      or {"ok": false, "reason": "invalid_lesson"|"budget"|"analysis_used"|"questions_used"}
 create or replace function public.pupil_ai_use(
   p_lesson_id   text,
   p_pass        text,
@@ -51,9 +58,7 @@ as $$
 declare
   v_pairs     integer;
   v_performer text;
-  v_limit     integer;
   v_row       public.ai_usage%rowtype;
-  v_model     text;
 begin
   select pair_count into v_pairs
   from public.lessons
@@ -65,10 +70,8 @@ begin
 
   if p_purpose = 'peer_feedback' then
     v_performer := 'pair';
-    v_limit := 12;
   elsif p_purpose in ('analysis', 'question') and p_performer in ('apple', 'banana') then
     v_performer := p_performer;
-    v_limit := 5;
   else
     return jsonb_build_object('ok', false, 'reason', 'invalid_lesson');
   end if;
@@ -81,19 +84,31 @@ begin
   where lesson_id = p_lesson_id and pair_number = p_pair_number and performer = v_performer
   for update;
 
-  if v_row.calls >= v_limit then
-    return jsonb_build_object('ok', false, 'reason', 'budget');
+  if p_purpose = 'peer_feedback' then
+    if v_row.calls >= 12 then
+      return jsonb_build_object('ok', false, 'reason', 'budget');
+    end if;
+    update public.ai_usage set calls = calls + 1, updated_at = now()
+    where lesson_id = p_lesson_id and pair_number = p_pair_number and performer = v_performer;
+    return jsonb_build_object('ok', true, 'model', 'haiku');
   end if;
 
-  v_model := case when p_purpose = 'analysis' and not v_row.sonnet_used then 'sonnet' else 'haiku' end;
+  if p_purpose = 'analysis' then
+    if v_row.analyses >= 1 then
+      return jsonb_build_object('ok', false, 'reason', 'analysis_used');
+    end if;
+    update public.ai_usage set analyses = analyses + 1, sonnet_used = true, updated_at = now()
+    where lesson_id = p_lesson_id and pair_number = p_pair_number and performer = v_performer;
+    return jsonb_build_object('ok', true, 'model', 'sonnet');
+  end if;
 
-  update public.ai_usage set
-    calls       = calls + 1,
-    sonnet_used = sonnet_used or v_model = 'sonnet',
-    updated_at  = now()
+  -- question
+  if v_row.questions >= 5 then
+    return jsonb_build_object('ok', false, 'reason', 'questions_used');
+  end if;
+  update public.ai_usage set questions = questions + 1, updated_at = now()
   where lesson_id = p_lesson_id and pair_number = p_pair_number and performer = v_performer;
-
-  return jsonb_build_object('ok', true, 'model', v_model);
+  return jsonb_build_object('ok', true, 'model', 'haiku', 'questions_left', 4 - v_row.questions);
 end;
 $$;
 
@@ -112,9 +127,10 @@ security definer
 set search_path = public
 as $$
   update public.ai_usage set
-    calls       = greatest(calls - 1, 0),
-    sonnet_used = case when p_model = 'sonnet' then false else sonnet_used end,
-    updated_at  = now()
+    calls      = case when p_purpose = 'peer_feedback' then greatest(calls - 1, 0) else calls end,
+    analyses   = case when p_purpose = 'analysis' then greatest(analyses - 1, 0) else analyses end,
+    questions  = case when p_purpose = 'question' then greatest(questions - 1, 0) else questions end,
+    updated_at = now()
   where lesson_id = p_lesson_id
     and pair_number = p_pair_number
     and performer = case when p_purpose = 'peer_feedback' then 'pair' else p_performer end;
