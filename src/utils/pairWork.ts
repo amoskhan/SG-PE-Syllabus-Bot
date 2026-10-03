@@ -6,7 +6,9 @@ import { PerformerLock } from './submissionLock';
 //
 //   record → peer assessment → AI analysis → re-film once (optional) → final submission
 //
-// After a redo request there is no new AI analysis: the teacher grades it.
+// After a redo request each performer first chooses (#93): Keep what was sent,
+// or Film again: record → peer assessment → re-film once (optional) → final
+// submission, with no new AI analysis. The teacher grades the re-do.
 
 export interface PerformerWork {
   hasClip: boolean;     // a clip of this performer is saved on the device
@@ -14,25 +16,35 @@ export interface PerformerWork {
   refilmed: boolean;    // the one re-film has been used
   hasAnalysis: boolean; // the AI analysis has been done
   lock: PerformerLock;  // from the teacher's copy (submissionLock.ts)
+  redoFilms: number;    // films made since the current redo request
 }
 
-export type Stage = 'not_started' | 'needs_ticks' | 'needs_analysis' | 'ready' | 'submitted';
+export type Stage = 'not_started' | 'redo_choice' | 'needs_ticks' | 'needs_analysis' | 'ready' | 'submitted';
 
 export interface PerformerStage {
   stage: Stage;
+  canKeep: boolean;
   canFilmAgain: boolean;
   canSubmitFinal: boolean;
 }
 
-export const performerStage = (w: PerformerWork): PerformerStage => {
-  if (w.lock === 'locked') return { stage: 'submitted', canFilmAgain: false, canSubmitFinal: false };
+const NOTHING = { canKeep: false, canFilmAgain: false, canSubmitFinal: false };
 
-  const redo = w.lock === 'redo_requested';
-  const canFilmAgain = w.hasClip && (redo || !w.refilmed);
-  if (!w.hasClip) return { stage: 'not_started', canFilmAgain: false, canSubmitFinal: false };
-  if (!w.ticked) return { stage: 'needs_ticks', canFilmAgain, canSubmitFinal: false };
-  if (!w.hasAnalysis && !redo) return { stage: 'needs_analysis', canFilmAgain, canSubmitFinal: false };
-  return { stage: 'ready', canFilmAgain, canSubmitFinal: true };
+export const performerStage = (w: PerformerWork): PerformerStage => {
+  if (w.lock === 'locked') return { stage: 'submitted', ...NOTHING };
+
+  if (w.lock === 'redo_requested') {
+    if (w.redoFilms === 0) return { stage: 'redo_choice', canKeep: true, canFilmAgain: true, canSubmitFinal: false };
+    const canFilmAgain = w.redoFilms < 2;
+    if (!w.ticked) return { stage: 'needs_ticks', ...NOTHING, canFilmAgain };
+    return { stage: 'ready', ...NOTHING, canFilmAgain, canSubmitFinal: true };
+  }
+
+  const canFilmAgain = w.hasClip && !w.refilmed;
+  if (!w.hasClip) return { stage: 'not_started', ...NOTHING };
+  if (!w.ticked) return { stage: 'needs_ticks', ...NOTHING, canFilmAgain };
+  if (!w.hasAnalysis) return { stage: 'needs_analysis', ...NOTHING, canFilmAgain };
+  return { stage: 'ready', ...NOTHING, canFilmAgain, canSubmitFinal: true };
 };
 
 // ── Reading a pair's record ─────────────────────────────────────────────────
@@ -47,10 +59,17 @@ export const performerKey = (p: Performer) => (p === 'Apple' ? 'apple' : 'banana
  */
 export const currentAttempt = (r: PairSubmissionRecord, p: Performer) => (p === 'Apple' ? r.bananaRole : r.appleRole);
 
+/** Films this performer has made for the current redo request (0 for an older one). */
+export const redoFilmCount = (r: PairSubmissionRecord | null | undefined, p: Performer, redoRequestedAt?: string) => {
+  const films = r?.redoFilms?.[performerKey(p)];
+  return films && redoRequestedAt && films.requestedAt === redoRequestedAt ? films.count : 0;
+};
+
 export const performerWork = (
   r: PairSubmissionRecord | null | undefined,
   p: Performer,
   lock: PerformerLock,
+  redoRequestedAt?: string,
 ): PerformerWork => {
   const attempt = r ? currentAttempt(r, p) : undefined;
   const k = performerKey(p);
@@ -60,5 +79,20 @@ export const performerWork = (
     refilmed: !!r?.firstAttempt?.[k],
     hasAnalysis: !!(r?.pendingAnalysis?.[k] || r?.aiChatAnalysis?.[k]),
     lock,
+    redoFilms: lock === 'redo_requested' ? redoFilmCount(r, p, redoRequestedAt) : 0,
   };
 };
+
+/**
+ * The checklist a re-do is sent with (#93): every criterion, marked ⚠️ for the
+ * teacher to decide. Written as the same table the AI uses, so the teacher's
+ * review reads it the same way (gradingReview.ts). It never carries the peer
+ * ticks (ADR 0001: they don't reach the AI, and the nightly summary is AI).
+ */
+export const redoChecklistText = (criteria: string[]) => [
+  '**Re-do** after the teacher asked for another try. There is no AI analysis on a re-do: the teacher grades it.',
+  '',
+  '| # | Criterion | Result |',
+  '|---|---|---|',
+  ...criteria.map((c, i) => `| ${i + 1} | ${c.replace(/\|/g, '/')} | ⚠️ |`),
+].join('\n');

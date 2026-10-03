@@ -16,6 +16,23 @@ export interface AiChatAnalysisEntry {
   // The clip the AI analysed, when the performer filmed again afterwards: the
   // teacher sees this first attempt as well as the final one (#94).
   analysedClip?: { videoUrl?: string; cues: PeerCueResult[] };
+  // Set when the performer filmed again after a redo request (#93). The
+  // analysis above stays: it was about the earlier attempt.
+  redo?: RedoSubmission;
+}
+
+/** A performer's re-do, sent with their final submission (#93). */
+export interface RedoSubmission {
+  requestedAt: string;    // the teacher's redo request this answers
+  submittedAt: string;
+  checklistText: string;  // the checklist for the teacher to grade (no AI on a re-do)
+  firstClip?: { videoUrl?: string; cues: PeerCueResult[] }; // when they used the re-do's one re-film
+}
+
+export interface RedoFilms {
+  requestedAt: string;
+  count: number;
+  firstClip?: { videoUrl?: string; cues: PeerCueResult[] };
 }
 
 /** One recorded attempt by a performer, kept on this device. */
@@ -92,6 +109,12 @@ export interface PairSubmissionRecord {
   firstAttempt?: {
     apple?: AttemptSnapshot;
     banana?: AttemptSnapshot;
+  };
+  // Films made on this device since the teacher's redo request (#93): the
+  // first replaces the sent attempt, the second is the re-do's one re-film
+  redoFilms?: {
+    apple?: RedoFilms;
+    banana?: RedoFilms;
   };
   status: 'pending_sync' | 'synced' | 'approved' | 'needs_redo' | 'resubmitted';
   teacherFeedback?: string;

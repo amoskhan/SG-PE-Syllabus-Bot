@@ -5,8 +5,9 @@ import MarkdownRenderer from '../chat/MarkdownRenderer';
 
 // "Our work": what a pair has done so far (#94). Shows each performer's
 // video(s), the peer checklist, the AI analysis and the teacher's feedback.
-// Nothing here changes the work; filming again and the final submission
-// happen in the Practice Station.
+// Filming again and the final submission happen in the Practice Station.
+// After a redo request each performer chooses here first (#93): Keep what was
+// sent, or Film again.
 //
 // The page body doesn't scroll (index.html), so this screen is a fixed-height
 // column whose middle part scrolls.
@@ -19,6 +20,8 @@ interface PairWorkReviewProps {
   teacherFeedback?: string;
   teacherStar?: boolean;
   stageFor: (p: Performer) => PerformerStage & { redo: boolean };
+  onKeep: (p: Performer) => void | Promise<void>;
+  onFilmAgain: (p: Performer) => void;
   onOpenPracticeStation: () => void;
   onStartRecording: () => void;
   onClose: () => void;
@@ -26,6 +29,7 @@ interface PairWorkReviewProps {
 
 const STAGE_TEXT: Record<Stage, string> = {
   not_started: 'Not filmed yet',
+  redo_choice: 'Your teacher asked you to try again',
   needs_ticks: 'Assessor: tick the cues for this video',
   needs_analysis: 'Next: ask Coach Bot to analyse this video',
   ready: 'Ready to submit your final recording',
@@ -97,7 +101,10 @@ const PerformerPanel: React.FC<{
   record: PairSubmissionRecord;
   stage: PerformerStage & { redo: boolean };
   onDevice: boolean;
-}> = ({ performer, record, stage, onDevice }) => {
+  onKeep: (p: Performer) => void | Promise<void>;
+  onFilmAgain: (p: Performer) => void;
+}> = ({ performer, record, stage, onDevice, onKeep, onFilmAgain }) => {
+  const [busy, setBusy] = useState(false);
   const k = performerKey(performer);
   const attempt = currentAttempt(record, performer);
   const first: AttemptSnapshot | undefined = record.firstAttempt?.[k];
@@ -107,7 +114,7 @@ const PerformerPanel: React.FC<{
 
   // Off the recording device the next steps can't be done here: just saved / submitted
   const status = stage.redo
-    ? { icon: '🔄', text: 'Your teacher asked you to try again', tone: 'bg-amber-500/15 border-amber-400/50 text-amber-200' }
+    ? { icon: '🔄', text: stage.canKeep ? STAGE_TEXT.redo_choice : `Re-do: ${STAGE_TEXT[stage.stage]}`, tone: 'bg-amber-500/15 border-amber-400/50 text-amber-200' }
     : stage.stage === 'submitted'
       ? { icon: '✅', text: STAGE_TEXT.submitted, tone: 'bg-emerald-500/15 border-emerald-400/50 text-emerald-200' }
       : !onDevice && stage.stage !== 'not_started'
@@ -120,6 +127,34 @@ const PerformerPanel: React.FC<{
         <span className="text-2xl">{status.icon}</span>
         <p className="text-sm font-black leading-snug">{status.text}</p>
       </div>
+
+      {/* Re-do (#93): keep what was sent, or film it again */}
+      {stage.canKeep && (
+        <div className="rounded-3xl bg-slate-800/70 border border-amber-400/40 p-4 space-y-3">
+          <p className="text-sm text-slate-200 leading-snug">
+            Watch your video below, then choose. <b>Keep</b> sends nothing new. <b>Film again</b> records a new video for the
+            assessor to tick. You can film once more after that. Your teacher grades it, so there's no Coach Bot.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => { setBusy(true); try { await onKeep(performer); } finally { setBusy(false); } }}
+              className="h-12 rounded-2xl bg-slate-700 hover:bg-slate-600 active:scale-[0.98] text-base font-black disabled:opacity-50"
+            >
+              ✋ Keep
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onFilmAgain(performer)}
+              className="h-12 rounded-2xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-base font-black disabled:opacity-50"
+            >
+              📹 Film again
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className={`rounded-3xl border-2 ${t.ring} ${t.soft} p-3`}>
         <p className="text-xs font-bold text-slate-300 mb-2 px-1">{first ? 'Final attempt' : 'Your video'}</p>
@@ -159,6 +194,8 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
   teacherFeedback,
   teacherStar,
   stageFor,
+  onKeep,
+  onFilmAgain,
   onOpenPracticeStation,
   onStartRecording,
   onClose,
@@ -222,7 +259,7 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
                   );
                 })}
               </div>
-              <PerformerPanel performer={tab} record={record} stage={stageFor(tab)} onDevice={onDevice} />
+              <PerformerPanel performer={tab} record={record} stage={stageFor(tab)} onDevice={onDevice} onKeep={onKeep} onFilmAgain={onFilmAgain} />
             </>
           ) : (
             <div className="flex flex-col items-center text-center gap-2 py-16">
