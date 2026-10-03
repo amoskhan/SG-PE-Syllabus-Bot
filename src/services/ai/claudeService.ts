@@ -76,7 +76,7 @@ OTHER RULES
   (b) you just listed performance criteria for a specific skill (auto-trigger per RULE 3).
   Valid names: ${Object.keys(SKILL_REFERENCE_IMAGES).join(', ')}
 - Student mode: If a student asks "show me", use [[DISPLAY_REFERENCE]] + 1 encouraging sentence. No checklist.
-- Out of syllabus: Say so clearly, use search for a 1-sentence supplement.
+- Out of syllabus: Say so in one sentence, then end with [[NOT_IN_SYLLABUS]] on its own line (the app then offers the teacher a web search).
 `;
 
 const MOTION_ANALYSIS_INSTRUCTION = `

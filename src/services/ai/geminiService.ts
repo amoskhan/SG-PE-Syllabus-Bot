@@ -11,7 +11,7 @@ import {
 } from '../../data/gymnasticsSkillsData';
 import type { SkillMode } from '../../types';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
-import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusRequest } from '../../data/syllabusGuide';
+import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusRequest, WEB_SEARCH_INSTRUCTION } from '../../data/syllabusGuide';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 
 const MODEL_NAME = 'gemini-2.5-flash';
@@ -75,7 +75,7 @@ OTHER RULES
   (b) you just listed performance criteria for a specific skill (auto-trigger per RULE 3).
   Valid names: ${Object.keys(SKILL_REFERENCE_IMAGES).join(', ')}
 - Student mode: If a student asks "show me", use [[DISPLAY_REFERENCE]] + 1 encouraging sentence. No checklist.
-- Out of syllabus: Say so clearly, use search for a 1-sentence supplement.
+- Out of syllabus: Say so in one sentence, then end with [[NOT_IN_SYLLABUS]] on its own line (the app then offers the teacher a web search).
 `;
 
 const MOTION_ANALYSIS_INSTRUCTION = `
@@ -161,7 +161,9 @@ export const sendMessageToGemini = async (
   teacherProfile?: import('../../types').TeacherProfile | null,
   skillMode: SkillMode = 'fms',
   // A question the syllabus guide placed: send this section, not the whole syllabus
-  syllabusRequest?: SyllabusRequest
+  syllabusRequest?: SyllabusRequest,
+  // The teacher asked to search the web: Google Search on, no syllabus sent
+  webSearch = false
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
   try {
     let enhancedMessage = currentMessage;
@@ -603,10 +605,14 @@ ${checklist.join('\n')}
         .replace('**FUNDAMENTAL MOVEMENT SKILLS CHECKLIST:**', '**GYMNASTICS LOCOMOTOR SKILLS CHECKLIST:**');
     }
 
-    const sectionOnly = !!syllabusRequest && !(poseData && poseData.length > 0);
-    let systemInstruction = poseData && poseData.length > 0
+    const hasPose = !!(poseData && poseData.length > 0);
+    const searchWeb = webSearch && !hasPose;
+    const sectionOnly = !!syllabusRequest && !hasPose && !searchWeb;
+    let systemInstruction = hasPose
       ? modeAwareMotionInstruction
-      : sectionOnly
+      : searchWeb
+        ? WEB_SEARCH_INSTRUCTION
+        : sectionOnly
         ? SECTION_SYSTEM_INSTRUCTION
         : FULL_SYSTEM_INSTRUCTION_TEMPLATE
             .replace('{{FMS_CONTEXT}}', fmsBlock);
@@ -614,7 +620,7 @@ ${checklist.join('\n')}
     // RAG RETRIEVAL: Fetch extra context from uploaded PDFs
     let ragContext = '';
     try {
-      if (!sectionOnly && currentMessage && currentMessage.trim().length > 3) {
+      if (!sectionOnly && !searchWeb && currentMessage && currentMessage.trim().length > 3) {
         console.log("🔍 Querying Vector DB for context...");
         const ragController = new AbortController();
         const ragTimeout = setTimeout(() => ragController.abort(), 30_000);
@@ -888,8 +894,9 @@ ${BACKSWING_ITEM5_RULE}
     let tokenUsage = 0;
 
     // Text questions carry the syllabus as a context exchange: one section with
-    // the last few messages when the guide placed the question, else all of it
-    const syllabusContext: Content[] = sectionOnly
+    // the last few messages when the guide placed the question, else all of it.
+    // A web search sends no syllabus: the teacher asked because it isn't in there.
+    const syllabusContext: Content[] = searchWeb ? [] : sectionOnly
       ? [
           { role: 'user', parts: [{ text: sectionContextMessage(syllabusRequest!) }] },
           { role: 'model', parts: [{ text: `I have read ${syllabusRequest!.section.title} and will answer from it.` }] },
@@ -898,7 +905,9 @@ ${BACKSWING_ITEM5_RULE}
           { role: 'user', parts: [{ text: getSyllabusContextMessage() }] },
           { role: 'model', parts: [{ text: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' }] },
         ];
-    const chatHistory = sectionOnly ? recentHistory(history) : history;
+    const chatHistory = sectionOnly || searchWeb ? recentHistory(history) : history;
+    // Google Search only when the teacher asks for it (#115)
+    const tools = searchWeb ? [{ googleSearch: {} }] : undefined;
 
     // --- HYBRID EXECUTOR ---
     // If LOCAL (DEV) -> Use Direct Client Key (Fast, no server setup needed)
@@ -917,7 +926,7 @@ ${BACKSWING_ITEM5_RULE}
         model: MODEL_NAME,
         config: {
           systemInstruction: systemInstruction,
-          tools: [{ googleSearch: {} }],
+          tools,
         },
         history: [...syllabusContextPair, ...chatHistory]
       });
@@ -950,7 +959,7 @@ ${BACKSWING_ITEM5_RULE}
             : [...syllabusContext, ...chatHistory],
           message: parts, // Send the array of text/images
           systemInstruction: systemInstruction,
-          tools: [{ googleSearch: {} }], // Request search tool
+          tools,
           // Motion analysis and full outcome lists both fit in 1500 tokens;
           // shorter answers self-limit via the system prompt rules.
           maxOutputTokens: (poseData && poseData.length > 0) ? 1500 : 1500,

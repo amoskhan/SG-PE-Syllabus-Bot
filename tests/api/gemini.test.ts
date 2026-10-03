@@ -45,7 +45,7 @@ beforeEach(() => {
   sent.length = 0;
 });
 
-const ask = async () => {
+const ask = async (body: Record<string, unknown> = {}) => {
   const out: { status?: number; body?: any } = {};
   const res: any = {
     setHeader: () => res,
@@ -53,7 +53,7 @@ const ask = async () => {
     json: (b: any) => { out.body = b; return res; },
     end: () => res,
   };
-  await handler({ method: 'POST', headers: {}, body: { message: 'What are the P4 outcomes?', history: [] } }, res);
+  await handler({ method: 'POST', headers: {}, body: { message: 'What are the P4 outcomes?', history: [], ...body } }, res);
   return out;
 };
 
@@ -87,5 +87,13 @@ describe('/api/gemini', () => {
     script['gemini-2.5-flash'] = [{ text: 'P4 outcomes…' }];
     await ask();
     expect(sent[0].config.thinkingConfig).toEqual({ thinkingBudget: 0 });
+  });
+
+  it('searches the web only when the request asks for it', async () => {
+    script['gemini-2.5-flash'] = [{ text: 'from the syllabus' }, { text: 'from the web' }];
+    await ask();
+    expect(sent[0].config.tools).toBeUndefined();
+    await ask({ tools: [{ googleSearch: {} }] });
+    expect(sent[1].config.tools).toEqual([{ googleSearch: {} }]);
   });
 });

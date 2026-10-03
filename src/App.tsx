@@ -7,7 +7,7 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, SkillMode } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
-import { guideStep } from './data/syllabusGuide';
+import { guideStep, takeNotInSyllabus } from './data/syllabusGuide';
 import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
 import { computeVideoHash } from './services/videoAnalysisCache';
 
@@ -1715,6 +1715,7 @@ const App: React.FC = () => {
       startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean;
       studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean;
       performer?: 'Apple' | 'Banana'; // Practice Station "Analyse": whose performance is graded
+      webSearch?: boolean; // The teacher tapped "Search the web": Gemini with Google Search, no syllabus
     }
   ) => {
     // LOCK TARGET SESSION ID context to heavily prevent "chat-swapping" side effects
@@ -1890,7 +1891,8 @@ const App: React.FC = () => {
     // on from the guide state on the last bot message. Video and Practice Station
     // chats keep their flow.
     const lastBotMessage = currentMessages.filter(m => m.sender === Sender.BOT).at(-1);
-    const guide = !files?.length && !isVerifying && !isPupilPractice && !newMessage.hasMedia
+    const webSearch = !!metadata?.webSearch;
+    const guide = !webSearch && !files?.length && !isVerifying && !isPupilPractice && !newMessage.hasMedia
       && !currentMessages.some(m => m.poseData && m.poseData.length > 0)
       ? guideStep(newMessage.text, lastBotMessage?.guide)
       : null;
@@ -1990,7 +1992,9 @@ const App: React.FC = () => {
       // Every submission runs the model, including a re-upload of a video
       // already analysed. Results are still written to skill_analyses for
       // history, but a stored row is never served in place of a fresh run.
-      const aiService = getAIService(effectiveModel);
+      // Only Gemini can search the web, so a web search goes to it whichever model is chosen
+      const answeringModel = webSearch ? 'gemini' : effectiveModel;
+      const aiService = getAIService(answeringModel);
       setPupilAiRequest(pupilRequest);
       try {
       response = await aiService(
@@ -2005,7 +2009,8 @@ const App: React.FC = () => {
         studentMemory,
         user?.id,  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
         skillMode,
-        syllabusRequest
+        syllabusRequest,
+        webSearch
       );
       } finally {
         setPupilAiRequest(null);
@@ -2054,15 +2059,19 @@ const App: React.FC = () => {
         activeStudentContextRef.current = null;
       }
 
+      // The AI tags an answer the syllabus doesn't cover; the teacher may then search the web
+      const { text: answerText, notInSyllabus } = takeNotInSyllabus(response.text);
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: response.text,
+        text: answerText,
         sender: Sender.BOT,
         timestamp: new Date(),
-        groundingChunks: effectiveModel === 'gemini' ? response.groundingChunks : undefined,
+        groundingChunks: answeringModel === 'gemini' ? response.groundingChunks : undefined,
         referenceImageURI: response.referenceImageURI,
         tokenUsage: response.tokenUsage,
-        modelId: effectiveModel,
+        modelId: answeringModel,
+        offerWebSearch: notInSyllabus && !webSearch && !newMessage.hasMedia && !isPupilPractice,
+        fromWebSearch: webSearch || undefined,
         syllabusSectionId: syllabusRequest?.section.id,
         guide: guideAnswerState,
         studentId,
@@ -2145,6 +2154,14 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // "Search the web" under an answer the syllabus doesn't cover: ask the same question again with search on
+  const handleSearchWeb = (botMessage: Message) => {
+    const messages = sessionsRef.current.find(s => s.id === currentSessionId)?.messages ?? [];
+    const at = messages.findIndex(m => m.id === botMessage.id);
+    const question = messages.slice(0, at).reverse().find(m => m.sender === Sender.USER)?.text;
+    if (question) handleSendMessage(`🔎 Search the web: ${question}`, undefined, { webSearch: true });
   };
 
   const handleChipClick = (topic: string) => {
@@ -2741,6 +2758,7 @@ const App: React.FC = () => {
                 }}
                 onAnalyze={handleAnalyzeConfirm}
                 onSelectSkill={handleSelectSkill}
+                onSearchWeb={handleSearchWeb}
                 onSelectMultipleSkills={handleSelectMultipleSkills}
                 onShowAllSkills={() => setIsSkillSelectorOpen(true)}
                 disabled={isLoading || isProcessing}

@@ -439,8 +439,27 @@ The teacher's question is about ONE section of the syllabus, given to you in ful
 - Be brief: teachers read on a phone. Use at most 5 bullet points or 4 sentences, except when listing outcomes; then give every outcome in the section, numbered, in the syllabus's own words.
 - The section's full text and a link to its PDF page are shown under your answer, so do not paste the whole section unless asked.
 - Answer directly. Do not offer menus or choices, and do not use [[SKILL_CHOICES]].
-- If the section does not answer the question, say so in one sentence.
+- If the section does not answer the question, say so in one sentence, then end with [[NOT_IN_SYLLABUS]] on its own line.
 - Tone: direct, professional, Singapore PE context. No filler phrases.`;
+
+/**
+ * The AI ends an answer with this tag when the syllabus doesn't cover the
+ * question; the chat then offers a web search instead of searching by default.
+ */
+export const NOT_IN_SYLLABUS_TAG = '[[NOT_IN_SYLLABUS]]';
+
+export const takeNotInSyllabus = (text: string): { text: string; notInSyllabus: boolean } => ({
+  text: text.split(NOT_IN_SYLLABUS_TAG).join('').trim(),
+  notInSyllabus: text.includes(NOT_IN_SYLLABUS_TAG),
+});
+
+/** The instruction for a teacher's "Search the web" request */
+export const WEB_SEARCH_INSTRUCTION = `You are the Singapore PE Syllabus Assistant, helping a Singapore PE teacher.
+The teacher asked you to search the web because MOE's 2024 PE Syllabus does not cover this question.
+- Use Google Search, and answer briefly: at most 5 bullet points or 4 sentences.
+- Begin with: "From the web (not the MOE syllabus):"
+- Prefer official and Singapore sources (MOE, SportSG, national sports associations).
+- Tone: direct, professional. No filler phrases.`;
 
 export const sectionContextMessage = ({ section, need, focus }: SyllabusRequest): string =>
   [

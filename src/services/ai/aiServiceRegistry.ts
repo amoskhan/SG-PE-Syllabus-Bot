@@ -15,18 +15,19 @@ export type AIServiceFunction = (
     studentMemory?: string,
     userId?: string,
     skillMode?: import('../../types').SkillMode,
-    syllabusRequest?: import('../../data/syllabusGuide').SyllabusRequest
+    syllabusRequest?: import('../../data/syllabusGuide').SyllabusRequest,
+    webSearch?: boolean
 ) => Promise<ChatResponse & { tokenUsage?: number }>;
 
 // Wrapper for Gemini to convert standard history to Google Content format
-const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, _studentMemory, _userId, skillMode, syllabusRequest) => {
+const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, _studentMemory, _userId, skillMode, syllabusRequest, webSearch) => {
     // Convert { role: 'user'|'assistant', content: string }[] to Google Content[]
     const googleHistory: Content[] = history.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }] as import('@google/genai').Part[]
     }));
 
-    return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, skillMode ?? 'fms', syllabusRequest);
+    return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, skillMode ?? 'fms', syllabusRequest, webSearch);
 };
 
 // Wrapper for Claude Sonnet (Anthropic direct API)

@@ -7,6 +7,7 @@ import {
   recentHistory,
   sectionContextMessage,
   sectionPdfLink,
+  takeNotInSyllabus,
 } from './syllabusGuide';
 import { getSyllabusContextMessage } from './syllabusContext';
 
@@ -263,5 +264,21 @@ describe('what the AI is sent for a section', () => {
 
   it('links to the hosted PDF at the right page', () => {
     expect(sectionPdfLink(section('P1 games'))).toBe('/syllabus/pe-syllabus-2024.pdf#page=37');
+  });
+});
+
+describe('when the syllabus does not cover the question', () => {
+  it("takes the AI's tag off the answer and offers a web search", () => {
+    expect(takeNotInSyllabus("The syllabus doesn't cover pickleball.\n[[NOT_IN_SYLLABUS]]")).toEqual({
+      text: "The syllabus doesn't cover pickleball.",
+      notInSyllabus: true,
+    });
+  });
+
+  it('leaves an answer without the tag as it is', () => {
+    expect(takeNotInSyllabus('1. Roll using the underhand pattern.')).toEqual({
+      text: '1. Roll using the underhand pattern.',
+      notInSyllabus: false,
+    });
   });
 });

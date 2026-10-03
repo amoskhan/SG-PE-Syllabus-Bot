@@ -34,6 +34,7 @@ interface ChatMessageProps {
   onUpdateMessage?: (message: Message) => void;
   onAnalyze?: (message: Message) => void;
   onSelectSkill?: (skillName: string) => void;
+  onSearchWeb?: (message: Message) => void;
   onSelectMultipleSkills?: (skillNames: string[]) => void;
   onShowAllSkills?: () => void;
   onSubmitChecklistToTeacher?: (message: Message) => Promise<void>;
@@ -41,7 +42,7 @@ interface ChatMessageProps {
   skillMode?: SkillMode;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms' }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSearchWeb, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms' }) => {
   const [checklistSubmitState, setChecklistSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle');
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
@@ -542,6 +543,23 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
             )}
 
             {isBot && message.syllabusSectionId && <SyllabusSource sectionId={message.syllabusSectionId} />}
+
+            {isBot && message.fromWebSearch && (
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400 ml-1">
+                🔎 From a web search, not the MOE syllabus
+              </span>
+            )}
+
+            {isBot && message.offerWebSearch && onSearchWeb && (
+              <button
+                type="button"
+                onClick={() => !disabled && onSearchWeb(message)}
+                disabled={disabled}
+                className="self-start inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                🔎 Search the web
+              </button>
+            )}
 
             {/* Grounding Sources */}
             {isBot && message.groundingChunks && message.groundingChunks.length > 0 && (
