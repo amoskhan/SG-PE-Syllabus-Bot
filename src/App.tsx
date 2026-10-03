@@ -29,6 +29,7 @@ import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest } from './services/ai/aiAccess';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
 import { normaliseLevel } from './utils/gradingReview';
+import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
 
 type ModelId = 'gemini' | 'claude';
 
@@ -337,6 +338,7 @@ const App: React.FC = () => {
   const [checkInModalKey, setCheckInModalKey] = useState(0);
   const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
   const lastSeenTeacherFeedbackRef = useRef<string | null>(null);
+  const lastSeenRedoRef = useRef<string | null>(null);
   // Set once we confirm the active pair has already submitted a recording — enables the
   // "back to AI Coach chat" path on the home screen so the student can see teacher feedback.
   const [activePairSubmission, setActivePairSubmission] = useState<PairSubmissionRecord | null>(null);
@@ -659,7 +661,11 @@ const App: React.FC = () => {
       [performer === 'Apple' ? 'apple' : 'banana']: entry,
     };
     await queuePairSubmission(record);
-    await backupSubmissionToSupabase(record, ctx.teacherId, getOrCreatePairClaimToken(ctx.lessonId));
+    const sent = await backupSubmissionToSupabase(record, ctx.teacherId, getOrCreatePairClaimToken(ctx.lessonId));
+    if (sent.locked) {
+      setTeacherFeedbackBanner(LOCKED_MESSAGE);
+      return;
+    }
     setTeacherFeedbackBanner(null);
     lastSeenTeacherFeedbackRef.current = null; // so the teacher's reply re-triggers the banner
   };
@@ -679,6 +685,12 @@ const App: React.FC = () => {
       if (fb && fb !== lastSeenTeacherFeedbackRef.current) {
         lastSeenTeacherFeedbackRef.current = fb;
         setTeacherFeedbackBanner(fb);
+      }
+      // A new redo request: tell the pair once (submissionLock.ts)
+      const redo = sub && redoIsOpen(sub) ? sub.redoRequestedAt : undefined;
+      if (redo && redo !== lastSeenRedoRef.current) {
+        lastSeenRedoRef.current = redo;
+        setTeacherFeedbackBanner(fb ? `${REDO_MESSAGE}\n\n${fb}` : REDO_MESSAGE);
       }
     };
     poll();
@@ -707,16 +719,21 @@ const App: React.FC = () => {
     const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
     let cancelled = false;
     (async () => {
-      let sub: PairSubmissionRecord | null = null;
-      try { sub = (await (await getDB()).get('submissions', subId)) as PairSubmissionRecord ?? null; } catch { /* ignore */ }
+      // The cloud copy first: it carries the teacher's redo request
+      let sub: PairSubmissionRecord | null = await fetchPupilSubmission(subId, getOrCreatePairClaimToken(pair.lessonId));
       if (!sub) {
-        sub = await fetchPupilSubmission(subId, getOrCreatePairClaimToken(pair.lessonId));
+        try { sub = (await (await getDB()).get('submissions', subId)) as PairSubmissionRecord ?? null; } catch { /* ignore */ }
       }
       if (!cancelled) setActivePairSubmission(sub);
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePairSession?.pairNumber, activePairSession?.lessonId, appMode]);
+
+  /** The teacher has asked this pair to try again, and they haven't sent since. */
+  const redoIsOpen = (sub: PairSubmissionRecord) =>
+    performerLock(sub.appleSentAt, sub.redoRequestedAt) === 'redo_requested'
+    || performerLock(sub.bananaSentAt, sub.redoRequestedAt) === 'redo_requested';
 
   const peerCuesToMap = (skillName: string, list?: { cueIndex: number; isObserved: boolean }[]): Record<string, boolean> => {
     const cues = getAllCuesForSkill(skillName);
@@ -826,11 +843,16 @@ const App: React.FC = () => {
     }).catch(console.warn);
   };
 
-  // Restore active pair session from IndexedDB if iPad reloads
+  // Restore active pair session from IndexedDB if iPad reloads. A pair stays
+  // active for its lesson day (so a teacher's redo request has somewhere to
+  // show), then is dropped.
   useEffect(() => {
     getActivePairSession().then((session) => {
-      if (session) {
+      if (!session) return;
+      if (isSameSingaporeDay(session.checkedInAt, new Date())) {
         setActivePairSession(session);
+      } else {
+        clearActivePairSession().catch(() => { /* ignore */ });
       }
     });
   }, []);
@@ -1842,7 +1864,9 @@ const App: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-black text-sm leading-tight">Pair #{activePairSession.pairNumber} — active session</p>
                       <p className="text-emerald-100/90 text-xs font-medium truncate">
-                        {activePairSubmission ? 'Sent to your teacher' : 'Continue where you left off'}
+                        {activePairSubmission && redoIsOpen(activePairSubmission)
+                          ? '🔄 Your teacher asked you to try again'
+                          : activePairSubmission ? 'Sent to your teacher' : 'Continue where you left off'}
                       </p>
                     </div>
                     <button
@@ -2017,8 +2041,7 @@ const App: React.FC = () => {
           pairPhoto={activePairSession.pairPhoto}
           teacherId={activePairSession.teacherId}
           onSessionComplete={() => {
-            clearActivePairSession();
-            setActivePairSession(null);
+            // The pair stays active for the lesson day, so a redo request shows on Home
             setAppMode('home_screen');
           }}
           onSendToCoachBot={handlePeerSessionToChat}

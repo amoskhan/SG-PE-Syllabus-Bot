@@ -183,6 +183,7 @@ export const uploadGuestVideo = async (
         [performer === 'banana' ? 'banana_video_url' : 'apple_video_url']: publicUrl,
       });
       if (result === 'claimed') console.warn('[GuestUpload] row owned by another group — DB sync skipped');
+      if (result === 'locked') console.warn('[GuestUpload] work already sent — DB sync skipped');
     }
 
     return publicUrl;
@@ -208,7 +209,7 @@ export const uploadPeerSessionToTeacher = async (params: {
   bananaCues?: any[];
   appleCues?: any[];
   claimToken?: string; // identifies the group that owns this pair
-}): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean; blocked?: boolean; invalidLesson?: boolean }> => {
+}): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean; blocked?: boolean; invalidLesson?: boolean; locked?: boolean }> => {
   const { teacherId, lessonId, pairNumber, skillName, pairPhoto, bananaBlob, appleBlob, bananaCues, appleCues, claimToken } = params;
   const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   const subId = `sub-${lessonId}-p${pairNumber}-${safeName}`;
@@ -271,6 +272,7 @@ export const uploadPeerSessionToTeacher = async (params: {
     return { bananaVideoUrl, appleVideoUrl, success: false, blocked: true };
   }
   if (result === 'invalid_lesson') return { bananaVideoUrl, appleVideoUrl, success: false, invalidLesson: true };
+  if (result === 'locked') return { bananaVideoUrl, appleVideoUrl, success: false, locked: true };
   if (result === 'error') return { bananaVideoUrl, appleVideoUrl, success: false };
 
   console.log('[Upload] pair_submissions written successfully ✓');
