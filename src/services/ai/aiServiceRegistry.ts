@@ -15,24 +15,24 @@ export type AIServiceFunction = (
     studentMemory?: string,
     userId?: string,
     skillMode?: import('../../types').SkillMode,
-    syllabusSection?: import('../../data/syllabusGuide').SyllabusSection
+    syllabusRequest?: import('../../data/syllabusGuide').SyllabusRequest
 ) => Promise<ChatResponse & { tokenUsage?: number }>;
 
 // Wrapper for Gemini to convert standard history to Google Content format
-const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, _studentMemory, _userId, skillMode, syllabusSection) => {
+const geminiWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, _studentMemory, _userId, skillMode, syllabusRequest) => {
     // Convert { role: 'user'|'assistant', content: string }[] to Google Content[]
     const googleHistory: Content[] = history.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }] as import('@google/genai').Part[]
     }));
 
-    return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, skillMode ?? 'fms', syllabusSection);
+    return sendMessageToGemini(googleHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, skillMode ?? 'fms', syllabusRequest);
 };
 
 // Wrapper for Claude Sonnet (Anthropic direct API)
-const claudeWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode, syllabusSection) => {
+const claudeWrapper: AIServiceFunction = async (history, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode, syllabusRequest) => {
     const standardHistory = history.map(msg => ({ role: msg.role, content: msg.content as string }));
-    return sendMessageToClaudeAPI(standardHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode ?? 'fms', syllabusSection);
+    return sendMessageToClaudeAPI(standardHistory, currentMessage, poseData, mediaAttachments, skillName, isVerified, sessionId, teacherProfile, studentMemory, userId, skillMode ?? 'fms', syllabusRequest);
 };
 
 // Start with a registry that returns the FUNCTION.

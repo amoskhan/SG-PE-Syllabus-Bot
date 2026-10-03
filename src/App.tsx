@@ -7,7 +7,7 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, SkillMode } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
-import { resolveSyllabusQuestion } from './data/syllabusGuide';
+import { guideStep } from './data/syllabusGuide';
 import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
 import { computeVideoHash } from './services/videoAnalysisCache';
 
@@ -1796,7 +1796,7 @@ const App: React.FC = () => {
       const knownSkills = skillMode === 'gymnastics' ? gymnasticKnownSkills : fmsKnownSkills;
       const matchedSkill = knownSkills.sort((a, b) => b.length - a.length).find(skill => lowerText.includes(skill));
       const lastMsg = currentMessages[currentMessages.length - 1];
-      if (lastMsg && lastMsg.sender === Sender.BOT && (lastMsg.text.includes("[[SKILL_CHOICES:") || lastMsg.text.includes("[[MULTI_SKILL_CHOICES:"))) {
+      if (lastMsg && lastMsg.sender === Sender.BOT && !lastMsg.guide && (lastMsg.text.includes("[[SKILL_CHOICES:") || lastMsg.text.includes("[[MULTI_SKILL_CHOICES:"))) {
         if (isConfirmation) {
           isVerifying = true;
           const skillMatch = lastMsg.text.match(/\*\*(.*?)\*\*/);
@@ -1885,20 +1885,25 @@ const App: React.FC = () => {
       return;
     }
 
-    // Syllabus questions (#112): the guide places a typed question in one section,
-    // so only that section goes to the AI. Video and Practice Station chats keep their flow.
+    // Syllabus questions (#112): the guide asks up to 4 chip questions, then places
+    // the question in one section, so only that section goes to the AI. It carries
+    // on from the guide state on the last bot message. Video and Practice Station
+    // chats keep their flow.
+    const lastBotMessage = currentMessages.filter(m => m.sender === Sender.BOT).at(-1);
     const guide = !files?.length && !isVerifying && !isPupilPractice && !newMessage.hasMedia
       && !currentMessages.some(m => m.poseData && m.poseData.length > 0)
-      ? resolveSyllabusQuestion(newMessage.text)
+      ? guideStep(newMessage.text, lastBotMessage?.guide)
       : null;
-    if (guide?.kind === 'mismatch') {
-      // Not taught at that level: say so and offer the real sections, no AI call needed
+    if (guide?.kind === 'ask' || guide?.kind === 'mismatch') {
+      // A clarifying question, or something not taught at that level: chips, no AI call needed
       const reply: Message = {
         id: (Date.now() + 1).toString(),
-        text: `${guide.message}
-[[SKILL_CHOICES: ${guide.choices.join(', ')}]]`,
+        text: guide.kind === 'ask'
+          ? `${guide.prompt}\n[[SKILL_CHOICES: ${guide.choices.join(', ')}]]`
+          : `${guide.message}\n[[SKILL_CHOICES: ${guide.choices.join(', ')}]]`,
         sender: Sender.BOT,
         timestamp: new Date(),
+        guide: guide.kind === 'ask' ? guide.state : undefined,
       };
       updateSessionAndSync(originatingSessionId, session => ({
         ...session,
@@ -1907,7 +1912,8 @@ const App: React.FC = () => {
       }));
       return;
     }
-    const syllabusSection = guide?.kind === 'section' ? guide.section : undefined;
+    const syllabusRequest = guide?.kind === 'section' ? guide.request : undefined;
+    const guideAnswerState = guide?.kind === 'section' ? guide.state : undefined;
 
     setIsLoading(true);
 
@@ -1999,7 +2005,7 @@ const App: React.FC = () => {
         studentMemory,
         user?.id,  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
         skillMode,
-        syllabusSection
+        syllabusRequest
       );
       } finally {
         setPupilAiRequest(null);
@@ -2057,7 +2063,8 @@ const App: React.FC = () => {
         referenceImageURI: response.referenceImageURI,
         tokenUsage: response.tokenUsage,
         modelId: effectiveModel,
-        syllabusSectionId: syllabusSection?.id,
+        syllabusSectionId: syllabusRequest?.section.id,
+        guide: guideAnswerState,
         studentId,
         performer: metadata?.performer,
         // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
@@ -2126,7 +2133,8 @@ const App: React.FC = () => {
         timestamp: new Date(),
         isError: true,
         // The section's text and PDF link still help when the AI couldn't answer
-        syllabusSectionId: syllabusSection?.id,
+        syllabusSectionId: syllabusRequest?.section.id,
+        guide: guideAnswerState,
       };
       
       updateSessionAndSync(originatingSessionId, session => ({

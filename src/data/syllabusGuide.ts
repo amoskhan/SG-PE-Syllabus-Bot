@@ -1,8 +1,11 @@
 import { PE_SYLLABUS_TEXT } from './syllabusData';
+import { ALL_FMS_SKILLS } from './fundamentalMovementSkillsData';
+import { ALL_GYMNASTICS_SKILLS } from './gymnasticsSkillsData';
 
-// The syllabus guide (#112): turns a teacher's question into ONE section of the
-// 2024 syllabus, so the AI is sent that section instead of the whole document,
-// and the chat can show the section's own words and a link to its PDF page.
+// The syllabus guide (#112): asks up to 4 chip questions (level, area, focus,
+// need), then turns the teacher's question into ONE section of the 2024
+// syllabus, so the AI is sent that section instead of the whole document, and
+// the chat can show the section's own words and a link to its PDF page.
 // Pure and deterministic: no AI call decides where a question goes.
 
 const TEXT = PE_SYLLABUS_TEXT.replace(/\r\n/g, '\n');
@@ -19,13 +22,6 @@ export interface SyllabusSection {
   /** The section in the syllabus's own words, page footers and stamps removed */
   text: string;
 }
-
-export type GuideResult =
-  | { kind: 'section'; section: SyllabusSection }
-  /** The question names something that isn't taught at that level; the chips are real sections */
-  | { kind: 'mismatch'; message: string; choices: string[] }
-  /** Not a question the guide can place yet: the caller keeps the whole-syllabus answer */
-  | { kind: 'unplaced' };
 
 // ── Page footers ────────────────────────────────────────────────────────────
 // Each printed page ends with its number alone on a line (from p. 14; the
@@ -140,6 +136,8 @@ for (const [focus, heading] of Object.entries(FOCUS_HEADINGS) as [Focus, string]
 {
   const swim = lineIndex(`BY END OF PRIMARY 6${DASH}SWIMMING`, PRIMARY_START);
   if (swim !== -1) STARTS.push({ id: 'primary-swimming', index: swim, title: 'Swimming: learning outcomes by the end of Primary 6' });
+  const games = TEXT.indexOf('\nGames and Sports\nGames and Sports ', PRIMARY_START);
+  if (games !== -1) STARTS.push({ id: 'primary-games-overview', index: games + 1, title: 'Games and Sports (Primary): overview, progression and games concepts' });
   const cce = TEXT.indexOf('2.3 Character and Citizenship Education', PRIMARY_START);
   if (cce !== -1) STARTS.push({ id: 'primary-cce', index: cce, title: 'Character and Citizenship Education: developmental milestones (Primary)' });
 }
@@ -184,12 +182,108 @@ const FOCUS_WORDS: [Focus, RegExp][] = [
   ['territorial-invasion', /\bterritorial\b|\binvasion\b|\bfootball\b|\bsoccer\b|\bbasketball\b|\bnetball\b|\bhockey\b|\bfloorball\b|\bhandball\b|\bfrisbee\b|\bultimate\b/i],
 ];
 
+/**
+ * P1–4 Games has no fixed sub-sections (each level groups its outcomes its own
+ * way), so these narrow what the AI focuses on, not the text it is sent.
+ */
+const SKILL_GROUPS: [string, RegExp][] = [
+  ['Throwing and catching', /\bthrow(s|ing)?\b|\bcatch(es|ing)?\b|\broll(s|ing)?\b|\btoss(ing)?\b/i],
+  ['Kicking and trapping', /\bkick(s|ing)?\b|\btrap(s|ping)?\b/i],
+  ['Striking', /\bstrik(e|es|ing)\b(?![- ]fielding)|\bvolley(s|ing)?\b|\bhit(s|ting)?\b|\bracket\b|\bbat\b/i],
+  ['Dribbling', /\bdribbl(e|es|ing)\b/i],
+];
+
+export const NEEDS = ['Outcomes', 'Lesson ideas', 'Teaching cues', 'Assessment', 'Differentiation'] as const;
+export type Need = (typeof NEEDS)[number];
+const NEED_WORDS: [Need, RegExp][] = [
+  ['Outcomes', /\boutcomes?\b|\bLOs?\b|\blearning objectives?\b|\bwhat (do|should) (pupils|students|they) learn\b/i],
+  ['Lesson ideas', /\blesson\b|\bactivit(y|ies)\b|\bideas?\b|\bdrills?\b|\bplan(s|ning)?\b/i],
+  ['Teaching cues', /\bcues?\b|\bteaching points?\b|\bcoaching\b/i],
+  ['Assessment', /\bassess(ing|ment)?\b|\brubrics?\b|\bgrad(e|ing)\b|\bchecklist\b/i],
+  ['Differentiation', /\bdifferentiat\w*|\bweaker\b|\bstronger\b|\bSEN\b|\bscaffold\w*|\bmodif(y|ication)\b|\badapt\w*/i],
+];
+
+/** What each need asks of the AI's summary */
+const NEED_GUIDANCE: Record<Need, string> = {
+  Outcomes: 'List the learning outcomes, numbered, in the syllabus’s own words.',
+  'Lesson ideas': 'Give 3–4 practical activity ideas that teach these outcomes, each linked to the outcome it builds.',
+  'Teaching cues': 'Give short cues a teacher can say to pupils (3–5 words each), linked to the outcomes.',
+  Assessment: 'Say what to look for when checking these outcomes, and 2–3 simple ways to check them in a lesson.',
+  Differentiation: 'Give ways to make the activities easier and harder for these outcomes (space, equipment, speed, numbers).',
+};
+
 const NOT_PRIMARY = /\bsec(ondary)?\b|\bjc\b|\bjunior college\b|\bpre-?u(niversity)?\b|\bs[1-5]\b/i;
 
-const levelOf = (q: string): number | null => {
+/** Words that make a message a syllabus question even without a level or area */
+const SYLLABUS_INTENT = /\bsyllabus\b|\bcurriculum\b|\blearning areas?\b|\bscheme of work\b|\bwhat (should|do|can) (i|we|my \w+|pupils|students|they) (teach|learn|cover)\b/i;
+
+/** FMS and gymnastics skill names: questions about these go to the skill checklists, not the guide */
+const SKILL_NAMES = new RegExp(`\\b(${[...ALL_FMS_SKILLS, ...ALL_GYMNASTICS_SKILLS]
+  .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
+
+const levelOf = (q: string): number | undefined => {
   const m = q.match(/\b(?:p|pri|primary)\s*([1-6])\b/i);
-  return m ? Number(m[1]) : null;
+  return m ? Number(m[1]) : undefined;
 };
+
+interface Parsed {
+  level?: number;
+  areas: Area[];
+  categories: Focus[];
+  group?: string;
+  need?: Need;
+}
+
+const parse = (q: string): Parsed => {
+  const categories = FOCUS_WORDS.filter(([, re]) => re.test(q)).map(([f]) => f);
+  const areas = new Set(AREA_WORDS.filter(([, re]) => re.test(q)).map(([a]) => a));
+  if (categories.length) areas.add('games');
+  return {
+    level: levelOf(q),
+    areas: [...areas],
+    categories,
+    group: SKILL_GROUPS.find(([, re]) => re.test(q))?.[0],
+    need: NEED_WORDS.find(([, re]) => re.test(q))?.[0],
+  };
+};
+
+// ── The guide's steps ───────────────────────────────────────────────────────
+export const JUST_ANSWER = 'Just answer';
+export const MAX_QUESTIONS = 4;
+
+export type GuideStepName = 'level' | 'area' | 'focus' | 'need';
+
+/** What the guide knows, kept on each guide message so the next reply carries on from it */
+export interface GuideState {
+  level?: number;
+  area?: Area;
+  /** A P5/6 Games category, or a P1–4 Games skill group */
+  focus?: string;
+  need?: Need;
+  /** Questions asked so far for this topic */
+  asked: number;
+  /** The question this message asked; unset on an answer */
+  step?: GuideStepName;
+  /** The section answered from; set on an answer */
+  sectionId?: string;
+}
+
+/** A section with what the teacher wants from it, for the AI */
+export interface SyllabusRequest {
+  section: SyllabusSection;
+  need?: Need;
+  focus?: string;
+}
+
+export type GuideStep =
+  | { kind: 'ask'; step: GuideStepName; prompt: string; choices: string[]; state: GuideState }
+  | { kind: 'section'; request: SyllabusRequest; state: GuideState }
+  /** The question names something that isn't taught at that level; the chips are real sections */
+  | { kind: 'mismatch'; message: string; choices: string[] }
+  /** Not a question the guide can place: the caller keeps the whole-syllabus answer */
+  | { kind: 'unplaced' };
+
+const UNPLACED: GuideStep = { kind: 'unplaced' };
 
 const label = (id: string): string => {
   const [, level, rest] = id.match(/^p(\d)-(.+)$/) ?? [];
@@ -198,38 +292,140 @@ const label = (id: string): string => {
   return id;
 };
 
-export const resolveSyllabusQuestion = (question: string): GuideResult => {
-  if (NOT_PRIMARY.test(question)) return { kind: 'unplaced' };
-  const level = levelOf(question);
-  const focuses = FOCUS_WORDS.filter(([, re]) => re.test(question)).map(([f]) => f);
-  const areas = new Set(AREA_WORDS.filter(([, re]) => re.test(question)).map(([a]) => a));
-  if (focuses.length) areas.add('games');
-  if (level === null || areas.size !== 1 || focuses.length > 1) return { kind: 'unplaced' };
-  const [area] = [...areas];
-  const found = (id: string): GuideResult => {
-    const section = SECTIONS.get(id);
-    return section ? { kind: 'section', section } : { kind: 'unplaced' };
-  };
+const isCategory = (focus?: string): focus is Focus => !!focus && focus in FOCUS_NAMES;
 
-  if (focuses.length === 1) {
-    const focus = focuses[0];
-    if (level >= 5) return found(focusId(focus));
+/** Areas taught at a level (Athletics starts at P4) */
+const areasAt = (level?: number): Area[] =>
+  (Object.keys(AREA_NAMES) as Area[]).filter((a) => a !== 'athletics' || level === undefined || level >= 4);
+
+/** Levels at which an area's answer differs (one section for all of them needs no question) */
+const levelsFor = (area?: Area, focus?: string): number[] => {
+  if (area === 'swimming' || area === 'cce' || isCategory(focus)) return [];
+  if (area === 'athletics') return [4, 5, 6];
+  return [1, 2, 3, 4, 5, 6];
+};
+
+/** The section for what is known, or none yet */
+const sectionIdFor = (s: GuideState): string | undefined => {
+  if (s.area === 'swimming') return 'primary-swimming';
+  if (s.area === 'cce') return 'primary-cce';
+  if (isCategory(s.focus)) return focusId(s.focus);
+  if (!s.area || s.level === undefined) return undefined;
+  if (s.area === 'games' && s.level >= 5) return 'primary-games-overview';
+  return levelId(s.area, s.level);
+};
+
+const mismatchFor = (s: GuideState): GuideStep | undefined => {
+  if (s.level === undefined) return undefined;
+  if (isCategory(s.focus) && s.level < 5) {
     return {
       kind: 'mismatch',
-      message: `${FOCUS_NAMES[focus]} are taught from Primary 5 in the syllabus. At P${level}, Games and Sports covers the basic skills of sending and receiving.`,
-      choices: [label(focusId(focus)), label(levelId('games', level))],
+      message: `${FOCUS_NAMES[s.focus]} are taught from Primary 5 in the syllabus. At P${s.level}, Games and Sports covers the basic skills of sending and receiving.`,
+      choices: [label(focusId(s.focus)), label(levelId('games', s.level))],
     };
   }
-  if (area === 'athletics' && level < 4) {
+  if (s.area === 'athletics' && s.level < 4) {
     return {
       kind: 'mismatch',
-      message: `Athletics is taught from Primary 4 in the syllabus. At P${level}, running, jumping and throwing are learnt through Dance, Games and Sports, and Gymnastics.`,
-      choices: [label(levelId('athletics', 4)), label(levelId('games', level))],
+      message: `Athletics is taught from Primary 4 in the syllabus. At P${s.level}, running, jumping and throwing are learnt through Dance, Games and Sports, and Gymnastics.`,
+      choices: [label(levelId('athletics', 4)), label(levelId('games', s.level))],
     };
   }
-  if (area === 'swimming') return found('primary-swimming');
-  if (area === 'cce') return found('primary-cce');
-  return found(levelId(area, level));
+  return undefined;
+};
+
+const answer = (s: GuideState): GuideStep => {
+  const id = sectionIdFor(s);
+  const section = id ? SECTIONS.get(id) : undefined;
+  if (!section) return UNPLACED;
+  const focus = s.focus && !isCategory(s.focus) ? s.focus : undefined;
+  return {
+    kind: 'section',
+    request: { section, need: s.need, focus },
+    state: { level: s.level, area: s.area, focus: s.focus, need: s.need, asked: s.asked, sectionId: section.id },
+  };
+};
+
+const ask = (s: GuideState, step: GuideStepName, prompt: string, choices: string[]): GuideStep => ({
+  kind: 'ask',
+  step,
+  prompt,
+  choices: [...choices, JUST_ANSWER],
+  state: { level: s.level, area: s.area, focus: s.focus, need: s.need, asked: s.asked + 1, step },
+});
+
+/** The next question, or the answer once nothing left would narrow it */
+const next = (s: GuideState): GuideStep => {
+  const mismatch = mismatchFor(s);
+  if (mismatch) return mismatch;
+  if (s.asked >= MAX_QUESTIONS) return answer(s);
+
+  const levels = levelsFor(s.area, s.focus);
+  if (s.level === undefined && levels.length > 1) {
+    return ask(s, 'level', 'Which level are you planning for?', levels.map((l) => `P${l}`));
+  }
+  if (!s.area) {
+    return ask(s, 'area', 'Which learning area?', areasAt(s.level).map((a) => AREA_NAMES[a]));
+  }
+  if (s.area === 'games' && !s.focus && s.level !== undefined) {
+    return s.level >= 5
+      ? ask(s, 'focus', 'Which games category?', Object.values(FOCUS_NAMES))
+      : ask(s, 'focus', 'Which skills?', SKILL_GROUPS.map(([g]) => g));
+  }
+  if (!s.need) return ask(s, 'need', 'What do you need?', [...NEEDS]);
+  return answer(s);
+};
+
+/** Fill what the message says into what is known; a new level or area starts a new topic */
+const merge = (s: GuideState, p: Parsed): GuideState => {
+  const area = p.areas.length === 1 ? p.areas[0] : s.area;
+  const changedTopic = (p.level !== undefined && p.level !== s.level) || area !== s.area;
+  const keptFocus = area === s.area ? s.focus : undefined;
+  const focus = p.categories.length === 1 ? p.categories[0] : area === 'games' && p.group ? p.group : keptFocus;
+  return {
+    level: p.level ?? s.level,
+    area,
+    focus,
+    need: p.need ?? s.need,
+    asked: changedTopic && s.sectionId ? 0 : s.asked,
+  };
+};
+
+const says = (p: Parsed) => p.level !== undefined || p.areas.length > 0 || !!p.need || !!p.group;
+
+/**
+ * One step of the guide for a teacher's message. `previous` is the guide state
+ * on the last bot message, if it was a guide question or a guide answer.
+ */
+export const guideStep = (text: string, previous?: GuideState): GuideStep => {
+  if (NOT_PRIMARY.test(text)) return UNPLACED;
+  const p = parse(text);
+  if (p.categories.length > 1 || p.areas.length > 1) return previous?.step ? next(previous) : UNPLACED;
+  // A question about an FMS or gymnastics skill belongs to the skill checklists
+  const isSkillQuestion = SKILL_NAMES.test(text) && p.level === undefined && p.areas.length === 0;
+
+  // Replying to a guide question
+  if (previous?.step) {
+    if (text.trim().toLowerCase() === JUST_ANSWER.toLowerCase()) return answer(previous);
+    if (says(p) && !isSkillQuestion) return next(merge(previous, p));
+    // Didn't answer the question: treat it as a new message
+    return guideStep(text);
+  }
+
+  // A follow-up to a guide answer stays on that section unless it names a new level or area
+  if (previous?.sectionId) {
+    if (isSkillQuestion) return UNPLACED;
+    if (p.level === undefined && p.areas.length === 0) {
+      return answer({ ...previous, need: p.need ?? previous.need, focus: p.group && previous.area === 'games' ? p.group : previous.focus });
+    }
+    return next(merge(previous, p));
+  }
+
+  // A new message
+  if (p.level === undefined && p.areas.length === 0 && (isSkillQuestion || !(p.need || SYLLABUS_INTENT.test(text)))) {
+    return UNPLACED;
+  }
+  return next(merge({ asked: 0 }, p));
 };
 
 // ── What the AI is sent ─────────────────────────────────────────────────────
@@ -239,13 +435,21 @@ export const recentHistory = <T>(history: T[]): T[] => history.slice(-SECTION_HI
 
 export const SECTION_SYSTEM_INSTRUCTION = `You are the Singapore PE Syllabus Assistant for MOE Singapore's 2024 PE Syllabus.
 The teacher's question is about ONE section of the syllabus, given to you in full. Answer from that section only.
-- Be brief: teachers read on a phone. Use at most 5 bullet points or 4 sentences, unless the teacher asks for a full list; then give every item in the section, numbered, in the syllabus's own words.
+- Shape the answer to what the teacher needs (given with the section).
+- Be brief: teachers read on a phone. Use at most 5 bullet points or 4 sentences, except when listing outcomes; then give every outcome in the section, numbered, in the syllabus's own words.
 - The section's full text and a link to its PDF page are shown under your answer, so do not paste the whole section unless asked.
 - Answer directly. Do not offer menus or choices, and do not use [[SKILL_CHOICES]].
 - If the section does not answer the question, say so in one sentence.
 - Tone: direct, professional, Singapore PE context. No filler phrases.`;
 
-export const sectionContextMessage = (s: SyllabusSection): string =>
-  `SINGAPORE MOE PE SYLLABUS 2024 — ${s.title} (syllabus p. ${s.printedPage})\n\n${s.text}`;
+export const sectionContextMessage = ({ section, need, focus }: SyllabusRequest): string =>
+  [
+    `SINGAPORE MOE PE SYLLABUS 2024 — ${section.title} (syllabus p. ${section.printedPage})`,
+    need ? `The teacher needs: ${need}. ${NEED_GUIDANCE[need]}` : '',
+    focus ? `Focus on: ${focus}.` : '',
+    section.text,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 
 export const sectionPdfLink = (s: Pick<SyllabusSection, 'pdfPage'>): string => `${SYLLABUS_PDF_URL}#page=${s.pdfPage}`;
