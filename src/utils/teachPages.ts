@@ -3,9 +3,9 @@ import { GYMNASTICS_REFERENCE_IMAGES, getGymnasticsChecklist } from '../data/gym
 import { OFFICIAL_FMS_PEER_CUES } from '../data/peerSyllabusCues';
 import type { LessonStep } from './lessonFlow';
 
-// What a Teach step shows pupils (#88), as pages they swipe through: the
-// skill's reference picture and its cues. The teacher's own pictures and
-// videos join as more pages (#89).
+// What a Teach step shows pupils (#88, #89), as pages they swipe through: the
+// teacher's own videos and pictures first, then the skill's reference picture
+// and its cues.
 
 export interface TeachCue {
   icon: string;
@@ -14,6 +14,7 @@ export interface TeachCue {
 }
 
 export type TeachPage =
+  | { kind: 'media'; type: 'video' | 'image'; path: string; caption?: string }
   | { kind: 'reference'; src: string; skillName: string }
   | { kind: 'cues'; skillName: string; cues: TeachCue[] };
 
@@ -47,7 +48,7 @@ export const teachCues = (skillName: string): TeachCue[] => {
 /** The pages of a Teach step, in order. Empty for any other step. */
 export const teachPages = (step: LessonStep): TeachPage[] => {
   if (step.kind !== 'teach' || !step.teach) return [];
-  const pages: TeachPage[] = [];
+  const pages: TeachPage[] = (step.teach.media ?? []).map(m => ({ kind: 'media', type: m.type, path: m.path, caption: m.caption }));
   const src = step.teach.showReferenceImage ? referenceImageFor(step.skillName) : undefined;
   if (src) pages.push({ kind: 'reference', src, skillName: step.skillName });
   const cues = step.teach.showCues ? teachCues(step.skillName) : [];

@@ -879,11 +879,16 @@ const App: React.FC = () => {
         setAppMode('peer_coaching');
       }
     } else if (step.kind === 'assess' && step.assess?.method === 'ai_analysis') {
-      handleResumePracticeChat();
+      // AI analysis includes the peer assessment: film and tick first, unless
+      // the pair already did in an earlier step, then the Practice Station
+      if (pairRecord || activePairSubmission) handleResumePracticeChat();
+      else setAppMode('peer_coaching');
     } else {
       setAppMode('pupil_step');
     }
   };
+
+  const isAiStep = (s: Screen) => s.kind === 'step' && s.step.kind === 'assess' && s.step.assess?.method === 'ai_analysis';
 
   const goToStep = async (move: 'stay' | 'next' | 'back') => {
     const steps = activePairSession ? await refreshLessonSteps(activePairSession.lessonId, pairSkillName) : lessonSteps;
@@ -897,8 +902,14 @@ const App: React.FC = () => {
   // straight away (with the automatic AI peer feedback) when that comes next.
   const handlePeerStepDone = async (data: CompletedPeerSession) => {
     const steps = activePairSession ? await refreshLessonSteps(activePairSession.lessonId, pairSkillName) : lessonSteps;
+    // Filming for an AI analysis step: on into its Practice Station
+    if (isAiStep(nextScreen(steps, pairProgress))) {
+      await handlePeerSessionToChat(data);
+      loadPairRecord();
+      return;
+    }
     const next = nextScreen(steps, pairProgress, 'next');
-    if (next.kind === 'step' && next.step.kind === 'assess' && next.step.assess?.method === 'ai_analysis') {
+    if (isAiStep(next)) {
       setPairProgress(progressFor(next, steps));
       await handlePeerSessionToChat(data);
       loadPairRecord();
@@ -2372,10 +2383,7 @@ const App: React.FC = () => {
             setAppMode('home_screen');
           }}
           onSendToCoachBot={handlePeerStepDone}
-          nextIsCoachBot={(() => {
-            const next = nextScreen(lessonSteps, pairProgress, 'next');
-            return next.kind === 'step' && next.step.kind === 'assess' && next.step.assess?.method === 'ai_analysis';
-          })()}
+          nextIsCoachBot={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
           onExit={() => {
             const wasRefilm = !!refilmPerformer;
             setRefilmPerformer(null);

@@ -38,7 +38,7 @@ A lesson step in which pupils carry out the skill.
 A lesson step that gathers evidence of pupils' performance by one assessment method.
 
 **Assessment Method**:
-How an assess step judges performance: AI analysis, peer assessment, or the teacher alone.
+How an assess step judges performance: AI analysis, peer assessment, or the teacher alone. AI analysis always comes with a peer assessment: the pair films and ticks first (unless they already did earlier in the lesson), then the AI analyses the clips.
 
 **Lesson Pass**:
 The day's permission, carried in a lesson's QR code, that lets pupil devices use the classroom tools.
