@@ -14,8 +14,17 @@ const MAX_OUTPUT_TOKENS = 2000;
 const MAX_HISTORY = 60;
 
 // Flash first; Flash-Lite has its own free quota, so it answers when Flash's
-// is used up (429) or Flash stays busy (503).
-const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+// is used up (429), Flash stays busy (503) or Google has retired it (404).
+// The "-latest" names follow Google's current models, so a retired version
+// (as gemini-2.5-flash-lite was for new keys) doesn't stop the bot.
+// Flash thinks first unless told not to; Flash-Lite doesn't think, and refuses
+// the setting (400), so only Flash is sent it.
+const MODELS = [
+    { name: 'gemini-flash-latest', thinks: true },
+    { name: 'gemini-flash-lite-latest', thinks: false },
+];
+// Worth trying the next model: quota used up, busy, or the model is gone
+const TRY_NEXT = [429, 503, 404];
 
 // Google's servers have moments of "high demand" (503) that pass within a
 // second or two, so a 503 is tried again before giving up.
@@ -80,18 +89,18 @@ export default async function handler(req: any, res: any) {
         // Initialize GenAI
         const ai = new GoogleGenAI({ apiKey });
 
-        // Gemini 2.5 "thinks" first, and the thinking counts against
+        // Flash "thinks" first, and the thinking counts against
         // maxOutputTokens: a syllabus answer could come back cut short or empty.
         // Text questions don't need it; motion analysis (video frames) keeps it.
         const hasImages = Array.isArray(message) && message.some((part: any) => part?.inlineData);
 
-        const send = (model: string) => ai.chats.create({
-            model,
+        const send = ({ name, thinks }: (typeof MODELS)[number]) => ai.chats.create({
+            model: name,
             config: {
                 systemInstruction: systemInstruction,
                 tools: onlySearchTool(tools),
                 temperature: 0.3,
-                thinkingConfig: hasImages ? undefined : { thinkingBudget: 0 },
+                thinkingConfig: thinks && !hasImages ? { thinkingBudget: 0 } : undefined,
                 // 1200 default for syllabus text Q&A (clarifications are short; full section
         // dumps for a single sub-category need ~600-900 tokens, so 1200 gives headroom).
         // Motion analysis overrides this with 1500 from the client.
@@ -100,7 +109,7 @@ export default async function handler(req: any, res: any) {
             history: history || []
         }).sendMessage({ message }); // text, or multipart for images
 
-        const sendWithRetry = async (model: string) => {
+        const sendWithRetry = async (model: (typeof MODELS)[number]) => {
             for (let attempt = 0; ; attempt++) {
                 try {
                     return await send(model);
@@ -112,16 +121,16 @@ export default async function handler(req: any, res: any) {
         };
 
         let result;
-        let model = MODELS[0];
+        let model = MODELS[0].name;
         for (let i = 0; ; i++) {
-            model = MODELS[i];
+            model = MODELS[i].name;
             try {
-                result = await sendWithRetry(model);
+                result = await sendWithRetry(MODELS[i]);
                 break;
             } catch (error) {
-                const busy = statusOf(error) === 429 || statusOf(error) === 503;
-                if (!busy || i === MODELS.length - 1) throw error;
-                console.warn(`[gemini] ${model} busy (${statusOf(error)}), trying ${MODELS[i + 1]}`);
+                const status = statusOf(error);
+                if (!TRY_NEXT.includes(status as number) || i === MODELS.length - 1) throw error;
+                console.warn(`[gemini] ${model} unavailable (${status}), trying ${MODELS[i + 1].name}`);
             }
         }
         const response = (result as any).response || result;

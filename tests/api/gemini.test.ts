@@ -59,24 +59,24 @@ const ask = async (body: Record<string, unknown> = {}) => {
 
 describe('/api/gemini', () => {
   it('retries a moment of "high demand" (503) and still answers', async () => {
-    script['gemini-2.5-flash'] = [{ error: 503 }, { text: 'P4 outcomes…' }];
+    script['gemini-flash-latest'] = [{ error: 503 }, { text: 'P4 outcomes…' }];
     const res = await ask();
     expect(res.status).toBe(200);
     expect(res.body.text).toBe('P4 outcomes…');
   });
 
   it("answers with Flash-Lite when Flash's free quota is used up (429)", async () => {
-    script['gemini-2.5-flash'] = [{ error: 429, retryDelay: '40s' }];
-    script['gemini-2.5-flash-lite'] = [{ text: 'P4 outcomes from Lite' }];
+    script['gemini-flash-latest'] = [{ error: 429, retryDelay: '40s' }];
+    script['gemini-flash-lite-latest'] = [{ text: 'P4 outcomes from Lite' }];
     const res = await ask();
     expect(res.status).toBe(200);
     expect(res.body.text).toBe('P4 outcomes from Lite');
-    expect(res.body.model).toBe('gemini-2.5-flash-lite');
+    expect(res.body.model).toBe('gemini-flash-lite-latest');
   });
 
   it("says when to try again if every model's quota is used up", async () => {
-    script['gemini-2.5-flash'] = [{ error: 429, retryDelay: '40s' }];
-    script['gemini-2.5-flash-lite'] = [{ error: 429, retryDelay: '12.5s' }];
+    script['gemini-flash-latest'] = [{ error: 429, retryDelay: '40s' }];
+    script['gemini-flash-lite-latest'] = [{ error: 429, retryDelay: '12.5s' }];
     const res = await ask();
     expect(res.status).toBe(429);
     expect(res.body.retryAfterSeconds).toBe(13);
@@ -84,16 +84,32 @@ describe('/api/gemini', () => {
   });
 
   it('asks Gemini not to think, so the whole token limit goes to the answer', async () => {
-    script['gemini-2.5-flash'] = [{ text: 'P4 outcomes…' }];
+    script['gemini-flash-latest'] = [{ text: 'P4 outcomes…' }];
     await ask();
     expect(sent[0].config.thinkingConfig).toEqual({ thinkingBudget: 0 });
   });
 
   it('searches the web only when the request asks for it', async () => {
-    script['gemini-2.5-flash'] = [{ text: 'from the syllabus' }, { text: 'from the web' }];
+    script['gemini-flash-latest'] = [{ text: 'from the syllabus' }, { text: 'from the web' }];
     await ask();
     expect(sent[0].config.tools).toBeUndefined();
     await ask({ tools: [{ googleSearch: {} }] });
     expect(sent[1].config.tools).toEqual([{ googleSearch: {} }]);
+  });
+
+  it("sends Flash-Lite no thinking setting (it doesn't think, and refuses the setting)", async () => {
+    script['gemini-flash-latest'] = [{ error: 429 }];
+    script['gemini-flash-lite-latest'] = [{ text: 'from Lite' }];
+    await ask();
+    expect(sent[1]).toMatchObject({ model: 'gemini-flash-lite-latest' });
+    expect(sent[1].config.thinkingConfig).toBeUndefined();
+  });
+
+  it('moves on to the next model when Google has retired one (404)', async () => {
+    script['gemini-flash-latest'] = [{ error: 404 }];
+    script['gemini-flash-lite-latest'] = [{ text: 'still answering' }];
+    const res = await ask();
+    expect(res.status).toBe(200);
+    expect(res.body.text).toBe('still answering');
   });
 });
