@@ -379,10 +379,7 @@ export const LessonList: React.FC<LessonListProps> = ({
   const upcoming = lessons.filter((l) => l.lessonDate >= today).reverse(); // soonest first
   const past = lessons.filter((l) => l.lessonDate < today); // most recent first
 
-  const section = (title: string, list: Lesson[]) =>
-    list.length > 0 && (
-      <section className="flex flex-col gap-2">
-        <h3 className="text-xs uppercase font-extrabold text-slate-400 tracking-wider">{title}</h3>
+  const rows = (list: Lesson[]) => (
         <ul className="flex flex-col gap-2">
           {list.map((l) => (
             <LessonRow
@@ -397,8 +394,7 @@ export const LessonList: React.FC<LessonListProps> = ({
             />
           ))}
         </ul>
-      </section>
-    );
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -430,8 +426,21 @@ export const LessonList: React.FC<LessonListProps> = ({
         </div>
       )}
 
-      {section('Today & upcoming', upcoming)}
-      {section('Past', past)}
+      {upcoming.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h3 className="text-xs uppercase font-extrabold text-slate-400 tracking-wider">Today & upcoming</h3>
+          {rows(upcoming)}
+        </section>
+      )}
+      {/* Past lessons are for looking back: folded so the list is about what's coming (#109) */}
+      {past.length > 0 && (
+        <details className="group flex flex-col gap-2">
+          <summary className="list-none cursor-pointer select-none text-xs uppercase font-extrabold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 tracking-wider mb-2">
+            <span className="inline-block transition-transform group-open:rotate-90">▸</span> Past lessons ({past.length})
+          </summary>
+          {rows(past)}
+        </details>
+      )}
     </div>
   );
 };
