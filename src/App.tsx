@@ -27,7 +27,7 @@ import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
-import { setPupilAiRequest, PupilAiRequest } from './services/ai/aiAccess';
+import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
 import { normaliseLevel } from './utils/gradingReview';
 import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
@@ -336,6 +336,10 @@ const App: React.FC = () => {
   const effectiveModel: ModelId = isPupilPractice ? 'claude' : user ? selectedModel : 'gemini';
   // Pupil budget bookkeeping: questions count against whoever was analysed last
   const lastAnalysedPerformerRef = useRef<'apple' | 'banana'>('apple');
+  // What the server last said about each pupil's Practice Station limits (#95):
+  // 1 analysis and 5 questions per lesson
+  const [pupilUsage, setPupilUsage] = useState<Record<'apple' | 'banana', { questionsLeft?: number; analysisUsed?: boolean }>>({ apple: {}, banana: {} });
+  useEffect(() => onPupilUsage(r => setPupilUsage(prev => ({ ...prev, [r.performer]: { ...prev[r.performer], ...r } }))), []);
   const [claimedPairNumbers, setClaimedPairNumbers] = useState<Set<number>>(new Set());
   const [checkInModalKey, setCheckInModalKey] = useState(0);
   const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
@@ -351,6 +355,7 @@ const App: React.FC = () => {
   const [isPairReviewOpen, setIsPairReviewOpen] = useState(false);
 
   const handlePeerSessionToChat = async (data: CompletedPeerSession) => {
+    setPupilUsage({ apple: {}, banana: {} });
     setActivePeerSessionData(data);
     setAppMode('chat');
 
@@ -615,6 +620,10 @@ const App: React.FC = () => {
     return { ...performerStage(performerWork(record, p, lock)), redo: lock === 'redo_requested' };
   };
 
+  /** This pupil has had their one Practice Station analysis (#95). */
+  const analysisUsed = (p: Performer) =>
+    !!pupilUsage[performerKey(p)].analysisUsed || stageFor(p).stage === 'submitted' || performerWork(pairRecord, p, 'open').hasAnalysis;
+
   const STAGE_HINT: Record<Stage, string> = {
     not_started: "hasn't been filmed yet. Record and save your videos first.",
     needs_ticks: "'s new video needs the assessor's ticks first.",
@@ -802,6 +811,7 @@ const App: React.FC = () => {
     const skillName = pair.skillName || activePairSubmission?.skillName || scannedLessonData.skillName || 'Overhand Throw';
     const sub = activePairSubmission;
 
+    if (activePeerSessionData?.pairNumber !== pair.pairNumber) setPupilUsage({ apple: {}, banana: {} });
     setActivePeerSessionData({
       pairNumber: pair.pairNumber,
       lessonId: pair.lessonId,
@@ -1800,7 +1810,10 @@ const App: React.FC = () => {
       let errorText: string;
 
       const lower = rawError.toLowerCase();
-      if (lower.includes('429') || lower.includes('rate') && lower.includes('limit')) {
+      // The server's own words to pupils (Practice Station limits, lesson pass) read best as they are
+      if (/^You've |ask your teacher/i.test(rawError)) {
+        errorText = `⚠️ ${rawError}`;
+      } else if (lower.includes('429') || lower.includes('rate') && lower.includes('limit')) {
         errorText = "⚠️ You're sending messages too fast. Please wait a moment and try again.";
       } else if (lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('402')) {
         errorText = "⚠️ The AI service has reached its daily usage limit. Please try again later or switch to a different model.";
@@ -2433,12 +2446,13 @@ const App: React.FC = () => {
                       <div key={p} className="flex flex-col gap-1.5">
                         <button
                           type="button"
-                          disabled={isLoading || isProcessing || st.stage === 'submitted'}
+                          disabled={isLoading || isProcessing || st.stage === 'submitted' || analysisUsed(p)}
+                          title={analysisUsed(p) ? `${p} has had their one Coach Bot analysis` : undefined}
                           onClick={() => handleAnalyzePeerPerformer(p)}
                           className={`h-12 px-3 active:scale-[0.98] rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
                             banana ? 'bg-amber-400 hover:bg-amber-300 text-amber-950' : 'bg-rose-500 hover:bg-rose-400 text-white'}`}
                         >
-                          <span>{banana ? '🍌' : '🍎'}</span><span>Analyse {p}</span>
+                          <span>{banana ? '🍌' : '🍎'}</span><span>{analysisUsed(p) ? `${p} analysed ✓` : `Analyse ${p}`}</span>
                         </button>
                         {st.stage === 'submitted' ? (
                           <p className="h-10 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400">✅ {p} submitted</p>
@@ -2488,6 +2502,15 @@ const App: React.FC = () => {
                   </button>
                 </div>
               </div>
+            )}
+
+            {activePeerSessionData && (pupilUsage.apple.questionsLeft !== undefined || pupilUsage.banana.questionsLeft !== undefined) && (
+              <p className="mb-1.5 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                💬 Questions left
+                {(['banana', 'apple'] as const).map(k => pupilUsage[k].questionsLeft !== undefined && (
+                  <span key={k}> · {k === 'banana' ? '🍌' : '🍎'} {pupilUsage[k].questionsLeft}</span>
+                ))}
+              </p>
             )}
 
             <ChatInput

@@ -8,7 +8,7 @@ import { getSyllabusContextMessage } from '../../data/syllabusContext';
 import { getFewShotExamples } from '../../data/skillExamples';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 import { supabase } from '../db/supabaseClient';
-import { claudeAccessHeaders, serverErrorMessage } from './aiAccess';
+import { claudeAccessHeaders, reportPupilUsage, serverErrorMessage } from './aiAccess';
 
 const MODEL_HAIKU  = 'claude-haiku-4-5-20251001';
 const MODEL_SONNET = 'claude-sonnet-4-6';
@@ -953,6 +953,7 @@ ${BACKSWING_ITEM5_RULE}
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: response.statusText })) as any;
             if (errorData.details) console.error('Claude API error details:', errorData.details);
+            reportPupilUsage({ ok: false, status: response.status });
             // Sign-in, lesson and pupil-budget refusals carry a message meant for the user
             if ([401, 403, 429].includes(response.status)) {
                 throw new Error(serverErrorMessage(errorData) ?? `Claude API error (${response.status})`);
@@ -965,6 +966,7 @@ ${BACKSWING_ITEM5_RULE}
         const data = await response.json() as any;
         text = data.text || '';
         tokenUsage = data.tokenUsage || 0;
+        reportPupilUsage({ ok: true, questionsLeft: data.questionsLeft });
 
         if (!text || text.trim().length === 0) {
             throw new Error('Claude returned an empty response. Please try rephrasing.');

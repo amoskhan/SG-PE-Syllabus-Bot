@@ -40,7 +40,7 @@ React (src/) → POST /api/upload-pdf → pdf-parse → Gemini embeddings → Su
 | `/api/upload-pdf.ts` | pdf-parse + Gemini embeddings | PDF ingestion pipeline |
 
 **Who may call which model** (`api/claude.ts`, `api/gemini.ts`):
-- `/api/claude` (paid) answers only a **signed-in teacher** (`Authorization: Bearer` Supabase token) or a **pupil with today's lesson pass** (`X-Lesson-*` headers built by `src/services/ai/aiAccess.ts`). Pupil calls are checked and counted by `pupil_ai_use()` (`supabase_ai_usage.sql`): automatic peer feedback 12 calls/pair (Haiku); Practice Station analyses + questions 5/pupil, first analysis Sonnet then Haiku. The server picks the model and caps `max_tokens` — never trust the body's `model`.
+- `/api/claude` (paid) answers only a **signed-in teacher** (`Authorization: Bearer` Supabase token) or a **pupil with today's lesson pass** (`X-Lesson-*` headers built by `src/services/ai/aiAccess.ts`). Pupil calls are checked and counted by `pupil_ai_use()` (`supabase_ai_usage.sql`): automatic peer feedback 12 calls/pair (Haiku); Practice Station **1 analysis (Sonnet) + 5 questions (Haiku) per pupil per lesson** — a redo request adds none. The Practice Station shows what's left via `onPupilUsage` (`aiAccess.ts`). The server picks the model and caps `max_tokens` — never trust the body's `model`.
 - `/api/gemini` is open to visitors; the server fixes the model, caps output tokens and allows only the Google Search tool.
 - In the app, `effectiveModel` in `App.tsx`: not signed in → Gemini (Claude greyed out); pupil in the Practice Station → Claude.
 - In local dev, Vite's `claude-dev-proxy` stands in for `api/claude.ts`, so these checks only apply on Vercel.

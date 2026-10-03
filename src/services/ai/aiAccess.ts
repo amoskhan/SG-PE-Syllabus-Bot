@@ -51,3 +51,37 @@ export const serverErrorMessage = (errorData: unknown): string | null => {
   const e = (errorData as { error?: unknown } | null)?.error;
   return typeof e === 'string' && e.trim() ? e : null;
 };
+
+// ── Practice Station limits (#95): what the server last said ────────────────
+// Each pupil gets 1 analysis and 5 questions per lesson. The server is the
+// judge (pupil_ai_use); these reports only let the Practice Station show
+// what's left. claudeService reports after each pupil call.
+
+export interface PupilUsageReport {
+  performer: 'apple' | 'banana';
+  questionsLeft?: number;   // after a question was answered
+  analysisUsed?: boolean;   // after an analysis, or when the server refused one
+}
+
+type UsageListener = (report: PupilUsageReport) => void;
+const usageListeners = new Set<UsageListener>();
+
+export const onPupilUsage = (listener: UsageListener) => {
+  usageListeners.add(listener);
+  return () => { usageListeners.delete(listener); };
+};
+
+/** Called with the server's answer for the current pupil request. */
+export const reportPupilUsage = (outcome: { ok: boolean; status?: number; questionsLeft?: number; message?: string }) => {
+  const req = currentPupilRequest;
+  if (!req || req.performer === 'pair') return;
+  let report: PupilUsageReport | null = null;
+  if (req.purpose === 'question' && outcome.ok && typeof outcome.questionsLeft === 'number') {
+    report = { performer: req.performer, questionsLeft: outcome.questionsLeft };
+  } else if (req.purpose === 'question' && outcome.status === 429) {
+    report = { performer: req.performer, questionsLeft: 0 };
+  } else if (req.purpose === 'analysis' && (outcome.ok || outcome.status === 429)) {
+    report = { performer: req.performer, analysisUsed: true };
+  }
+  if (report) usageListeners.forEach(l => l(report!));
+};

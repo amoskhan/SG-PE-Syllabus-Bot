@@ -30,7 +30,18 @@ const MAX_IMAGES = 32; // gymnastics grading sends up to 30 frames
 type Purpose = keyof typeof MAX_TOKENS_PUPIL;
 type Caller =
     | { kind: 'teacher' }
-    | { kind: 'pupil'; lessonId: string; pairNumber: number; performer: string; purpose: Purpose; model: 'sonnet' | 'haiku' };
+    | {
+          kind: 'pupil'; lessonId: string; pairNumber: number; performer: string; purpose: Purpose;
+          model: 'sonnet' | 'haiku';
+          questionsLeft?: number; // after this question (Practice Station limit, #95)
+      };
+
+// Each pupil gets 1 analysis and 5 questions per lesson (supabase_ai_usage.sql)
+const LIMIT_MESSAGES: Record<string, string> = {
+    analysis_used: "You've already had your Coach Bot analysis for this lesson. You can still ask Coach Bot questions.",
+    questions_used: "You've asked all 5 of your questions for this lesson. Ask your teacher if you need more help.",
+    budget: "You've used all your AI feedback for this lesson. Ask your teacher for help.",
+};
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -95,13 +106,17 @@ async function identifyCaller(req: VercelRequest): Promise<Caller> {
         console.error('[api/claude] pupil_ai_use error:', error.message);
         throw new Refusal(500, 'Could not check the lesson. Please try again.');
     }
-    const decision = data as { ok: boolean; model?: 'sonnet' | 'haiku'; reason?: string };
+    const decision = data as { ok: boolean; model?: 'sonnet' | 'haiku'; reason?: string; questions_left?: number };
     if (!decision.ok) {
-        throw decision.reason === 'budget'
-            ? new Refusal(429, "You've used all your AI feedback for this lesson. Ask your teacher for help.")
+        throw decision.reason && LIMIT_MESSAGES[decision.reason]
+            ? new Refusal(429, LIMIT_MESSAGES[decision.reason])
             : new Refusal(403, "This lesson's QR code isn't open today. Ask your teacher to show today's QR code.");
     }
-    return { kind: 'pupil', lessonId, pairNumber, performer, purpose, model: decision.model ?? 'haiku' };
+    return {
+        kind: 'pupil', lessonId, pairNumber, performer, purpose,
+        model: decision.model ?? 'haiku',
+        questionsLeft: typeof decision.questions_left === 'number' ? decision.questions_left : undefined,
+    };
 }
 
 /** Give a pupil's turn back when Anthropic fails, so an outage doesn't use up their budget. */
@@ -197,6 +212,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
             text: data.content?.[0]?.text || '',
             tokenUsage: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0),
+            // so the Practice Station can show "N questions left"
+            ...(caller.kind === 'pupil' && caller.questionsLeft !== undefined ? { questionsLeft: caller.questionsLeft } : {}),
         });
 
     } catch (error: any) {
