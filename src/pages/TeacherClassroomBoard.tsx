@@ -1090,6 +1090,20 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                       </div>
                       <div className="p-4 bg-slate-50 dark:bg-zinc-900/60">
                         <p className="text-[11px] font-bold text-slate-400 mb-1.5">{entry.skillName}</p>
+                        {/* The pupil filmed again after this analysis: show the attempt it was about (#94) */}
+                        {entry.analysedClip && (
+                          <div className="mb-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900">
+                            <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                              First attempt: the AI analysed this one. The video above is their final attempt.
+                            </p>
+                            <VideoBlobPlayer videoUrl={entry.analysedClip.videoUrl} performer={entry.studentLabel} />
+                            {entry.analysedClip.cues.length > 0 && (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                                Peer ticks for the first attempt: {entry.analysedClip.cues.filter(c => c.isObserved).length}/{entry.analysedClip.cues.length}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
                           {entry.analysisText}
                         </p>

@@ -9,7 +9,8 @@ import {
   queuePairSubmission,
   PairSubmissionRecord,
   PeerCueResult,
-  getDB,
+  getSubmission,
+  putSubmission,
   getOrCreatePairClaimToken,
 } from '../../services/offline/offlineStorage';
 import { backupSubmissionToSupabase } from '../../services/cloudSyncService';
@@ -40,6 +41,17 @@ interface PeerCoachingSessionProps {
   onSessionComplete: () => void;
   onSendToCoachBot?: (data: CompletedPeerSession) => void;
   onExit: () => void;
+  // Re-film mode (#94): record and tick just this performer, then hand the new
+  // attempt back instead of running the whole pair flow.
+  refilmPerformer?: 'Apple' | 'Banana';
+  onRefilmDone?: (attempt: RefilmedAttempt) => void;
+}
+
+export interface RefilmedAttempt {
+  performer: 'Apple' | 'Banana';
+  videoBlob: Blob | null;
+  cues: Record<string, boolean>;
+  poseFrames: string[];
 }
 
 type Step =
@@ -60,8 +72,11 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   onSessionComplete,
   onSendToCoachBot,
   onExit,
+  refilmPerformer,
+  onRefilmDone,
 }) => {
-  const [step, setStep] = useState<Step>('APPLE_INTRO');
+  // Banana performs in the APPLE_* steps (Apple films), Apple in the BANANA_* steps
+  const [step, setStep] = useState<Step>(refilmPerformer === 'Apple' ? 'SWAP_PROMPT' : 'APPLE_INTRO');
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
@@ -105,13 +120,15 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         speechService.speak('Apple, watch the replay. Did Banana follow the PE syllabus cues?');
         break;
       case 'SWAP_PROMPT':
-        speechService.speak('Great job, Apple! Now swap roles. Banana grab the iPad, Apple get ready to perform!');
+        speechService.speak(refilmPerformer === 'Apple'
+          ? 'Banana, grab the iPad. Apple, get ready to perform again!'
+          : 'Great job, Apple! Now swap roles. Banana grab the iPad, Apple get ready to perform!');
         break;
       case 'BANANA_REVIEW':
         speechService.speak('Banana, watch the replay. Check off Apple cues!');
         break;
       case 'SESSION_COMPLETED':
-        speechService.speak('Awesome teamwork! Both partners are done. Your practice has been saved for the teacher!');
+        speechService.speak('Awesome teamwork! Both partners are done. Your videos are saved.');
         break;
     }
   }, [step, skillName]);
@@ -441,12 +458,11 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         // No QR / no teacherId — save video blob to local submission in IndexedDB as backup
         const safeSkill = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         const localId = `sub-${lessonId}-p${pairNumber}-${safeSkill}`;
-        const db = await getDB();
-        const existing = await db.get('submissions', localId);
+        const existing = await getSubmission(localId);
         if (existing) {
           if (performer === 'banana') existing.appleRole = { ...existing.appleRole, videoBlob: blob };
           else existing.bananaRole = { ...existing.bananaRole, videoBlob: blob };
-          await db.put('submissions', existing);
+          await putSubmission(existing);
         }
         setState('saved');
       }
@@ -516,6 +532,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         isObserved: rated[c.id] ?? false,
       }));
 
+    const cloudUrls: { apple?: string; banana?: string } = {};
     try {
       // ── Cloud upload (teacher always provides teacherId via QR scan) ────────
       if (teacherId) {
@@ -547,14 +564,22 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           console.warn('[Submit] uploadPeerSessionToTeacher returned success=false');
         } else {
           console.log('[Submit] Cloud upload complete ✓ banana:', result.bananaVideoUrl, 'apple:', result.appleVideoUrl);
+          cloudUrls.banana = result.bananaVideoUrl;
+          cloudUrls.apple = result.appleVideoUrl;
         }
       } else {
         console.warn('[Submit] No teacherId — QR was not scanned. Saving locally only.');
       }
 
       // ── Local IndexedDB backup (always, regardless of cloud result) ─────────
+      // Keeps anything already on this device for the pair (Practice Station
+      // analyses, a first attempt) and the cloud links, so a clip is never
+      // uploaded twice (see backupSubmissionToSupabase).
+      const id = `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+      const previous = (await getSubmission(id)) as PairSubmissionRecord | undefined;
       const submission: PairSubmissionRecord = {
-        id: `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`,
+        ...previous,
+        id,
         lessonId,
         pairNumber,
         skillName,
@@ -563,20 +588,29 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           studentPerformer: 'Banana',
           evaluator: 'Apple',
           videoBlob: bananaVideoBlob || undefined,
+          videoUrl: cloudUrls.banana,
           cues: mapCues(bananaCues),
         },
         bananaRole: {
           studentPerformer: 'Apple',
           evaluator: 'Banana',
           videoBlob: appleVideoBlob || undefined,
+          videoUrl: cloudUrls.apple,
           cues: mapCues(appleCues),
         },
-        status: 'pending_sync',
-        createdAt: new Date().toISOString(),
+        status: previous?.status ?? 'pending_sync',
+        createdAt: previous?.createdAt ?? new Date().toISOString(),
       };
-      await queuePairSubmission(submission);
-
-      setIsOfflineSaved(true);
+      try {
+        const { videosKept } = await queuePairSubmission(submission);
+        setIsOfflineSaved(true);
+        // Without the clips here, "Our work" and the Practice Station can't
+        // play them (the rest of the pair's work is still saved)
+        if (!videosKept) setSubmitError("This device is too full to keep your videos, but your ticks are saved. Tell your teacher.");
+      } catch (e) {
+        console.error('[Submit] Could not keep a copy on this device:', e);
+        setSubmitError("This device couldn't keep a copy of your work. Your teacher may still have it. Tell your teacher.");
+      }
       setStep('SESSION_COMPLETED');
     } catch (e) {
       console.error('[Submit] Unexpected error:', e);
@@ -846,14 +880,25 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
             {/* Actions: Re-do, Upload, Continue */}
             <div className="flex flex-col gap-2 mt-2">
-              <button
-                type="button"
-                onClick={() => setStep('SWAP_PROMPT')}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 font-black rounded-2xl text-base shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Next: Swap Roles 🍎 ⇄ 🍌</span>
-                <span>→</span>
-              </button>
+              {refilmPerformer === 'Banana' ? (
+                <button
+                  type="button"
+                  disabled={!bananaVideoBlob}
+                  onClick={() => onRefilmDone?.({ performer: 'Banana', videoBlob: bananaVideoBlob, cues: bananaCues, poseFrames: bananaPoseFrames })}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 font-black rounded-2xl text-base shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <span>✅ Keep this new video of Banana</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setStep('SWAP_PROMPT')}
+                  className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 font-black rounded-2xl text-base shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Next: Swap Roles 🍎 ⇄ 🍌</span>
+                  <span>→</span>
+                </button>
+              )}
 
               <div className="flex gap-2">
                 <button
@@ -903,7 +948,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         {step === 'SWAP_PROMPT' && (
           <div className="w-full max-w-md bg-slate-800 p-6 rounded-3xl border-2 border-indigo-500 text-center flex flex-col items-center animate-scale-in">
             <span className="text-6xl mb-3 animate-spin">🔄</span>
-            <h2 className="text-2xl font-black text-white">SWAP ROLES NOW!</h2>
+            <h2 className="text-2xl font-black text-white">{refilmPerformer === 'Apple' ? 'FILM APPLE AGAIN!' : 'SWAP ROLES NOW!'}</h2>
             
             <div className="my-4 p-4 bg-slate-900/80 rounded-2xl border border-slate-700 text-left space-y-2 text-sm w-full">
               <p className="flex items-center gap-2 text-amber-300 font-bold">
@@ -1126,15 +1171,26 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
             {/* Actions: Prominent Submit + Secondary Actions */}
             <div className="flex flex-col gap-2 mt-2">
-              {/* PRIMARY ACTION BUTTON */}
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={handleSubmitSession}
-                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 font-black rounded-2xl text-base shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-              >
-                <span>{isSaving ? '🚀 Syncing to Teacher Review Tray…' : 'Send to Teacher Review Tray 🚀'}</span>
-              </button>
+              {/* PRIMARY ACTION BUTTON: saves only; the final submission is in the Practice Station */}
+              {refilmPerformer === 'Apple' ? (
+                <button
+                  type="button"
+                  disabled={!appleVideoBlob}
+                  onClick={() => onRefilmDone?.({ performer: 'Apple', videoBlob: appleVideoBlob, cues: appleCues, poseFrames: applePoseFrames })}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 font-black rounded-2xl text-base shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <span>✅ Keep this new video of Apple</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleSubmitSession}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 font-black rounded-2xl text-base shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                >
+                  <span>{isSaving ? '💾 Saving our videos…' : '💾 Save our videos'}</span>
+                </button>
+              )}
 
               {/* Error banner — shown if cloud upload fails */}
               {submitError && (
@@ -1193,11 +1249,18 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             <h2 className="text-2xl font-black text-white">MISSION COMPLETE!</h2>
             <p className="text-xs text-emerald-400 font-bold mt-1">Both Apple & Banana Finished Practice</p>
 
+            {submitError && (
+              <div className="my-3 w-full px-3 py-2 bg-red-900/60 border border-red-500 rounded-xl text-red-200 text-xs font-medium flex items-start gap-2 text-left">
+                <span className="text-base shrink-0">⚠️</span>
+                <span>{submitError}</span>
+              </div>
+            )}
+
             {isOfflineSaved && (
               <div className="my-4 p-3 bg-emerald-950/60 border border-emerald-500/40 rounded-2xl text-xs text-emerald-300 flex items-center gap-2">
                 <span className="text-lg">💾</span>
                 <span className="text-left leading-relaxed">
-                  Saved safely to iPad storage! The teacher will receive your videos when the iPad connects to Wi-Fi.
+                  Your videos are saved. Next, ask Coach Bot, then each of you submits your final recording.
                 </span>
               </div>
             )}

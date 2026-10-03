@@ -21,15 +21,17 @@ import Dashboard from './pages/Dashboard';
 import { TeacherClassroomBoard } from './pages/TeacherClassroomBoard';
 import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal';
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
-import { PeerCoachingSession, CompletedPeerSession } from './components/peer/PeerCoachingSession';
+import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
+import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getDB, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
-import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission } from './services/cloudSyncService';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
+import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest } from './services/ai/aiAccess';
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
 import { normaliseLevel } from './utils/gradingReview';
 import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
+import { Performer, Stage, currentAttempt, performerKey, performerStage, performerWork } from './utils/pairWork';
 
 type ModelId = 'gemini' | 'claude';
 
@@ -342,6 +344,11 @@ const App: React.FC = () => {
   // Set once we confirm the active pair has already submitted a recording — enables the
   // "back to AI Coach chat" path on the home screen so the student can see teacher feedback.
   const [activePairSubmission, setActivePairSubmission] = useState<PairSubmissionRecord | null>(null);
+  // This device's copy of the pair's work (clips, ticks, analyses), and the
+  // Practice Station's "Film again" / "Our work" screens (#94)
+  const [pairRecord, setPairRecord] = useState<PairSubmissionRecord | null>(null);
+  const [refilmPerformer, setRefilmPerformer] = useState<Performer | null>(null);
+  const [isPairReviewOpen, setIsPairReviewOpen] = useState(false);
 
   const handlePeerSessionToChat = async (data: CompletedPeerSession) => {
     setActivePeerSessionData(data);
@@ -428,8 +435,7 @@ const App: React.FC = () => {
       // Save AI results to IndexedDB on the pair's submission record
       const submissionId = canonicalSubmissionId(data.lessonId, data.pairNumber, data.skillName);
       try {
-        const db = await getDB();
-        const existing = await db.get('submissions', submissionId);
+        const existing = await getSubmission(submissionId);
         if (existing) {
           existing.aiStudentFeedback = {
             bananaFeedback: result.studentFeedback.bananaFeedback,
@@ -447,7 +453,7 @@ const App: React.FC = () => {
             generatedAt: new Date().toISOString(),
             modelUsed: 'claude-haiku',
           };
-          await db.put('submissions', existing);
+          await putSubmission(existing);
           // Push the enriched record to Supabase so the teacher's board (another device) sees the AI report
           backupSubmissionToSupabase(existing, activePairSession?.teacherId, getOrCreatePairClaimToken(data.lessonId)).catch(console.warn);
         }
@@ -503,7 +509,7 @@ const App: React.FC = () => {
     const skillName = activePeerSessionData?.skillName || pair.skillName || scannedLessonData.skillName || 'Overhand Throw';
     const subId = canonicalSubmissionId(pair.lessonId, pair.pairNumber, skillName);
     try {
-      const saved = (await (await getDB()).get('submissions', subId)) as PairSubmissionRecord | undefined;
+      const saved = (await getSubmission(subId)) as PairSubmissionRecord | undefined;
       // bananaRole is the turn where Apple performed (see PairSubmissionRecord)
       const blob = performer === 'Apple' ? saved?.bananaRole.videoBlob : saved?.appleRole.videoBlob;
       return blob && blob.size > 0 ? blob : null;
@@ -546,7 +552,7 @@ const App: React.FC = () => {
           id: `no-media-${Date.now()}`,
           sender: Sender.BOT,
           timestamp: new Date(),
-          text: `⚠️ I couldn't load ${performer}'s recording for analysis. Tap **📹 Record again** to capture a fresh attempt, then try analysing.`,
+          text: `⚠️ I couldn't load ${performer}'s recording for analysis. Tap **📹 Film again** to record a fresh attempt, then try analysing.`,
           isError: true,
         }],
         updatedAt: new Date(),
@@ -561,113 +567,155 @@ const App: React.FC = () => {
     await handleSendMessage(text, files, { skillName, isVerified: true, performer });
   };
 
-  // Student sends a full AI rubric analysis from the Practice Station to the teacher's
-  // board — one slot per performer so Apple's and Banana's don't overwrite each other.
-  const handleSubmitChecklistToTeacher = async (message: Message) => {
-    // Identifiers come from the active pair session, or fall back to the completed
-    // peer-session data (which carries pairNumber/lessonId/skill but no teacherId).
-    const ctx = activePairSession
+  // The pair the Practice Station is working for: the active pair session, or
+  // the completed peer-session data (which carries no teacherId).
+  const pairContext = () => activePairSession
+    ? {
+        lessonId: activePairSession.lessonId,
+        pairNumber: activePairSession.pairNumber,
+        skillName: activePairSession.skillName || activePeerSessionData?.skillName || scannedLessonData.skillName || 'Overhand Throw',
+        pairPhoto: activePairSession.pairPhoto || activePeerSessionData?.pairPhoto || '',
+        teacherId: activePairSession.teacherId,
+      }
+    : activePeerSessionData
       ? {
-          lessonId: activePairSession.lessonId,
-          pairNumber: activePairSession.pairNumber,
-          skillName: activePairSession.skillName || activePeerSessionData?.skillName || scannedLessonData.skillName || 'Overhand Throw',
-          pairPhoto: activePairSession.pairPhoto || activePeerSessionData?.pairPhoto || '',
-          teacherId: activePairSession.teacherId,
+          lessonId: activePeerSessionData.lessonId,
+          pairNumber: activePeerSessionData.pairNumber,
+          skillName: activePeerSessionData.skillName,
+          pairPhoto: activePeerSessionData.pairPhoto || '',
+          teacherId: scannedLessonData.teacherId as string | undefined,
         }
-      : activePeerSessionData
-        ? {
-            lessonId: activePeerSessionData.lessonId,
-            pairNumber: activePeerSessionData.pairNumber,
-            skillName: activePeerSessionData.skillName,
-            pairPhoto: activePeerSessionData.pairPhoto || '',
-            teacherId: scannedLessonData.teacherId as string | undefined,
-          }
-        : null;
-    if (!ctx) {
-      setTeacherFeedbackBanner('Join a pair station (scan the class QR) before sending work to your teacher.');
-      return;
-    }
-    const skillName = ctx.skillName;
-    const subId = canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, skillName);
+      : null;
 
-    // Which performer is this analysis about? Analyses are stamped when created.
-    // Older ones fall back to the prompt just above the message, then to the
-    // analysis's own heading. Never guess from a message that isn't found — that
-    // used to file every analysis under Apple, each overwriting the last.
-    let performer: 'Apple' | 'Banana' | undefined = message.performer;
-    if (!performer) {
-      const sess = sessionsRef.current.find(s => s.messages.some(m => m.id === message.id));
-      const idx = sess ? sess.messages.findIndex(m => m.id === message.id) : -1;
-      const priorUser = sess && idx > 0
-        ? [...sess.messages.slice(0, idx)].reverse().find(m => m.sender === Sender.USER)
-        : undefined;
-      const hint = priorUser?.text ?? message.text.slice(0, 300);
-      const named = hint.match(/\b(Apple|Banana)\b/i)?.[1];
-      if (named) performer = named.toLowerCase() === 'banana' ? 'Banana' : 'Apple';
-    }
-    if (!performer) {
-      setTeacherFeedbackBanner("Couldn't tell whether this analysis is Apple's or Banana's. Tap Analyse again for the right pupil, then send that one.");
-      return;
-    }
+  const loadPairRecord = async (): Promise<PairSubmissionRecord | null> => {
+    const ctx = pairContext();
+    if (!ctx) { setPairRecord(null); return null; }
+    let record: PairSubmissionRecord | null = null;
+    try {
+      record = ((await getSubmission(canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, ctx.skillName))) as PairSubmissionRecord) ?? null;
+    } catch { /* ignore */ }
+    setPairRecord(record);
+    return record;
+  };
 
-    // Peer ratings still held in the live session. The per-clip "Save to Teacher" button
-    // (uploadGuestVideo) creates the submission row without cues, so if the pair never
-    // tapped the final "Submit to Teacher" the checklist would otherwise never reach the
-    // teacher's board. Carry it here so this path is self-sufficient.
-    const ratedToCueResults = (rated?: Record<string, boolean>): PeerCueResult[] => {
-      if (!rated || Object.keys(rated).length === 0) return [];
-      return getAllCuesForSkill(skillName).map(c => ({
-        cueIndex: c.itemNumber,
-        criterionText: c.syllabusCriterion,
-        isObserved: !!rated[c.id],
-      }));
-    };
-    // appleRole = Apple evaluating Banana, so it carries the ratings ABOUT Banana.
-    const bananaPerformerCues = ratedToCueResults(activePeerSessionData?.bananaCues);
-    const applePerformerCues = ratedToCueResults(activePeerSessionData?.appleCues);
+  const cuesToResults = (skillName: string, rated?: Record<string, boolean>): PeerCueResult[] =>
+    getAllCuesForSkill(skillName).map(c => ({
+      cueIndex: c.itemNumber,
+      criterionText: c.syllabusCriterion,
+      isObserved: !!rated?.[c.id],
+    }));
 
-    const db = await getDB();
-    let record = await db.get('submissions', subId) as PairSubmissionRecord | undefined;
-    if (!record) {
-      record = {
-        id: subId,
-        lessonId: ctx.lessonId,
-        pairNumber: ctx.pairNumber,
-        skillName,
-        pairPhoto: ctx.pairPhoto,
-        appleRole: { studentPerformer: 'Banana', evaluator: 'Apple', cues: bananaPerformerCues },
-        bananaRole: { studentPerformer: 'Apple', evaluator: 'Banana', cues: applePerformerCues },
-        status: 'pending_sync',
-        createdAt: new Date().toISOString(),
-      };
-    } else {
-      // Existing record but the peer checklist never made it (clip-by-clip save path)
-      if (!record.appleRole.cues?.length && bananaPerformerCues.length) {
-        record.appleRole = { ...record.appleRole, cues: bananaPerformerCues };
-      }
-      if (!record.bananaRole.cues?.length && applePerformerCues.length) {
-        record.bananaRole = { ...record.bananaRole, cues: applePerformerCues };
-      }
-    }
+  // Lock state comes from the teacher's copy; the rest from this device
+  const lockFor = (p: Performer) => performerLock(
+    p === 'Apple' ? activePairSubmission?.appleSentAt : activePairSubmission?.bananaSentAt,
+    activePairSubmission?.redoRequestedAt,
+  );
+  const stageFor = (p: Performer, record: PairSubmissionRecord | null = pairRecord ?? activePairSubmission) => {
+    const lock = lockFor(p);
+    return { ...performerStage(performerWork(record, p, lock)), redo: lock === 'redo_requested' };
+  };
+
+  const STAGE_HINT: Record<Stage, string> = {
+    not_started: "hasn't been filmed yet. Record and save your videos first.",
+    needs_ticks: "'s new video needs the assessor's ticks first.",
+    needs_analysis: ' needs Coach Bot to analyse the video first. Tap Analyse.',
+    ready: '',
+    submitted: "'s final recording is already with your teacher.",
+  };
+
+  const addPracticeMessage = (text: string, isError = false) =>
+    updateSessionAndSync(currentSessionIdRef.current, session => ({
+      ...session,
+      messages: [...session.messages, { id: `practice-${Date.now()}`, sender: Sender.BOT, timestamp: new Date(), text, isError }],
+      updatedAt: new Date(),
+    }));
+
+  // Keep a Practice Station analysis on this device until the final submission (#94)
+  const storePendingAnalysis = async (performer: Performer, message: Message) => {
+    const ctx = pairContext();
+    if (!ctx) return;
+    const record = (await getSubmission(canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, ctx.skillName))) as PairSubmissionRecord | undefined;
+    if (!record) return;
     const entry: AiChatAnalysisEntry = {
       analysisText: message.text,
-      skillName,
+      skillName: ctx.skillName,
       studentLabel: performer,
       modelUsed: message.modelId ?? effectiveModel,
       submittedAt: new Date().toISOString(),
     };
-    record.aiChatAnalysis = {
-      ...(record.aiChatAnalysis || {}),
-      [performer === 'Apple' ? 'apple' : 'banana']: entry,
-    };
+    record.pendingAnalysis = { ...record.pendingAnalysis, [performerKey(performer)]: entry };
+    await putSubmission(record);
+    setPairRecord(record);
+  };
+
+  // The one re-film (#94): the old attempt is kept, and uploaded, as the first
+  // attempt so the teacher sees both. The new one becomes the current attempt.
+  const handleRefilmDone = async (attempt: RefilmedAttempt) => {
+    setRefilmPerformer(null);
+    setAppMode('chat');
+    const ctx = pairContext();
+    if (!ctx || !attempt.videoBlob) return;
+    const record = (await getSubmission(canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, ctx.skillName))) as PairSubmissionRecord | undefined;
+    if (!record) return;
+
+    const k = performerKey(attempt.performer);
+    const old = currentAttempt(record, attempt.performer);
+    let firstUrl = old.videoUrl;
+    if (!firstUrl && old.videoBlob && ctx.teacherId) {
+      firstUrl = await uploadPupilClip(old.videoBlob, ctx.teacherId, ctx.lessonId, ctx.pairNumber, `${k}_first_attempt`);
+    }
+    record.firstAttempt = { ...record.firstAttempt, [k]: { videoBlob: old.videoBlob, videoUrl: firstUrl, cues: old.cues } };
+    const pending = record.pendingAnalysis?.[k];
+    if (pending) {
+      record.pendingAnalysis = { ...record.pendingAnalysis, [k]: { ...pending, analysedClip: { videoUrl: firstUrl, cues: old.cues } } };
+    }
+
+    // No videoUrl: it's uploaded with the final submission
+    const next = { videoBlob: attempt.videoBlob, videoUrl: undefined, cues: cuesToResults(ctx.skillName, attempt.cues) };
+    if (attempt.performer === 'Apple') record.bananaRole = { ...record.bananaRole, ...next };
+    else record.appleRole = { ...record.appleRole, ...next };
+    await putSubmission(record);
+    setPairRecord(record);
+
+    setActivePeerSessionData(prev => prev && (attempt.performer === 'Apple'
+      ? { ...prev, appleVideoBlob: attempt.videoBlob ?? undefined, appleCues: attempt.cues, applePoseFrames: attempt.poseFrames }
+      : { ...prev, bananaVideoBlob: attempt.videoBlob ?? undefined, bananaCues: attempt.cues, bananaPoseFrames: attempt.poseFrames }));
+    addPracticeMessage(`📹 **New video of ${attempt.performer} saved.** That was your one chance to film again. When you're ready, tap **📤 Submit final: ${attempt.performer}**.`);
+  };
+
+  // A performer's final submission (GLOSSARY.md): their current clip, its peer
+  // checklist and their AI analysis go to the teacher, and their work locks.
+  const handleSubmitFinal = async (performer: Performer) => {
+    const ctx = pairContext();
+    if (!ctx) {
+      setTeacherFeedbackBanner('Join a pair station (scan the class QR) before sending work to your teacher.');
+      return;
+    }
+    const record = (await getSubmission(canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, ctx.skillName))) as PairSubmissionRecord | undefined;
+    const stage = stageFor(performer, record ?? null);
+    if (!record || !stage.canSubmitFinal) {
+      addPracticeMessage(`⚠️ ${performer}${STAGE_HINT[stage.stage] || ' can’t be submitted yet.'}`, true);
+      return;
+    }
+
+    const k = performerKey(performer);
+    const analysis = record.pendingAnalysis?.[k] ?? record.aiChatAnalysis?.[k];
+    if (analysis) {
+      // A fresh time on every final submission is what the database counts as "sent"
+      record.aiChatAnalysis = { ...record.aiChatAnalysis, [k]: { ...analysis, submittedAt: new Date().toISOString() } };
+    }
     await queuePairSubmission(record);
     const sent = await backupSubmissionToSupabase(record, ctx.teacherId, getOrCreatePairClaimToken(ctx.lessonId));
     if (sent.locked) {
       setTeacherFeedbackBanner(LOCKED_MESSAGE);
       return;
     }
+    await loadPairRecord();
+    const fresh = await fetchPupilSubmission(record.id, getOrCreatePairClaimToken(ctx.lessonId));
+    if (fresh) setActivePairSubmission(fresh);
     setTeacherFeedbackBanner(null);
     lastSeenTeacherFeedbackRef.current = null; // so the teacher's reply re-triggers the banner
+    addPracticeMessage(`📤 **${performer}'s final recording is with your teacher.** Well done!`);
   };
 
   // While in a Practice Station, poll the pair's submission row for a teacher comment.
@@ -681,6 +729,7 @@ const App: React.FC = () => {
 
     const poll = async () => {
       const sub = await fetchPupilSubmission(subId, getOrCreatePairClaimToken(src.lessonId));
+      if (sub) setActivePairSubmission(sub);
       const fb = sub?.teacherFeedback?.trim();
       if (fb && fb !== lastSeenTeacherFeedbackRef.current) {
         lastSeenTeacherFeedbackRef.current = fb;
@@ -721,10 +770,13 @@ const App: React.FC = () => {
     (async () => {
       // The cloud copy first: it carries the teacher's redo request
       let sub: PairSubmissionRecord | null = await fetchPupilSubmission(subId, getOrCreatePairClaimToken(pair.lessonId));
-      if (!sub) {
-        try { sub = (await (await getDB()).get('submissions', subId)) as PairSubmissionRecord ?? null; } catch { /* ignore */ }
+      let local: PairSubmissionRecord | null = null;
+      try { local = (await getSubmission(subId)) as PairSubmissionRecord ?? null; } catch { /* ignore */ }
+      if (!sub) sub = local;
+      if (!cancelled) {
+        setActivePairSubmission(sub);
+        setPairRecord(local);
       }
-      if (!cancelled) setActivePairSubmission(sub);
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -774,7 +826,7 @@ const App: React.FC = () => {
         id: `resume-${Date.now()}`,
         sender: Sender.BOT,
         timestamp: new Date(),
-        text: `## 🍎🍌 Practice Station — Pair #${pair.pairNumber}\n\nWelcome back! Tap **🍌 Analyse Banana** or **🍎 Analyse Apple** below for a full AI grading, then **📤 Send to Teacher**. Your teacher's feedback shows up here.`,
+        text: `## 🍎🍌 Practice Station — Pair #${pair.pairNumber}\n\nWelcome back! Tap **🍌 Analyse Banana** or **🍎 Analyse Apple** below for a full AI grading. You can **📹 Film again** once, then tap **📤 Submit final** for each of you. Your teacher's feedback shows up here.`,
         hasMedia: false,
       };
       setSessions(prev => [
@@ -1716,6 +1768,9 @@ const App: React.FC = () => {
         // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
         hasMedia: newMessage.hasMedia || !!(contextPoseData && contextPoseData.length > 0)
       };
+      if (metadata?.performer && activePeerSessionData) {
+        storePendingAnalysis(metadata.performer, botMessage).catch(e => console.warn('[Practice] could not keep analysis:', e));
+      }
 
       const skillMatch = response.text.match(/(?:I believe this is a|this looks like a|I have detected a|Performance Analysis for) (?:\*\*|)?([^*:\n]+)(?:\*\*|:)?/i);
       const detectedSkill = skillMatch ? skillMatch[1].trim() : undefined;
@@ -1819,6 +1874,24 @@ const App: React.FC = () => {
     return <Dashboard onOpenChat={() => setShowDashboard(false)} />;
   }
 
+  // Before the home screen: "Our work" opens from the home banner
+  if (isPairReviewOpen && activePairSession) {
+    return (
+      <PairWorkReview
+        pairNumber={activePairSession.pairNumber}
+        skillName={activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw'}
+        record={pairRecord ?? activePairSubmission}
+        onDevice={!!pairRecord}
+        teacherFeedback={activePairSubmission?.teacherFeedback}
+        teacherStar={activePairSubmission?.teacherStar}
+        stageFor={(p) => stageFor(p)}
+        onOpenPracticeStation={() => { setIsPairReviewOpen(false); handleResumePracticeChat(); }}
+        onStartRecording={() => { setIsPairReviewOpen(false); setAppMode('peer_coaching'); }}
+        onClose={() => setIsPairReviewOpen(false)}
+      />
+    );
+  }
+
   if (appMode === 'home_screen') {
     return (
       <div className="relative flex flex-col h-[100dvh] w-screen bg-slate-950 overflow-hidden">
@@ -1866,7 +1939,9 @@ const App: React.FC = () => {
                       <p className="text-emerald-100/90 text-xs font-medium truncate">
                         {activePairSubmission && redoIsOpen(activePairSubmission)
                           ? '🔄 Your teacher asked you to try again'
-                          : activePairSubmission ? 'Sent to your teacher' : 'Continue where you left off'}
+                          : stageFor('Apple').stage === 'submitted' && stageFor('Banana').stage === 'submitted'
+                            ? 'Final recordings sent to your teacher'
+                            : pairRecord || activePairSubmission ? 'Work saved' : 'Continue where you left off'}
                       </p>
                     </div>
                     <button
@@ -1883,7 +1958,7 @@ const App: React.FC = () => {
                     </button>
                   </div>
                   <div className="flex gap-2">
-                    {activePairSubmission && (
+                    {(pairRecord || activePairSubmission) && (
                       <button
                         type="button"
                         onClick={handleResumePracticeChat}
@@ -1892,16 +1967,17 @@ const App: React.FC = () => {
                         <span>💬</span><span>AI Coach</span>
                       </button>
                     )}
+                    {/* Saved work opens "Our work"; recording again happens from the Practice Station (#94) */}
                     <button
                       type="button"
-                      onClick={() => setAppMode('peer_coaching')}
+                      onClick={() => (pairRecord || activePairSubmission ? setIsPairReviewOpen(true) : setAppMode('peer_coaching'))}
                       className={`px-3 py-2.5 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                        activePairSubmission
+                        pairRecord || activePairSubmission
                           ? 'flex-1 bg-emerald-500/40 hover:bg-emerald-500/60 text-white border border-emerald-300/40'
                           : 'flex-1 bg-white text-emerald-700 hover:bg-emerald-50'
                       }`}
                     >
-                      <span>📹</span><span>{activePairSubmission ? 'Record again' : 'Continue recording'}</span>
+                      <span>{pairRecord || activePairSubmission ? '📋' : '📹'}</span><span>{pairRecord || activePairSubmission ? 'Our work' : 'Start recording'}</span>
                     </button>
                   </div>
                 </div>
@@ -2040,13 +2116,20 @@ const App: React.FC = () => {
           skillName={activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw'}
           pairPhoto={activePairSession.pairPhoto}
           teacherId={activePairSession.teacherId}
+          refilmPerformer={refilmPerformer ?? undefined}
+          onRefilmDone={handleRefilmDone}
           onSessionComplete={() => {
             // The pair stays active for the lesson day, so a redo request shows on Home
             setAppMode('home_screen');
           }}
-          onSendToCoachBot={handlePeerSessionToChat}
+          onSendToCoachBot={async (data) => {
+            await handlePeerSessionToChat(data);
+            loadPairRecord();
+          }}
           onExit={() => {
-            setAppMode('home_screen');
+            const wasRefilm = !!refilmPerformer;
+            setRefilmPerformer(null);
+            setAppMode(wasRefilm ? 'chat' : 'home_screen');
           }}
         />
         <TeacherHelpBeacon pairNumber={activePairSession.pairNumber} onSignalHelp={handleSignalPairNeedsHelp} />
@@ -2305,7 +2388,6 @@ const App: React.FC = () => {
                 onSelectSkill={handleSelectSkill}
                 onSelectMultipleSkills={handleSelectMultipleSkills}
                 onShowAllSkills={() => setIsSkillSelectorOpen(true)}
-                onSubmitChecklistToTeacher={(activePairSession || activePeerSessionData) ? handleSubmitChecklistToTeacher : undefined}
                 disabled={isLoading || isProcessing}
                 skillMode={skillMode}
               />
@@ -2344,22 +2426,48 @@ const App: React.FC = () => {
             {activePeerSessionData && (
               <div className="mb-2 flex flex-col gap-2">
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={isLoading || isProcessing}
-                    onClick={() => handleAnalyzePeerPerformer('Banana')}
-                    className="h-12 px-3 bg-amber-400 hover:bg-amber-300 active:scale-[0.98] text-amber-950 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                  >
-                    <span>🍌</span><span>Analyse Banana</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isLoading || isProcessing}
-                    onClick={() => handleAnalyzePeerPerformer('Apple')}
-                    className="h-12 px-3 bg-rose-500 hover:bg-rose-400 active:scale-[0.98] text-white rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                  >
-                    <span>🍎</span><span>Analyse Apple</span>
-                  </button>
+                  {(['Banana', 'Apple'] as const).map((p) => {
+                    const st = stageFor(p);
+                    const banana = p === 'Banana';
+                    return (
+                      <div key={p} className="flex flex-col gap-1.5">
+                        <button
+                          type="button"
+                          disabled={isLoading || isProcessing || st.stage === 'submitted'}
+                          onClick={() => handleAnalyzePeerPerformer(p)}
+                          className={`h-12 px-3 active:scale-[0.98] rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
+                            banana ? 'bg-amber-400 hover:bg-amber-300 text-amber-950' : 'bg-rose-500 hover:bg-rose-400 text-white'}`}
+                        >
+                          <span>{banana ? '🍌' : '🍎'}</span><span>Analyse {p}</span>
+                        </button>
+                        {st.stage === 'submitted' ? (
+                          <p className="h-10 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400">✅ {p} submitted</p>
+                        ) : (
+                          <div className="flex gap-1.5">
+                            {st.canFilmAgain && activePairSession && (
+                              <button
+                                type="button"
+                                disabled={isLoading || isProcessing}
+                                onClick={() => { setRefilmPerformer(p); setAppMode('peer_coaching'); }}
+                                className="h-10 px-2 flex-1 bg-white/90 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
+                              >
+                                📹 Film again
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={isLoading || isProcessing}
+                              onClick={() => handleSubmitFinal(p)}
+                              className={`h-10 px-2 flex-1 rounded-xl text-xs font-black cursor-pointer disabled:opacity-50 ${
+                                st.canSubmitFinal ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}
+                            >
+                              📤 Submit final
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
                   <button
