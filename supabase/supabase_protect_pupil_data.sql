@@ -200,6 +200,7 @@ $$;
 -- A pair reads back its own submission (teacher comment, status, cues).
 -- Rows without a claim token (made before tokens existed) are never returned:
 -- their ids are guessable.
+-- Replaced by supabase_submission_lock.sql (adds the lock on sent work); re-run that after this file.
 create or replace function public.pupil_get_submission(p_id text, p_claim_token text)
 returns jsonb
 language sql

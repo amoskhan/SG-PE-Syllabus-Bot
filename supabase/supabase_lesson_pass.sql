@@ -150,6 +150,7 @@ $$;
 -- Same as Step 1, plus: the lesson must accept this caller, the row must
 -- belong to that lesson, and video / photo values must point where uploads
 -- for that lesson go. Returns 'ok' | 'claimed' | 'invalid_lesson'.
+-- Replaced by supabase_submission_lock.sql (adds the lock on sent work); re-run that after this file.
 create or replace function public.pupil_save_submission(p jsonb)
 returns text
 language plpgsql

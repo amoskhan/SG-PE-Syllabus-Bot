@@ -32,6 +32,7 @@ import { LessonPlanForm, LessonList } from '../components/classroom/LessonPlanne
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
 import { normaliseLevel } from '../utils/gradingReview';
+import { performerLock } from '../utils/submissionLock';
 import { Student, SkillAnalysis } from '../types';
 import { getStudents } from '../services/studentService';
 import {
@@ -1134,6 +1135,27 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Whether each performer can still send (supabase_submission_lock.sql) */}
+            {(() => {
+              const rows = ([
+                ['🍎 Apple', performerLock(activeReviewSub.appleSentAt, activeReviewSub.redoRequestedAt)],
+                ['🍌 Banana', performerLock(activeReviewSub.bananaSentAt, activeReviewSub.redoRequestedAt)],
+              ] as const).filter(([, lock]) => lock !== 'open');
+              if (!rows.length) return null;
+              return (
+                <div className="mb-3 px-3 py-2 rounded-xl text-[11px] font-medium bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 space-y-0.5">
+                  {rows.map(([who, lock]) => (
+                    <p key={who}>
+                      {who}:{' '}
+                      {lock === 'locked'
+                        ? "🔒 sent, so the pair can't change it. Send it back for a re-do to reopen it."
+                        : '🔄 re-do requested: the pair can send again.'}
+                    </p>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Actions */}
             <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-zinc-800">

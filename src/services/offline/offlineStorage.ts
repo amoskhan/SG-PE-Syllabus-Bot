@@ -77,6 +77,11 @@ export interface PairSubmissionRecord {
   createdAt: string;
   syncedAt?: string;
   claimToken?: string; // identifies the group that owns this pair (see getOrCreatePairClaimToken)
+  // supabase_submission_lock.sql: when each performer's work was sent, and
+  // when the teacher last asked for a redo (see utils/submissionLock.ts)
+  appleSentAt?: string;
+  bananaSentAt?: string;
+  redoRequestedAt?: string;
 }
 
 export interface PairSessionData {

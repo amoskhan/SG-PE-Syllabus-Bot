@@ -9,6 +9,7 @@ export async function backupSubmissionToSupabase(
   bananaVideoUrl?: string;
   appleVideoUrl?: string;
   blocked?: boolean;
+  locked?: boolean;
 }> {
   let bananaVideoUrl: string | undefined = submission.appleRole.videoUrl;
   let appleVideoUrl: string | undefined = submission.bananaRole.videoUrl;
@@ -93,6 +94,10 @@ export async function backupSubmissionToSupabase(
   if (result === "invalid_lesson") {
     console.warn(`[CloudBackup] submission ${submission.id} refused — lesson not on today or pass missing`);
   }
+  if (result === "locked") {
+    console.warn(`[CloudBackup] submission ${submission.id} refused — already sent, no redo requested`);
+    return { bananaVideoUrl, appleVideoUrl, locked: true };
+  }
 
   return { bananaVideoUrl, appleVideoUrl };
 }
@@ -124,6 +129,9 @@ export function mapRowToSubmission(row: any): PairSubmissionRecord {
     teacherStar: row.teacher_star || false,
     createdAt: row.created_at || new Date().toISOString(),
     claimToken: row.claim_token || undefined,
+    appleSentAt: row.apple_sent_at || undefined,
+    bananaSentAt: row.banana_sent_at || undefined,
+    redoRequestedAt: row.redo_requested_at || undefined,
   };
 }
 
@@ -134,7 +142,9 @@ export function mapRowToSubmission(row: any): PairSubmissionRecord {
 // (supabase_lesson_pass.sql). Writes for a lesson that isn't on today, or
 // without its pass, come back as "invalid_lesson".
 
-export type PupilWriteResult = "ok" | "claimed" | "invalid_lesson" | "error";
+// "locked": that performer's work was already sent and the teacher hasn't
+// asked for a redo (supabase_submission_lock.sql).
+export type PupilWriteResult = "ok" | "claimed" | "invalid_lesson" | "locked" | "error";
 
 export type LessonPassStatus = "ok" | "not_today" | "invalid" | "offline";
 
@@ -178,7 +188,7 @@ export async function savePupilSubmission(fields: {
     console.error("[CloudSync] pupil_save_submission error:", error);
     return "error";
   }
-  return data === "claimed" || data === "invalid_lesson" ? data : "ok";
+  return data === "claimed" || data === "invalid_lesson" || data === "locked" ? data : "ok";
 }
 
 /** A pair's own submission, proven by its claim token. Null if none or not theirs. */
@@ -268,6 +278,8 @@ export async function updateCloudSubmissionStatus(
       status,
       updated_at: new Date().toISOString(),
     };
+    // A redo request reopens a graded submission (supabase_submission_lock.sql)
+    if (status === 'needs_redo') updatePayload.redo_requested_at = new Date().toISOString();
     if (feedback !== undefined) updatePayload.teacher_feedback = feedback;
     if (star !== undefined) updatePayload.teacher_star = star;
 

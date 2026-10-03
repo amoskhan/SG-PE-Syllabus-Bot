@@ -73,16 +73,20 @@ The part of the Classroom Board where the teacher works through pairs' submissio
 _Avoid_: Seesaw tray
 
 **Practice Station**:
-The pupil-facing name for an assess step that uses AI analysis: where a pupil gets an analysis of their clip, asks the AI about it, and sends it to the teacher.
+The pupil-facing name for an assess step that uses AI analysis: where each pupil gets one analysis of their clip per lesson and may ask the AI up to five questions about it.
 
 **Practice Station Conversation**:
 Everything a pupil asked the AI in the Practice Station and every answer it gave; the teacher can read all of it, the pupil is always told so, and it is filed under that student's record.
 
 **Submission**:
-The single piece of work a pair sends from the Practice Station in a lesson, holding both performers' work; resending it replaces it rather than adding another. It is locked once the teacher sets a final level, unless the teacher makes a redo request.
+The single piece of work a pair hands to the teacher in a lesson, holding both performers' work. Each performer's part is locked by their final submission, and only a redo request opens it again.
+
+**Final Submission**:
+A performer's last send to the teacher: their chosen clip, the peer checklist for it and, in a lesson that uses AI analysis, the analysis of their first attempt. Before it, each performer may film again once; the teacher sees every attempt.
+_Avoid_: Send to teacher (for any earlier save)
 
 **Redo Request**:
-A teacher asking a pair to send its submission again, which unlocks it.
+The teacher's green light for a pair to try again; each performer sees their earlier attempt and chooses to keep it or film again, and a new attempt replaces the old one.
 
 ## Skills and grading
 
