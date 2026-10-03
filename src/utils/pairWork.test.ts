@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { performerStage, performerWork, PerformerWork, redoChecklistText } from './pairWork';
+import { noAnalysisChecklistText, performerStage, performerWork, PerformerWork, redoChecklistText } from './pairWork';
 import { parseAiCriteria } from './gradingReview';
 import type { PairSubmissionRecord } from '../services/offline/offlineStorage';
 
@@ -29,6 +29,11 @@ describe('performerStage', () => {
     it('is ready to submit once clip, ticks and analysis are there', () => {
         expect(performerStage(work({ hasClip: true, ticked: true, hasAnalysis: true })))
             .toEqual({ canKeep: false, stage: 'ready', canFilmAgain: true, canSubmitFinal: true });
+    });
+
+    it("lets them submit without an analysis when Coach Bot couldn't do one", () => {
+        expect(performerStage(work({ hasClip: true, ticked: true, analysisFailed: true })))
+            .toEqual({ stage: 'ready', canKeep: false, canFilmAgain: true, canSubmitFinal: true });
     });
 
     it('allows only one re-film before the final submission', () => {
@@ -96,7 +101,7 @@ describe('performerWork', () => {
     });
 
     it('treats a missing record as nothing done', () => {
-        expect(performerWork(undefined, 'Apple', 'open')).toEqual({ hasClip: false, ticked: false, refilmed: false, hasAnalysis: false, lock: 'open', redoFilms: 0 });
+        expect(performerWork(undefined, 'Apple', 'open')).toEqual({ hasClip: false, ticked: false, refilmed: false, hasAnalysis: false, lock: 'open', redoFilms: 0, analysisFailed: false });
     });
 
     it('counts re-do films only for the current redo request', () => {
@@ -118,5 +123,10 @@ describe('redoChecklistText', () => {
 
     it("names no level, so the level is the teacher's", () => {
         expect(redoChecklistText(['Face the target'])).not.toMatch(/beginning|developing|competent|accomplished/i);
+        expect(noAnalysisChecklistText(['Face the target'])).not.toMatch(/beginning|developing|competent|accomplished/i);
+    });
+
+    it('reads the same way when Coach Bot could not analyse', () => {
+        expect(parseAiCriteria(noAnalysisChecklistText(['Face the target']))).toEqual([{ name: 'Face the target', result: 'unsure' }]);
     });
 });

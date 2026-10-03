@@ -82,12 +82,14 @@ declare
   v_existing public.skill_analyses%rowtype;
   v_redo     jsonb;
   v_redo_of  timestamptz;
+  v_teacher_grades boolean;  -- sent without an AI analysis: the level is the teacher's
 begin
   select * into v_sub from public.pair_submissions where id = p_submission_id;
   if not found or v_sub.teacher_id is null then return; end if;
 
   v_entry := v_sub.ai_chat_analysis -> p_performer;
   v_redo  := case when jsonb_typeof(v_entry -> 'redo') = 'object' then v_entry -> 'redo' end;
+  v_teacher_grades := coalesce((v_entry ->> 'teacherGrades')::boolean, false);
   select student_id into v_student from public.lesson_pairs
    where lesson_id = v_sub.lesson_id and pair_number = v_sub.pair_number and performer = p_performer;
 
@@ -97,8 +99,9 @@ begin
   v_level := initcap(substring(lower(coalesce(v_text, '')) from '(beginning|developing|competent|accomplished|excellent)'));
   if v_level = 'Excellent' then v_level := 'Accomplished'; end if;
 
-  -- Nobody assigned to this slot, or nothing gradable sent: no record for it
-  if v_student is null or v_text is null or v_level is null then
+  -- Nobody assigned to this slot, or nothing gradable sent: no record for it.
+  -- Work sent when Coach Bot couldn't analyse it has no level until the teacher grades it.
+  if v_student is null or v_text is null or (v_level is null and not v_teacher_grades) then
     delete from public.skill_analyses where submission_id = p_submission_id and performer = p_performer;
     return;
   end if;
@@ -140,14 +143,15 @@ begin
       (student_id, teacher_id, skill_name, video_url, proficiency_level, analysis_text,
        model_id, summarised, source, lesson_id, submission_id, performer, created_at)
     values
-      (v_student, v_sub.teacher_id, coalesce(v_entry ->> 'skillName', v_sub.skill_name), v_video, v_level, v_text,
+      (v_student, v_sub.teacher_id, coalesce(v_entry ->> 'skillName', v_sub.skill_name), v_video,
+       case when v_teacher_grades then null else v_level end, v_text,
        v_entry ->> 'modelUsed', false, 'practice_station', v_sub.lesson_id, p_submission_id, p_performer,
        coalesce((v_entry ->> 'submittedAt')::timestamptz, v_sub.created_at));
   elsif v_existing.analysis_text is distinct from v_text then
     -- A new analysis was sent: the teacher's review was of the old one
     update public.skill_analyses set
       student_id = v_student, video_url = coalesce(v_video, video_url),
-      proficiency_level = v_level, analysis_text = v_text,
+      proficiency_level = case when v_teacher_grades then null else v_level end, analysis_text = v_text,
       skill_name = coalesce(v_entry ->> 'skillName', skill_name),
       model_id = v_entry ->> 'modelUsed',
       created_at = coalesce((v_entry ->> 'submittedAt')::timestamptz, created_at),

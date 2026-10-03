@@ -115,6 +115,26 @@ const VideoBlobPlayer: React.FC<{ blob?: Blob; videoUrl?: string; performer: str
   );
 };
 
+/** Whether a performer's video in the tray is their final one (#86, Submit final is the pupil's choice). */
+const AttemptStatus: React.FC<{ sentAt?: string; redoRequestedAt?: string; hasVideo: boolean }> = ({ sentAt, redoRequestedAt, hasVideo }) => {
+  const lock = performerLock(sentAt, redoRequestedAt);
+  const [text, tone] = lock === 'locked'
+    ? ['✅ Final', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300']
+    : lock === 'redo_requested'
+      ? ['🔄 Re-do: not final yet', 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300']
+      : hasVideo
+        ? ['👀 Peer-assessed, not final yet', 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300']
+        : ['Not filmed yet', 'bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-slate-400'];
+  return <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${tone}`}>{text}</span>;
+};
+
+/** Compares what the tray shows of a submission, so a refresh that changed nothing doesn't reset its videos. */
+const reviewSignature = (s: PairSubmissionRecord) => JSON.stringify([
+  s.appleRole.videoUrl, s.bananaRole.videoUrl, s.appleRole.cues, s.bananaRole.cues,
+  s.aiChatAnalysis, s.firstAttempt && { apple: s.firstAttempt.apple?.videoUrl, banana: s.firstAttempt.banana?.videoUrl },
+  s.aiTeacherReport?.generatedAt, s.appleSentAt, s.bananaSentAt, s.redoRequestedAt, s.status, s.teacherFeedback, s.teacherStar,
+]);
+
 export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   onOpenChat,
   teacherId,
@@ -311,6 +331,16 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
 
   const [feedbackSent, setFeedbackSent] = useState(false);
+
+  // The open review follows the 3-second refresh, so new work shows without
+  // closing it. The feedback box is separate state, so typing isn't lost.
+  useEffect(() => {
+    setActiveReviewSub(prev => {
+      if (!prev) return prev;
+      const fresh = submissions.find(x => x.id === prev.id);
+      return fresh && reviewSignature(fresh) !== reviewSignature(prev) ? fresh : prev;
+    });
+  }, [submissions]);
 
   // The copies of the open submission's analyses in the pupils' own records:
   // per performer, oldest first (the last is a re-do's, once one is sent, #93)
@@ -953,11 +983,26 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   </span>
                 </div>
                 {pupilPicker(activeReviewSub, 'banana')}
+                <AttemptStatus
+                  sentAt={activeReviewSub.bananaSentAt}
+                  redoRequestedAt={activeReviewSub.redoRequestedAt}
+                  hasVideo={!!(activeReviewSub.appleRole.videoBlob || activeReviewSub.appleRole.videoUrl)}
+                />
                 <VideoBlobPlayer
                   blob={activeReviewSub.appleRole.videoBlob}
                   videoUrl={activeReviewSub.appleRole.videoUrl}
                   performer="Banana"
                 />
+                {/* Filmed again: the earlier attempt, unless the AI card below already shows it */}
+                {activeReviewSub.firstAttempt?.banana?.videoUrl && !activeReviewSub.aiChatAnalysis?.banana?.analysedClip && (
+                  <details className="mt-2 rounded-xl border border-slate-200 dark:border-zinc-700 px-3 py-2">
+                    <summary className="text-[11px] font-bold text-slate-500 dark:text-slate-400 cursor-pointer">🎬 First attempt (before filming again)</summary>
+                    <VideoBlobPlayer videoUrl={activeReviewSub.firstAttempt.banana.videoUrl} performer="Banana" />
+                    <p className="text-[11px] text-slate-500">
+                      Peer ticks: {activeReviewSub.firstAttempt.banana.cues.filter(c => c.isObserved).length}/{activeReviewSub.firstAttempt.banana.cues.length}
+                    </p>
+                  </details>
+                )}
                 <div className="space-y-1.5 mt-3">
                   {activeReviewSub.appleRole.cues.map((c, i) => (
                     <div key={i} className="flex items-center justify-between text-xs p-1.5 bg-white dark:bg-zinc-900 rounded-lg">
@@ -981,11 +1026,26 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   </span>
                 </div>
                 {pupilPicker(activeReviewSub, 'apple')}
+                <AttemptStatus
+                  sentAt={activeReviewSub.appleSentAt}
+                  redoRequestedAt={activeReviewSub.redoRequestedAt}
+                  hasVideo={!!(activeReviewSub.bananaRole.videoBlob || activeReviewSub.bananaRole.videoUrl)}
+                />
                 <VideoBlobPlayer
                   blob={activeReviewSub.bananaRole.videoBlob}
                   videoUrl={activeReviewSub.bananaRole.videoUrl}
                   performer="Apple"
                 />
+                {/* Filmed again: the earlier attempt, unless the AI card below already shows it */}
+                {activeReviewSub.firstAttempt?.apple?.videoUrl && !activeReviewSub.aiChatAnalysis?.apple?.analysedClip && (
+                  <details className="mt-2 rounded-xl border border-slate-200 dark:border-zinc-700 px-3 py-2">
+                    <summary className="text-[11px] font-bold text-slate-500 dark:text-slate-400 cursor-pointer">🎬 First attempt (before filming again)</summary>
+                    <VideoBlobPlayer videoUrl={activeReviewSub.firstAttempt.apple.videoUrl} performer="Apple" />
+                    <p className="text-[11px] text-slate-500">
+                      Peer ticks: {activeReviewSub.firstAttempt.apple.cues.filter(c => c.isObserved).length}/{activeReviewSub.firstAttempt.apple.cues.length}
+                    </p>
+                  </details>
+                )}
                 <div className="space-y-1.5 mt-3">
                   {activeReviewSub.bananaRole.cues.map((c, i) => (
                     <div key={i} className="flex items-center justify-between text-xs p-1.5 bg-white dark:bg-zinc-900 rounded-lg">
@@ -1088,7 +1148,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                       <div className="bg-emerald-950/80 dark:bg-emerald-950 px-4 py-2.5 flex items-center gap-2">
                         <span className="text-lg">{who === 'apple' ? '🍎' : '🍌'}</span>
                         <span className="font-black text-white text-sm">
-                          AI Assessment Checklist — {slotStudent(activeReviewSub.lessonId, activeReviewSub.pairNumber, who)?.name ?? entry.studentLabel}
+                          {entry.teacherGrades ? 'Checklist to grade' : 'AI Assessment Checklist'} — {slotStudent(activeReviewSub.lessonId, activeReviewSub.pairNumber, who)?.name ?? entry.studentLabel}
                         </span>
                         <span className="ml-auto text-[10px] text-emerald-300">
                           {entry.modelUsed} · {new Date(entry.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1109,6 +1169,11 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                               </p>
                             )}
                           </div>
+                        )}
+                        {entry.teacherGrades && (
+                          <p className="mb-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900 text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                            Coach Bot couldn't analyse this, so there's no AI analysis. Grade it below.
+                          </p>
                         )}
                         {/* Re-filmed after a redo request (#93): the AI analysis below is of the earlier attempt */}
                         {entry.redo && (

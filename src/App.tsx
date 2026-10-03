@@ -31,7 +31,7 @@ import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/a
 import { getAllCuesForSkill } from './data/peerSyllabusCues';
 import { normaliseLevel } from './utils/gradingReview';
 import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
-import { Performer, Stage, currentAttempt, performerKey, performerStage, performerWork, redoChecklistText, redoFilmCount } from './utils/pairWork';
+import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey, performerStage, performerWork, redoChecklistText, redoFilmCount } from './utils/pairWork';
 
 type ModelId = 'gemini' | 'claude';
 
@@ -658,6 +658,18 @@ const App: React.FC = () => {
     setPairRecord(record);
   };
 
+  // Coach Bot couldn't analyse this performer: they may submit without it, and
+  // the teacher grades it. Kept on the device so a reload doesn't undo it.
+  const markAnalysisFailed = async (performer: Performer) => {
+    const ctx = pairContext();
+    if (!ctx) return;
+    const record = (await getSubmission(canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, ctx.skillName))) as PairSubmissionRecord | undefined;
+    if (!record) return;
+    record.analysisFailed = { ...record.analysisFailed, [performerKey(performer)]: true };
+    await putSubmission(record);
+    setPairRecord(record);
+  };
+
   // The one re-film (#94): the old attempt is kept, and uploaded, as the first
   // attempt so the teacher sees both. The new one becomes the current attempt.
   const handleRefilmDone = async (attempt: RefilmedAttempt) => {
@@ -699,12 +711,18 @@ const App: React.FC = () => {
       }
     }
 
-    // No videoUrl: it's uploaded with the final submission
+    // No videoUrl yet: the upload below adds it
     const next = { videoBlob: attempt.videoBlob, videoUrl: undefined, cues: cuesToResults(ctx.skillName, attempt.cues) };
     if (attempt.performer === 'Apple') record.bananaRole = { ...record.bananaRole, ...next };
     else record.appleRole = { ...record.appleRole, ...next };
     await putSubmission(record);
     setPairRecord(record);
+
+    // The teacher sees the new film (and the earlier one) as soon as it's
+    // ticked. It isn't final, or locked, until the pupil taps Submit final.
+    backupSubmissionToSupabase(record, ctx.teacherId, getOrCreatePairClaimToken(ctx.lessonId))
+      .then(() => loadPairRecord())
+      .catch(e => console.warn('[Practice] could not send the new film yet:', e));
 
     setActivePeerSessionData(prev => prev && (attempt.performer === 'Apple'
       ? { ...prev, appleVideoBlob: attempt.videoBlob ?? undefined, appleCues: attempt.cues, applePoseFrames: attempt.poseFrames }
@@ -747,6 +765,13 @@ const App: React.FC = () => {
       if (analysis) {
         // A fresh time on every final submission is what the database counts as "sent"
         record.aiChatAnalysis = { ...record.aiChatAnalysis, [k]: { ...analysis, submittedAt: now } };
+      } else {
+        // Coach Bot couldn't analyse it: the teacher grades it from a checklist
+        const criteria = getAllCuesForSkill(ctx.skillName).map(c => c.syllabusCriterion);
+        record.aiChatAnalysis = {
+          ...record.aiChatAnalysis,
+          [k]: { analysisText: noAnalysisChecklistText(criteria), skillName: ctx.skillName, studentLabel: performer, modelUsed: 'none', submittedAt: now, teacherGrades: true },
+        };
       }
     }
     await queuePairSubmission(record);
@@ -1870,9 +1895,13 @@ const App: React.FC = () => {
       let errorText: string;
 
       const lower = rawError.toLowerCase();
+      const failedPerformer = activePeerSessionData ? metadata?.performer : undefined;
+      if (failedPerformer) markAnalysisFailed(failedPerformer).catch(e => console.warn('[Practice] could not note the failed analysis:', e));
       // The server's own words to pupils (Practice Station limits, lesson pass) read best as they are
       if (/^You've |ask your teacher/i.test(rawError)) {
         errorText = `⚠️ ${rawError}`;
+      } else if (failedPerformer) {
+        errorText = `⚠️ Coach Bot can't analyse ${failedPerformer} right now. You can still tap 📤 Submit final, and your teacher will grade it.`;
       } else if (lower.includes('429') || lower.includes('rate') && lower.includes('limit')) {
         errorText = "⚠️ You're sending messages too fast. Please wait a moment and try again.";
       } else if (lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('402')) {
