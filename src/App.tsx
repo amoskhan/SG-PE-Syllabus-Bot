@@ -24,8 +24,8 @@ import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps } from './services/offline/offlineStorage';
-import { LessonStep, PairProgress, Screen, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepsOrLegacy } from './utils/lessonFlow';
+import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef } from './services/offline/offlineStorage';
+import { LessonStep, PairProgress, Screen, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep } from './services/cloudSyncService';
@@ -395,6 +395,20 @@ const App: React.FC = () => {
     reportPairStep(lessonId, pairNumber, getOrCreatePairClaimToken(lessonId), progress).catch(() => { /* best effort */ });
   };
   const stepScreen = nextScreen(lessonSteps, pairProgress);
+  /** The step the pair is on, to label the evidence it makes (#92). */
+  const currentStepRef = (): StepRef | undefined =>
+    activePairSession && stepScreen.kind === 'step'
+      ? { id: stepScreen.step.id, number: stepScreen.number, label: stepLabel(stepScreen.step), skillName: stepScreen.step.skillName }
+      : undefined;
+  /**
+   * The skill being assessed now: the current Assess step's own skill (a
+   * warm-up can differ from the main skill), else the lesson's main skill.
+   * Work is still filed under the main skill.
+   */
+  const assessSkillName = activePeerSessionData?.assessSkillName
+    || (activePairSession && stepScreen.kind === 'step' && stepScreen.step.kind === 'assess' ? stepScreen.step.skillName : undefined)
+    || activePeerSessionData?.skillName
+    || pairSkillName;
   /** Mark the pair as on the first step of this kind (when a screen is opened directly). */
   const markStep = (kind: LessonStep['kind'], method?: NonNullable<LessonStep['assess']>['method']) => {
     const i = findLessonStep(lessonSteps, kind, method);
@@ -453,7 +467,7 @@ const App: React.FC = () => {
 
     try {
       const result = await runPeerCoachingAnalysis(
-        data.skillName,
+        data.assessSkillName || data.skillName,
         data.bananaVideoBlob || null,
         data.appleVideoBlob || null,
         data.bananaCues,
@@ -572,7 +586,7 @@ const App: React.FC = () => {
 
   const handleAnalyzePeerPerformer = async (performer: 'Banana' | 'Apple') => {
     if (!activePeerSessionData) return;
-    const skillName = activePeerSessionData.skillName;
+    const skillName = assessSkillName;
 
     // 1. Peer assessment checklist card
     const peerMsg = buildPeerChecklistMessage(performer, skillName);
@@ -696,10 +710,11 @@ const App: React.FC = () => {
     if (!record) return;
     const entry: AiChatAnalysisEntry = {
       analysisText: message.text,
-      skillName: ctx.skillName,
+      skillName: assessSkillName,
       studentLabel: performer,
       modelUsed: message.modelId ?? effectiveModel,
       submittedAt: new Date().toISOString(),
+      step: currentStepRef(),
     };
     record.pendingAnalysis = { ...record.pendingAnalysis, [performerKey(performer)]: entry };
     await putSubmission(record);
@@ -760,9 +775,11 @@ const App: React.FC = () => {
     }
 
     // No videoUrl yet: the upload below adds it
-    const next = { videoBlob: attempt.videoBlob, videoUrl: undefined, cues: cuesToResults(ctx.skillName, attempt.cues) };
+    const next = { videoBlob: attempt.videoBlob, videoUrl: undefined, cues: cuesToResults(assessSkillName, attempt.cues) };
     if (attempt.performer === 'Apple') record.bananaRole = { ...record.bananaRole, ...next };
     else record.appleRole = { ...record.appleRole, ...next };
+    const stepRef = currentStepRef();
+    if (stepRef) record.peerSteps = { ...record.peerSteps, [k]: stepRef };
     await putSubmission(record);
     setPairRecord(record);
 
@@ -802,8 +819,8 @@ const App: React.FC = () => {
       // A re-do (#93): the earlier analysis stays as it was; the re-do goes with
       // a checklist for the teacher to grade. Sending it is what counts as "sent".
       const earlier = record.aiChatAnalysis?.[k] ?? activePairSubmission?.aiChatAnalysis?.[k]
-        ?? { analysisText: '', skillName: ctx.skillName, studentLabel: performer, modelUsed: 'none', submittedAt: now };
-      const criteria = getAllCuesForSkill(ctx.skillName).map(c => c.syllabusCriterion);
+        ?? { analysisText: '', skillName: assessSkillName, studentLabel: performer, modelUsed: 'none', submittedAt: now, step: currentStepRef() };
+      const criteria = getAllCuesForSkill(assessSkillName).map(c => c.syllabusCriterion);
       record.aiChatAnalysis = {
         ...record.aiChatAnalysis,
         [k]: { ...earlier, redo: { requestedAt: redoAt, submittedAt: now, checklistText: redoChecklistText(criteria), firstClip: record.redoFilms?.[k]?.firstClip } },
@@ -815,10 +832,10 @@ const App: React.FC = () => {
         record.aiChatAnalysis = { ...record.aiChatAnalysis, [k]: { ...analysis, submittedAt: now } };
       } else {
         // No analysis (Coach Bot couldn't, or the lesson has no AI step): the teacher grades it from a checklist
-        const criteria = getAllCuesForSkill(ctx.skillName).map(c => c.syllabusCriterion);
+        const criteria = getAllCuesForSkill(assessSkillName).map(c => c.syllabusCriterion);
         record.aiChatAnalysis = {
           ...record.aiChatAnalysis,
-          [k]: { analysisText: noAnalysisChecklistText(criteria, lessonUsesAi ? 'failed' : 'no_ai_in_lesson'), skillName: ctx.skillName, studentLabel: performer, modelUsed: 'none', submittedAt: now, teacherGrades: true },
+          [k]: { analysisText: noAnalysisChecklistText(criteria, lessonUsesAi ? 'failed' : 'no_ai_in_lesson'), skillName: assessSkillName, studentLabel: performer, modelUsed: 'none', submittedAt: now, teacherGrades: true, step: currentStepRef() },
         };
       }
     }
@@ -905,6 +922,7 @@ const App: React.FC = () => {
   // A peer assessment is done: on to the next step. Into the Practice Station
   // straight away (with the automatic AI peer feedback) when that comes next.
   const handlePeerStepDone = async (data: CompletedPeerSession) => {
+    await labelPeerTicks(data);
     const steps = activePairSession ? await refreshLessonSteps(activePairSession.lessonId, pairSkillName) : lessonSteps;
     // Filming for an AI analysis step: on into its Practice Station
     if (isAiStep(nextScreen(steps, pairProgress))) {
@@ -926,6 +944,17 @@ const App: React.FC = () => {
       await loadPairRecord();
       goToStep('next');
     }
+  };
+
+  /** Label both performers' new peer ticks with the step they came from (#92). */
+  const labelPeerTicks = async (data: CompletedPeerSession) => {
+    const stepRef = currentStepRef();
+    if (!stepRef || !activePairSession) return;
+    const record = (await getSubmission(canonicalSubmissionId(data.lessonId, data.pairNumber, data.skillName))) as PairSubmissionRecord | undefined;
+    if (!record) return;
+    record.peerSteps = { ...record.peerSteps, apple: stepRef, banana: stepRef };
+    await putSubmission(record);
+    backupSubmissionToSupabase(record, activePairSession.teacherId, getOrCreatePairClaimToken(data.lessonId)).catch(console.warn);
   };
 
   /** The step after this pair's current one, for "Next step" buttons. */
@@ -1015,17 +1044,20 @@ const App: React.FC = () => {
     const skillName = pair.skillName || activePairSubmission?.skillName || scannedLessonData.skillName || 'Overhand Throw';
     const sub = activePairSubmission;
     markStep('assess', 'ai_analysis');
+    const aiStep = lessonSteps[findLessonStep(lessonSteps, 'assess', 'ai_analysis')];
+    const cueSkill = aiStep?.skillName || skillName;
 
     if (activePeerSessionData?.pairNumber !== pair.pairNumber) setPupilUsage({ apple: {}, banana: {} });
     setActivePeerSessionData({
       pairNumber: pair.pairNumber,
       lessonId: pair.lessonId,
       skillName,
+      assessSkillName: cueSkill,
       pairPhoto: pair.pairPhoto || sub?.pairPhoto || '',
       applePoseFrames: [],
       bananaPoseFrames: [],
-      appleCues: peerCuesToMap(skillName, sub?.bananaRole?.cues),
-      bananaCues: peerCuesToMap(skillName, sub?.appleRole?.cues),
+      appleCues: peerCuesToMap(cueSkill, sub?.bananaRole?.cues),
+      bananaCues: peerCuesToMap(cueSkill, sub?.appleRole?.cues),
     });
 
     // Reuse the pair's existing chat if it's still in the list, else start a fresh one
@@ -2401,6 +2433,7 @@ const App: React.FC = () => {
             setAppMode('home_screen');
           }}
           onSendToCoachBot={handlePeerStepDone}
+          cueSkillName={stepScreen.kind === 'step' && stepScreen.step.kind === 'assess' ? stepScreen.step.skillName : undefined}
           nextIsCoachBot={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
           onExit={() => {
             const wasRefilm = !!refilmPerformer;
@@ -2471,7 +2504,7 @@ const App: React.FC = () => {
               </button>
               <div className="min-w-0 flex-1">
                 <p className="text-sm sm:text-base font-black text-white truncate">
-                  🍎🍌 Pair {activePeerSessionData.pairNumber} · {activePeerSessionData.skillName}
+                  🍎🍌 Pair {activePeerSessionData.pairNumber} · {assessSkillName}
                 </p>
                 {(appleTotal > 0 || bananaTotal > 0 || (activePairSession && lessonSteps.length > 1)) && (
                   <p className="text-[11px] sm:text-xs font-bold text-slate-300 truncate">
@@ -2775,7 +2808,7 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     disabled={isLoading || isProcessing}
-                    onClick={() => handleSendMessage(`Coach, how can we get more distance and power on our ${activePeerSessionData.skillName}?`)}
+                    onClick={() => handleSendMessage(`Coach, how can we get more distance and power on our ${assessSkillName}?`)}
                     className="h-9 px-3 shrink-0 bg-white/90 dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                   >
                     ⚡ More power?
@@ -2783,7 +2816,7 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     disabled={isLoading || isProcessing}
-                    onClick={() => handleSendMessage(`Give us a fun 2-minute partner challenge drill for ${activePeerSessionData.skillName}!`)}
+                    onClick={() => handleSendMessage(`Give us a fun 2-minute partner challenge drill for ${assessSkillName}!`)}
                     className="h-9 px-3 shrink-0 bg-white/90 dark:bg-zinc-900 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-full text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                   >
                     🎮 Fun partner drill

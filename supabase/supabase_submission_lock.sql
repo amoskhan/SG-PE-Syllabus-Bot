@@ -20,7 +20,10 @@ alter table public.pair_submissions
   add column if not exists banana_sent_at    timestamptz,
   -- A performer's earlier attempt once they film again, {"apple": {"videoUrl", "cues"}, ...},
   -- sent as soon as the new film is ticked so the teacher sees both
-  add column if not exists first_attempts    jsonb;
+  add column if not exists first_attempts    jsonb,
+  -- Which lesson step each performer's peer ticks came from (#92), for the
+  -- Review Tray's labels: {"apple": {"id", "number", "label", "skillName"}, ...}
+  add column if not exists peer_steps        jsonb;
 
 -- Work sent before this migration counts as sent
 update public.pair_submissions set
@@ -98,6 +101,7 @@ declare
   v_ai_teacher jsonb := case when jsonb_typeof(p->'ai_teacher_report')   = 'object' then p->'ai_teacher_report' end;
   v_ai_chat    jsonb := case when jsonb_typeof(p->'ai_chat_analysis')    = 'object' then p->'ai_chat_analysis' end;
   v_first      jsonb := case when jsonb_typeof(p->'first_attempts')      = 'object' then p->'first_attempts' end;
+  v_peer_steps jsonb := case when jsonb_typeof(p->'peer_steps')          = 'object' then p->'peer_steps' end;
   v_pupil      boolean;
   v_apple_new  boolean;  -- this write changes Apple's work
   v_banana_new boolean;  -- this write changes Banana's work
@@ -150,6 +154,11 @@ begin
       return 'locked';
     end if;
     v_any_locked := public.performer_locked(v_row, 'apple') or public.performer_locked(v_row, 'banana');
+    -- Step labels (#92) only change with the work: a locked performer's stays
+    if v_pupil and v_peer_steps is not null then
+      if public.performer_locked(v_row, 'apple')  then v_peer_steps := v_peer_steps - 'apple';  end if;
+      if public.performer_locked(v_row, 'banana') then v_peer_steps := v_peer_steps - 'banana'; end if;
+    end if;
 
     update public.pair_submissions set
       skill_name          = coalesce(p->>'skill_name', skill_name),
@@ -170,6 +179,8 @@ begin
                                  else coalesce(ai_chat_analysis, '{}'::jsonb) || v_ai_chat end,
       first_attempts      = case when v_first is null then first_attempts
                                  else coalesce(first_attempts, '{}'::jsonb) || v_first end,
+      peer_steps          = case when v_peer_steps is null then peer_steps
+                                 else coalesce(peer_steps, '{}'::jsonb) || v_peer_steps end,
       -- Sending a performer's analysis is what "sent" means (stamped here, not by the device)
       apple_sent_at       = case when v_ai_chat ? 'apple' and v_ai_chat->'apple' is distinct from ai_chat_analysis->'apple'
                                  then now() else apple_sent_at end,
@@ -182,7 +193,7 @@ begin
     insert into public.pair_submissions
       (id, lesson_id, pair_number, skill_name, teacher_id, status, claim_token,
        pair_photo, banana_video_url, apple_video_url, banana_cues, apple_cues,
-       ai_student_feedback, ai_teacher_report, ai_chat_analysis, first_attempts, apple_sent_at, banana_sent_at,
+       ai_student_feedback, ai_teacher_report, ai_chat_analysis, first_attempts, peer_steps, apple_sent_at, banana_sent_at,
        created_at, updated_at)
     values
       (v_id, v_lesson, v_pair,
@@ -192,7 +203,7 @@ begin
        v_token, v_photo, v_banana, v_apple,
        coalesce(v_banana_cues, '[]'::jsonb),
        coalesce(v_apple_cues, '[]'::jsonb),
-       v_ai_student, v_ai_teacher, v_ai_chat, v_first,
+       v_ai_student, v_ai_teacher, v_ai_chat, v_first, v_peer_steps,
        case when v_ai_chat ? 'apple'  then now() end,
        case when v_ai_chat ? 'banana' then now() end,
        coalesce((p->>'created_at')::timestamptz, now()),

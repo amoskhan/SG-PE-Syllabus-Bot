@@ -9,7 +9,9 @@ import { teachPages } from './teachPages';
 // module.
 
 export type StepKind = 'teach' | 'practise' | 'assess';
-export type AssessmentMethod = 'ai_analysis' | 'peer_assessment' | 'teacher_alone';
+// AI analysis always includes a peer assessment first (GLOSSARY.md). A
+// "teacher alone" method was tried and dropped (#90).
+export type AssessmentMethod = 'ai_analysis' | 'peer_assessment';
 export type LearningArea = 'FMS' | 'Gymnastics';
 
 /** A picture or video the teacher attached to a Teach step (private Storage path). */
@@ -167,7 +169,6 @@ export const stepLabel = (step: LessonStep): string => {
   switch (step.assess?.method) {
     case 'ai_analysis': return 'Peer assessment + Coach Bot';
     case 'peer_assessment': return 'Peer assessment';
-    case 'teacher_alone': return 'Teacher assessment';
     default: return 'Assess';
   }
 };

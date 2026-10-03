@@ -89,6 +89,7 @@ export async function backupSubmissionToSupabase(
     ai_teacher_report: submission.aiTeacherReport,
     ai_chat_analysis: submission.aiChatAnalysis,
     first_attempts: uploadedFirstAttempts(submission),
+    peer_steps: submission.peerSteps,
     created_at: submission.createdAt,
   });
   if (result === "claimed") {
@@ -162,6 +163,7 @@ export function mapRowToSubmission(row: any): PairSubmissionRecord {
     aiTeacherReport: row.ai_teacher_report || undefined,
     aiChatAnalysis: row.ai_chat_analysis || undefined,
     firstAttempt: row.first_attempts || undefined,
+    peerSteps: row.peer_steps || undefined,
     status: row.status || 'pending_sync',
     teacherFeedback: row.teacher_feedback || undefined,
     teacherStar: row.teacher_star || false,
@@ -218,6 +220,7 @@ export async function savePupilSubmission(fields: {
   ai_teacher_report?: unknown;
   ai_chat_analysis?: unknown;
   first_attempts?: unknown;
+  peer_steps?: unknown;
   created_at?: string;
 }): Promise<PupilWriteResult> {
   const { data, error } = await supabase.rpc("pupil_save_submission", {

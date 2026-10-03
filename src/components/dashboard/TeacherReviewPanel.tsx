@@ -15,6 +15,8 @@ const AI_MARK: Record<CriterionResult, string> = { met: '✅', missed: '❌', un
 /**
  * Lets the teacher overrule the AI cue by cue. The level follows the ticks
  * using the FMS rubric, and the teacher can still pick a different level.
+ * A grading with no AI level (a re-do, or work sent without an AI analysis)
+ * is the teacher's own: no mention of the AI.
  */
 const TeacherReviewPanel: React.FC<Props> = ({ analysis, onSaved }) => {
   const initial = useMemo(() => effectiveCriteria(analysis), [analysis]);
@@ -41,6 +43,7 @@ const TeacherReviewPanel: React.FC<Props> = ({ analysis, onSaved }) => {
   const met = results.filter(r => r === 'met').length;
   const unsure = results.filter(r => r === 'unsure').length;
   const reviewed = !!analysis.teacherReviewedAt;
+  const fromAi = !!analysis.proficiencyLevel;
 
   const setMark = (name: string, result: 'met' | 'missed') => {
     setMarks(m => ({ ...m, [name]: result }));
@@ -83,7 +86,7 @@ const TeacherReviewPanel: React.FC<Props> = ({ analysis, onSaved }) => {
           <p className="text-xs text-slate-400 dark:text-slate-500">
             {reviewed
               ? `Checked by you on ${analysis.teacherReviewedAt!.toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })}`
-              : 'Mark each cue as you saw it. Your marks replace the AI’s everywhere.'}
+              : fromAi ? 'Mark each cue as you saw it. Your marks replace the AI’s everywhere.' : 'Mark each cue as you saw it, then save the level.'}
           </p>
         </div>
         {initial.length > 0 && (
@@ -103,9 +106,9 @@ const TeacherReviewPanel: React.FC<Props> = ({ analysis, onSaved }) => {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-slate-700 dark:text-slate-200">{c.name}</p>
                   <p className={`text-xs ${r === 'unsure' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                    AI said {AI_MARK[c.ai]}
-                    {r === 'unsure' && ' · not sure, please decide'}
-                    {differs && ' · you changed this'}
+                    {fromAi ? <>AI said {AI_MARK[c.ai]}</> : r === 'unsure' ? 'Not marked yet' : ''}
+                    {fromAi && r === 'unsure' && ' · not sure, please decide'}
+                    {fromAi && differs && ' · you changed this'}
                   </p>
                 </div>
                 <div className="flex rounded-lg border border-slate-200 dark:border-zinc-700 overflow-hidden flex-shrink-0" role="group" aria-label={`${c.name}: hit or missed`}>
@@ -181,7 +184,7 @@ const TeacherReviewPanel: React.FC<Props> = ({ analysis, onSaved }) => {
             ? 'Worked out from your marks: all cues → Competent, half or more → Developing, under half → Beginning.'
             : levelIndex(analysis.teacherLevel) >= 0
             ? 'Your saved level.'
-            : 'The AI’s level. It updates when you change a cue.'}
+            : fromAi ? 'The AI’s level. It updates when you change a cue.' : 'Mark the cues and the level follows, or pick one.'}
           {unsure > 0 && ` ${unsure} cue${unsure > 1 ? 's are' : ' is'} still ⚠️ and count${unsure > 1 ? '' : 's'} as not hit.`}
         </p>
       </div>
@@ -193,7 +196,7 @@ const TeacherReviewPanel: React.FC<Props> = ({ analysis, onSaved }) => {
           disabled={saving}
           className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
         >
-          {saving ? 'Saving…' : !reviewed && !changedFromAi && !manualLevel ? 'Confirm AI grading' : 'Save review'}
+          {saving ? 'Saving…' : !fromAi ? 'Save grade' : !reviewed && !changedFromAi && !manualLevel ? 'Confirm AI grading' : 'Save review'}
         </button>
         {reviewed && (
           <button
@@ -202,7 +205,7 @@ const TeacherReviewPanel: React.FC<Props> = ({ analysis, onSaved }) => {
             disabled={saving}
             className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors"
           >
-            Go back to AI grading
+            {fromAi ? 'Go back to AI grading' : 'Clear my grade'}
           </button>
         )}
         {status === 'saved' && <span className="text-xs text-emerald-600 dark:text-emerald-400">Saved. The AI note updates tonight.</span>}

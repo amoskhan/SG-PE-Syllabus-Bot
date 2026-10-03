@@ -4,10 +4,10 @@ import { StepBar } from './StepBar';
 import { TeachPager } from './TeachPager';
 import { teachPages } from '../../utils/teachPages';
 
-// The pupil screen for a step that isn't peer assessment or the Practice
-// Station (those have their own screens): Teach, Practise, and an Assess step
-// done by the teacher alone. A Teach step shows its pages (#88). A Practise step can let pupils film each other to
-// watch back (#87); that video stays on the device and is never sent.
+// The pupil screen for a Teach or Practise step (Assess steps have their own
+// screens: peer assessment and the Practice Station). A Teach step shows its
+// pages (#88). A Practise step can let pupils film each other to watch back
+// (#87); that video stays on the device and is never sent.
 //
 // The page body doesn't scroll (index.html), so the middle of this screen does.
 
@@ -25,10 +25,7 @@ const COPY = (step: LessonStep): { icon: string; title: string; hint: string; ne
   if (step.kind === 'teach') {
     return { icon: '👀', title: `Learn: ${step.skillName}`, hint: 'Watch and read together. Move on when you both know what to do.', next: "We're ready ➔" };
   }
-  if (step.kind === 'practise') {
-    return { icon: '🏃', title: `Practise: ${step.skillName}`, hint: 'Take turns. Help each other remember the cues.', next: "We're done practising ➔" };
-  }
-  return { icon: '🧑‍🏫', title: 'Your teacher is assessing you', hint: `Show your teacher your best ${step.skillName}. Wait for your teacher before moving on.`, next: 'Next ➔' };
+  return { icon: '🏃', title: `Practise: ${step.skillName}`, hint: 'Take turns. Help each other remember the cues.', next: "We're done practising ➔" };
 };
 
 /** Film a go and watch it back. Nothing is uploaded. */
