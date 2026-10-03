@@ -31,6 +31,8 @@ import {
   getLocalLessonNames,
 } from '../services/lessonService';
 import { LessonPlanForm, LessonList } from '../components/classroom/LessonPlanner';
+import { ClassPicker } from '../components/classroom/ClassPicker';
+import { ALL, ClassFilter, fitFilter, getClassFilter, isGraded, matchesFilter, saveClassFilter } from '../utils/classGroups';
 import { mediaPaths, removeTeachMedia } from '../services/teachMediaService';
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
@@ -217,7 +219,15 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   }, {});
 
   // Review Tray shows every lesson by default so older work can still be marked
-  const [reviewLessonFilter, setReviewLessonFilter] = useState<string>('ALL');
+  // Level → Class chosen for the Lessons tab and the Review Tray (#109), per device
+  const [classFilter, setClassFilterState] = useState<ClassFilter>(() => getClassFilter(teacherId));
+  const filter = fitFilter(lessons, classFilter);
+  const setClassFilter = (f: ClassFilter) => {
+    setClassFilterState(f);
+    saveClassFilter(teacherId, f);
+  };
+  const [trayTab, setTrayTab] = useState<'TO_GRADE' | 'GRADED'>('TO_GRADE');
+  const [openTrayLessons, setOpenTrayLessons] = useState<Record<string, boolean>>({});
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [submissions, setSubmissions] = useState<PairSubmissionRecord[]>([]);
   const [activeReviewSub, setActiveReviewSub] = useState<PairSubmissionRecord | null>(null);
@@ -464,12 +474,36 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   };
 
   const currentLessonSubmissions = lessonId ? submissions.filter((s) => s.lessonId === lessonId) : [];
-  // Current lesson first, then every lesson that has work in it, newest first
-  const reviewLessonIds: string[] = Array.from(
-    new Set<string>([...(lessonId ? [lessonId] : []), ...submissions.map((s) => s.lessonId)])
-  );
-  const reviewSubmissions =
-    reviewLessonFilter === 'ALL' ? submissions : submissions.filter((s) => s.lessonId === reviewLessonFilter);
+  // Review Tray (#109): the chosen classes' work, To grade or Graded, one
+  // section per lesson, newest first. Work from a lesson no longer planned
+  // (deleted, or from before lessons) has no class, so shows under All levels.
+  const lessonById = new Map<string, Lesson>(lessons.map((l) => [l.id, l]));
+  const filteredSubs = submissions.filter((sub) => {
+    const l = lessonById.get(sub.lessonId);
+    return l ? matchesFilter(l, filter) : filter.level === ALL;
+  });
+  const toGradeCount = filteredSubs.filter((sub) => !isGraded(sub)).length;
+  const gradedCount = filteredSubs.length - toGradeCount;
+  const trayGroups = Array.from(new Set<string>(filteredSubs.map((sub) => sub.lessonId)))
+    .map((id) => {
+      const all = filteredSubs.filter((sub) => sub.lessonId === id);
+      const planned = lessonById.get(id);
+      const latest = all.reduce((m, sub) => Math.max(m, new Date(sub.createdAt).getTime() || 0), 0);
+      return {
+        id,
+        title: planned ? lessonTitle(planned) : lessonLabel(id),
+        skillName: planned?.skillName ?? all[0]?.skillName ?? '',
+        sortKey: planned?.lessonDate ?? new Date(latest).toISOString().slice(0, 10),
+        latest,
+        pairs: all.length,
+        toGrade: all.filter((sub) => !isGraded(sub)).length,
+        subs: all
+          .filter((sub) => isGraded(sub) === (trayTab === 'GRADED'))
+          .sort((a, b) => a.pairNumber - b.pairNumber),
+      };
+    })
+    .filter((g) => g.subs.length > 0)
+    .sort((a, b) => b.sortKey.localeCompare(a.sortKey) || b.latest - a.latest);
 
   const handleDelete = async (sub: PairSubmissionRecord) => {
     if (!confirm(
@@ -802,9 +836,10 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
       {/* VIEW: YOUR LESSONS */}
       {viewMode === 'LESSONS' && (
         <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-4xl mx-auto w-full">
+          {teacherId && <ClassPicker lessons={lessons} value={filter} onChange={setClassFilter} />}
           {teacherId ? (
             <LessonList
-              lessons={lessons}
+              lessons={lessons.filter((l) => matchesFilter(l, filter))}
               currentLessonId={currentLessonId}
               loading={lessonsLoading}
               error={lessonsError}
@@ -866,20 +901,6 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <select
-                value={reviewLessonFilter}
-                onChange={(e) => setReviewLessonFilter(e.target.value)}
-                aria-label="Filter by lesson"
-                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold text-slate-700 dark:text-slate-200 max-w-[14rem]"
-              >
-                <option value="ALL">All lessons</option>
-                {reviewLessonIds.map((id) => (
-                  <option key={id} value={id}>
-                    {lessonLabel(id)}
-                    {id === lessonId ? ' (current)' : ''}
-                  </option>
-                ))}
-              </select>
               <button
                 type="button"
                 onClick={loadSubmissions}
@@ -888,23 +909,68 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 <span>🔄</span>
                 <span>Refresh</span>
               </button>
-              <span className="px-3.5 py-1.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-full font-black text-xs">
-                {reviewSubmissions.length} {reviewLessonFilter === 'ALL' ? 'Total' : 'in Lesson'}
-              </span>
             </div>
           </div>
 
-          {reviewSubmissions.length === 0 ? (
+          <ClassPicker lessons={lessons} value={filter} onChange={setClassFilter} />
+
+          {/* To grade is the to-do list; approved work is kept under Graded */}
+          <div className="flex gap-1 bg-slate-100 dark:bg-zinc-800 p-1 rounded-xl w-fit mb-5" role="tablist">
+            {([['TO_GRADE', 'To grade', toGradeCount], ['GRADED', 'Graded', gradedCount]] as const).map(([tab, label, count]) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={trayTab === tab}
+                onClick={() => setTrayTab(tab)}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  trayTab === tab ? 'bg-white dark:bg-zinc-900 text-indigo-700 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                {label} <span className="opacity-70">({count})</span>
+              </button>
+            ))}
+          </div>
+
+          {trayGroups.length === 0 ? (
             <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 p-8 shadow-xs">
               <span className="text-5xl block mb-3">📭</span>
-              <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200">No submissions pending review</h3>
+              <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200">
+                {trayTab === 'TO_GRADE' ? 'Nothing to grade' : 'Nothing graded yet'}
+              </h3>
               <p className="text-xs text-slate-400 mt-1">
-                When students finish their peer-coaching turns and reconnect to Wi-Fi, their attempts will appear here!
+                {trayTab === 'TO_GRADE'
+                  ? 'When pupils send their work, it appears here. Approve it and it moves to Graded.'
+                  : 'Work you approve is kept here, by lesson.'}
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {reviewSubmissions.map((sub) => (
+            <div className="flex flex-col gap-4">
+              {trayGroups.map((g, i) => {
+                const open = openTrayLessons[g.id] ?? i === 0; // the latest lesson starts open
+                return (
+                  <section key={g.id} className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-900/40">
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => setOpenTrayLessons((prev) => ({ ...prev, [g.id]: !open }))}
+                      className="w-full flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-left cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className={`text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
+                        <span className="font-extrabold text-sm text-slate-800 dark:text-white truncate">{g.title}</span>
+                        {g.skillName && <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">· {g.skillName}</span>}
+                      </span>
+                      <span className="flex items-center gap-2 text-[11px] font-bold">
+                        <span className="text-slate-500 dark:text-slate-400">{g.pairs} pair{g.pairs === 1 ? '' : 's'}</span>
+                        {g.toGrade > 0 && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">{g.toGrade} to grade</span>
+                        )}
+                      </span>
+                    </button>
+                    {open && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 px-4 pb-4">
+              {g.subs.map((sub) => (
                 <div
                   key={sub.id}
                   className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs hover:shadow-md transition-shadow"
@@ -930,10 +996,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           )}
                         </h4>
                         <span className="text-[10px] text-slate-400">{sub.skillName}</span>
-                        <span className="block text-[10px] text-slate-400 truncate">
-                          {sub.lessonId === LEGACY_LESSON_ID ? '' : `${lessonLabel(sub.lessonId)} · `}
-                          Sent {formatShortDate(sub.createdAt)}
-                        </span>
+                        <span className="block text-[10px] text-slate-400 truncate">Sent {formatShortDate(sub.createdAt)}</span>
                         {(sub.aiChatAnalysis?.apple || sub.aiChatAnalysis?.banana) && (
                           <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                             🤖 AI analysis
@@ -1011,6 +1074,11 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           )}
         </div>
