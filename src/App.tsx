@@ -1248,6 +1248,15 @@ const App: React.FC = () => {
   }, [sessions]);
 
 
+  // The home screen's Syllabus & Analysis card always opens a fresh chat. A chat
+  // nobody has typed in yet is reused, so going in and out doesn't pile up empty chats.
+  const openFreshChat = () => {
+    const unused = sessionsRef.current.find(s => !s.messages.some(m => m.sender === Sender.USER));
+    if (unused) setCurrentSessionId(unused.id);
+    else handleNewSession();
+    setAppMode('chat');
+  };
+
   // Session Management Actions
   const handleNewSession = async () => {
     const newId = Date.now().toString();
@@ -2387,7 +2396,7 @@ const App: React.FC = () => {
               {/* Syllabus & Analysis Chatbot Card */}
               <button
                 type="button"
-                onClick={() => setAppMode('chat')}
+                onClick={openFreshChat}
                 className="group relative w-full text-left bg-gradient-to-br from-teal-700/80 to-cyan-800/80 hover:from-teal-600/90 hover:to-cyan-700/90 hover:scale-[1.02] active:scale-[0.97] rounded-3xl p-5 sm:p-6 shadow-2xl shadow-teal-900/40 border border-teal-600/30 transition-all duration-200 cursor-pointer overflow-hidden"
               >
                 <div className="hidden sm:block absolute right-4 top-4 text-5xl opacity-20 group-hover:opacity-30 transition-opacity select-none">🤖</div>
