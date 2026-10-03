@@ -20,6 +20,9 @@ export interface AiChatAnalysisEntry {
   // Set when the performer filmed again after a redo request (#93). The
   // analysis above stays: it was about the earlier attempt.
   redo?: RedoSubmission;
+  // Sent without an AI analysis because Coach Bot couldn't analyse it:
+  // analysisText is a checklist for the teacher to grade
+  teacherGrades?: boolean;
 }
 
 /** A performer's re-do, sent with their final submission (#93). */
@@ -116,6 +119,12 @@ export interface PairSubmissionRecord {
   redoFilms?: {
     apple?: RedoFilms;
     banana?: RedoFilms;
+  };
+  // Coach Bot couldn't analyse this performer (AI down, no internet): they
+  // can still submit, and the teacher grades it
+  analysisFailed?: {
+    apple?: boolean;
+    banana?: boolean;
   };
   status: 'pending_sync' | 'synced' | 'approved' | 'needs_redo' | 'resubmitted';
   teacherFeedback?: string;

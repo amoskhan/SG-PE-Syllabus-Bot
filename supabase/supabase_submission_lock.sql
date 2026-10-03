@@ -17,7 +17,10 @@
 alter table public.pair_submissions
   add column if not exists redo_requested_at timestamptz,
   add column if not exists apple_sent_at     timestamptz,
-  add column if not exists banana_sent_at    timestamptz;
+  add column if not exists banana_sent_at    timestamptz,
+  -- A performer's earlier attempt once they film again, {"apple": {"videoUrl", "cues"}, ...},
+  -- sent as soon as the new film is ticked so the teacher sees both
+  add column if not exists first_attempts    jsonb;
 
 -- Work sent before this migration counts as sent
 update public.pair_submissions set
@@ -94,6 +97,7 @@ declare
   v_ai_student jsonb := case when jsonb_typeof(p->'ai_student_feedback') = 'object' then p->'ai_student_feedback' end;
   v_ai_teacher jsonb := case when jsonb_typeof(p->'ai_teacher_report')   = 'object' then p->'ai_teacher_report' end;
   v_ai_chat    jsonb := case when jsonb_typeof(p->'ai_chat_analysis')    = 'object' then p->'ai_chat_analysis' end;
+  v_first      jsonb := case when jsonb_typeof(p->'first_attempts')      = 'object' then p->'first_attempts' end;
   v_pupil      boolean;
   v_apple_new  boolean;  -- this write changes Apple's work
   v_banana_new boolean;  -- this write changes Banana's work
@@ -134,11 +138,13 @@ begin
     v_apple_new :=
          (v_apple is not null and v_apple is distinct from v_row.apple_video_url)
       or (v_apple_cues is not null and v_apple_cues is distinct from v_row.apple_cues)
-      or (v_ai_chat ? 'apple' and v_ai_chat->'apple' is distinct from v_row.ai_chat_analysis->'apple');
+      or (v_ai_chat ? 'apple' and v_ai_chat->'apple' is distinct from v_row.ai_chat_analysis->'apple')
+      or (v_first ? 'apple' and v_first->'apple' is distinct from v_row.first_attempts->'apple');
     v_banana_new :=
          (v_banana is not null and v_banana is distinct from v_row.banana_video_url)
       or (v_banana_cues is not null and v_banana_cues is distinct from v_row.banana_cues)
-      or (v_ai_chat ? 'banana' and v_ai_chat->'banana' is distinct from v_row.ai_chat_analysis->'banana');
+      or (v_ai_chat ? 'banana' and v_ai_chat->'banana' is distinct from v_row.ai_chat_analysis->'banana')
+      or (v_first ? 'banana' and v_first->'banana' is distinct from v_row.first_attempts->'banana');
     if v_pupil and ((v_apple_new and public.performer_locked(v_row, 'apple'))
                  or (v_banana_new and public.performer_locked(v_row, 'banana'))) then
       return 'locked';
@@ -162,6 +168,8 @@ begin
       -- Merged per performer, so sending one never drops the other's
       ai_chat_analysis    = case when v_ai_chat is null then ai_chat_analysis
                                  else coalesce(ai_chat_analysis, '{}'::jsonb) || v_ai_chat end,
+      first_attempts      = case when v_first is null then first_attempts
+                                 else coalesce(first_attempts, '{}'::jsonb) || v_first end,
       -- Sending a performer's analysis is what "sent" means (stamped here, not by the device)
       apple_sent_at       = case when v_ai_chat ? 'apple' and v_ai_chat->'apple' is distinct from ai_chat_analysis->'apple'
                                  then now() else apple_sent_at end,
@@ -174,7 +182,7 @@ begin
     insert into public.pair_submissions
       (id, lesson_id, pair_number, skill_name, teacher_id, status, claim_token,
        pair_photo, banana_video_url, apple_video_url, banana_cues, apple_cues,
-       ai_student_feedback, ai_teacher_report, ai_chat_analysis, apple_sent_at, banana_sent_at,
+       ai_student_feedback, ai_teacher_report, ai_chat_analysis, first_attempts, apple_sent_at, banana_sent_at,
        created_at, updated_at)
     values
       (v_id, v_lesson, v_pair,
@@ -184,7 +192,7 @@ begin
        v_token, v_photo, v_banana, v_apple,
        coalesce(v_banana_cues, '[]'::jsonb),
        coalesce(v_apple_cues, '[]'::jsonb),
-       v_ai_student, v_ai_teacher, v_ai_chat,
+       v_ai_student, v_ai_teacher, v_ai_chat, v_first,
        case when v_ai_chat ? 'apple'  then now() end,
        case when v_ai_chat ? 'banana' then now() end,
        coalesce((p->>'created_at')::timestamptz, now()),

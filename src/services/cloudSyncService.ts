@@ -87,6 +87,7 @@ export async function backupSubmissionToSupabase(
     ai_student_feedback: submission.aiStudentFeedback,
     ai_teacher_report: submission.aiTeacherReport,
     ai_chat_analysis: submission.aiChatAnalysis,
+    first_attempts: uploadedFirstAttempts(submission),
     created_at: submission.createdAt,
   });
   if (result === "claimed") {
@@ -103,6 +104,16 @@ export async function backupSubmissionToSupabase(
 
   return { bananaVideoUrl, appleVideoUrl };
 }
+
+/** Each performer's earlier attempt (once they filmed again) that has been uploaded: links and ticks only. */
+const uploadedFirstAttempts = (s: PairSubmissionRecord) => {
+  const out: Record<string, { videoUrl: string; cues: unknown[] }> = {};
+  for (const k of ["apple", "banana"] as const) {
+    const a = s.firstAttempt?.[k];
+    if (a?.videoUrl) out[k] = { videoUrl: a.videoUrl, cues: a.cues ?? [] };
+  }
+  return Object.keys(out).length ? out : undefined;
+};
 
 /**
  * Upload one pupil clip into today's lesson folder and return its stored link,
@@ -149,6 +160,7 @@ export function mapRowToSubmission(row: any): PairSubmissionRecord {
     aiStudentFeedback: row.ai_student_feedback || undefined,
     aiTeacherReport: row.ai_teacher_report || undefined,
     aiChatAnalysis: row.ai_chat_analysis || undefined,
+    firstAttempt: row.first_attempts || undefined,
     status: row.status || 'pending_sync',
     teacherFeedback: row.teacher_feedback || undefined,
     teacherStar: row.teacher_star || false,
@@ -204,6 +216,7 @@ export async function savePupilSubmission(fields: {
   ai_student_feedback?: unknown;
   ai_teacher_report?: unknown;
   ai_chat_analysis?: unknown;
+  first_attempts?: unknown;
   created_at?: string;
 }): Promise<PupilWriteResult> {
   const { data, error } = await supabase.rpc("pupil_save_submission", {

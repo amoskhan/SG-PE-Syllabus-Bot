@@ -6,6 +6,9 @@ import { PerformerLock } from './submissionLock';
 //
 //   record → peer assessment → AI analysis → re-film once (optional) → final submission
 //
+// If Coach Bot can't analyse (AI down, no internet), the performer can still
+// submit, and the teacher grades it.
+//
 // After a redo request each performer first chooses (#93): Keep what was sent,
 // or Film again: record → peer assessment → re-film once (optional) → final
 // submission, with no new AI analysis. The teacher grades the re-do.
@@ -17,6 +20,7 @@ export interface PerformerWork {
   hasAnalysis: boolean; // the AI analysis has been done
   lock: PerformerLock;  // from the teacher's copy (submissionLock.ts)
   redoFilms: number;    // films made since the current redo request
+  analysisFailed?: boolean; // Coach Bot couldn't analyse: they can submit without it
 }
 
 export type Stage = 'not_started' | 'redo_choice' | 'needs_ticks' | 'needs_analysis' | 'ready' | 'submitted';
@@ -43,7 +47,7 @@ export const performerStage = (w: PerformerWork): PerformerStage => {
   const canFilmAgain = w.hasClip && !w.refilmed;
   if (!w.hasClip) return { stage: 'not_started', ...NOTHING };
   if (!w.ticked) return { stage: 'needs_ticks', ...NOTHING, canFilmAgain };
-  if (!w.hasAnalysis) return { stage: 'needs_analysis', ...NOTHING, canFilmAgain };
+  if (!w.hasAnalysis && !w.analysisFailed) return { stage: 'needs_analysis', ...NOTHING, canFilmAgain };
   return { stage: 'ready', ...NOTHING, canFilmAgain, canSubmitFinal: true };
 };
 
@@ -80,19 +84,27 @@ export const performerWork = (
     hasAnalysis: !!(r?.pendingAnalysis?.[k] || r?.aiChatAnalysis?.[k]),
     lock,
     redoFilms: lock === 'redo_requested' ? redoFilmCount(r, p, redoRequestedAt) : 0,
+    analysisFailed: !!r?.analysisFailed?.[k],
   };
 };
 
 /**
- * The checklist a re-do is sent with (#93): every criterion, marked ⚠️ for the
- * teacher to decide. Written as the same table the AI uses, so the teacher's
+ * The checklist sent for the teacher to grade when there's no AI analysis: a
+ * re-do (#93), or work Coach Bot couldn't analyse. Every criterion is marked ⚠️
+ * for the teacher to decide, in the same table the AI uses, so the teacher's
  * review reads it the same way (gradingReview.ts). It never carries the peer
  * ticks (ADR 0001: they don't reach the AI, and the nightly summary is AI).
  */
-export const redoChecklistText = (criteria: string[]) => [
-  '**Re-do** after the teacher asked for another try. There is no AI analysis on a re-do: the teacher grades it.',
+const teacherChecklistText = (intro: string, criteria: string[]) => [
+  intro,
   '',
   '| # | Criterion | Result |',
   '|---|---|---|',
   ...criteria.map((c, i) => `| ${i + 1} | ${c.replace(/\|/g, '/')} | ⚠️ |`),
 ].join('\n');
+
+export const redoChecklistText = (criteria: string[]) => teacherChecklistText(
+  '**Re-do** after the teacher asked for another try. There is no AI analysis on a re-do: the teacher grades it.', criteria);
+
+export const noAnalysisChecklistText = (criteria: string[]) => teacherChecklistText(
+  "**No AI analysis:** Coach Bot couldn't analyse this attempt, so the teacher grades it.", criteria);
