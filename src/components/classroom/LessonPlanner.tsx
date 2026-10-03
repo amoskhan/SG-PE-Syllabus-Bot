@@ -8,12 +8,11 @@ import {
   SkillArea,
   makeLessonKeys,
   LEVELS,
-  DEFAULT_PAIR_COUNT,
   MAX_PAIR_COUNT,
   lessonTitle,
   todayIso,
 } from '../../services/lessonService';
-import { LessonStep, TeachMedia, defaultSteps, followMainSkill, validateLesson } from '../../utils/lessonFlow';
+import { LessonStep, TeachMedia, followMainSkill, validateLesson } from '../../utils/lessonFlow';
 import { StepBuilder } from './StepBuilder';
 import { mediaPaths, removeTeachMedia, uploadTeachMedia } from '../../services/teachMediaService';
 import type { UploadMedia } from './TeachMediaEditor';
@@ -38,26 +37,28 @@ interface LessonPlanFormProps {
 }
 
 export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherId, onSave, onCancel }) => {
-  const [lessonDate, setLessonDate] = useState(lesson?.lessonDate ?? todayIso());
+  // A new lesson starts blank: the teacher fills in every field and builds the steps
+  const [lessonDate, setLessonDate] = useState(lesson?.lessonDate ?? '');
   const [className, setClassName] = useState(lesson?.className ?? '');
   const [level, setLevel] = useState(lesson?.level ?? '');
   const [objective, setObjective] = useState(lesson?.objective ?? '');
-  const [skillArea, setSkillArea] = useState<SkillArea>(lesson?.skillArea ?? 'FMS');
-  const [skillName, setSkillName] = useState(lesson?.skillName ?? SKILLS_BY_AREA.FMS[0]);
-  const [pairCount, setPairCount] = useState(lesson?.pairCount ?? DEFAULT_PAIR_COUNT);
-  // A new lesson starts with the default steps (lessonFlow.ts)
-  const [steps, setSteps] = useState<LessonStep[]>(lesson?.steps ?? defaultSteps(lesson?.skillName ?? SKILLS_BY_AREA.FMS[0]));
+  const [skillArea, setSkillArea] = useState<SkillArea | ''>(lesson?.skillArea ?? '');
+  const [skillName, setSkillName] = useState(lesson?.skillName ?? '');
+  const [pairCount, setPairCount] = useState(lesson ? String(lesson.pairCount) : '');
+  const [steps, setSteps] = useState<LessonStep[]>(lesson?.steps ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const problems = validateLesson({ mainSkill: skillName, skillArea, steps });
+  const areaSkills = skillArea ? SKILLS_BY_AREA[skillArea] : [];
+  const problems = skillArea ? validateLesson({ mainSkill: skillName, skillArea, steps }) : [];
+  const pairs = Number(pairCount);
 
   // ── Teach media (#89) ──
   // Files live in the lesson's folder, which needs its id and pass: an edited
   // lesson has them; a new one gets them on its first upload.
   const newKeysRef = useRef<LessonKeys | null>(null);
   const uploadedRef = useRef<string[]>([]); // uploaded while this form is open
-  const draft = (): LessonDraft => ({ lessonDate, className, level, objective, skillArea, skillName, pairCount, steps });
+  const draft = (): LessonDraft => ({ lessonDate, className, level, objective, skillArea: skillArea || 'FMS', skillName, pairCount: pairs, steps });
   const uploadMedia: UploadMedia | undefined = teacherId
     ? async (file, onProgress) => {
         const keys = lesson ? { id: lesson.id, pupilPass: lesson.pupilPass } : (newKeysRef.current ??= makeLessonKeys(draft()));
@@ -79,19 +80,28 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
   };
 
   // Steps on the main skill follow it when it changes
-  const changeMainSkill = (next: string, area: SkillArea = skillArea) => {
-    setSteps(prev => followMainSkill(prev, skillName, next, SKILLS_BY_AREA[area]));
+  const changeMainSkill = (next: string, area: SkillArea | '' = skillArea) => {
+    setSteps(prev => followMainSkill(prev, skillName, next, area ? SKILLS_BY_AREA[area] : []));
     setSkillName(next);
   };
 
   const changeArea = (area: SkillArea) => {
+    if (area === skillArea) return;
     setSkillArea(area);
-    changeMainSkill(SKILLS_BY_AREA[area][0], area);
+    changeMainSkill('', area); // the teacher picks the main skill from the new area
   };
 
   const submit = async (showNow: boolean) => {
-    if (!className.trim()) {
-      setError('Enter the class, e.g. 4B.');
+    const missing =
+      !lessonDate ? 'Choose the date.'
+      : !className.trim() ? 'Enter the class, e.g. 4B.'
+      : !level ? 'Choose the level.'
+      : !skillArea ? 'Choose the skill area: FMS or Gymnastics.'
+      : !skillName ? 'Choose the main skill.'
+      : !(Number.isInteger(pairs) && pairs >= 1 && pairs <= MAX_PAIR_COUNT) ? `Enter the number of pairs (1–${MAX_PAIR_COUNT}).`
+      : null;
+    if (missing) {
+      setError(missing);
       return;
     }
     if (problems.length) {
@@ -145,8 +155,8 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
         </label>
         <label className="flex flex-col gap-1.5">
           <span className={labelClass}>Level</span>
-          <select value={level} onChange={(e) => setLevel(e.target.value)} className={inputClass}>
-            <option value="">—</option>
+          <select required value={level} onChange={(e) => setLevel(e.target.value)} className={inputClass}>
+            <option value="" disabled>Choose…</option>
             {LEVELS.map((l) => (
               <option key={l} value={l}>
                 {l}
@@ -189,8 +199,15 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
         </div>
         <label className="flex flex-col gap-1.5">
           <span className={labelClass}>Main skill</span>
-          <select value={skillName} onChange={(e) => changeMainSkill(e.target.value)} className={inputClass}>
-            {SKILLS_BY_AREA[skillArea].map((s) => (
+          <select
+            required
+            value={skillName}
+            disabled={!skillArea}
+            onChange={(e) => changeMainSkill(e.target.value)}
+            className={`${inputClass} disabled:opacity-60`}
+          >
+            <option value="" disabled>{skillArea ? 'Choose…' : 'Choose a skill area first'}</option>
+            {areaSkills.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -205,7 +222,8 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
             max={MAX_PAIR_COUNT}
             required
             value={pairCount}
-            onChange={(e) => setPairCount(Math.max(1, Math.min(MAX_PAIR_COUNT, Number(e.target.value) || 1)))}
+            onChange={(e) => setPairCount(e.target.value)}
+            placeholder="e.g. 15"
             className={inputClass}
           />
         </label>
@@ -213,7 +231,7 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
 
       <StepBuilder
         steps={steps}
-        skills={SKILLS_BY_AREA[skillArea]}
+        skills={areaSkills}
         mainSkill={skillName}
         problems={problems}
         onChange={setSteps}
