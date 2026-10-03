@@ -16,6 +16,32 @@ export default defineConfig(({ mode }) => {
       ...(process.env.DISABLE_HTTPS ? [] : [basicSsl()]),
       react(),
       {
+        // Local dev runs the real api/gemini.ts, so the models, the Flash-Lite
+        // fallback and the "busy" message are the same as on the live site
+        name: 'gemini-dev-proxy',
+        configureServer(server) {
+          process.env.GEMINI_API_KEY ||= env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY;
+          server.middlewares.use('/api/gemini', (req, res) => {
+            let body = '';
+            req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+            req.on('end', async () => {
+              // Vercel's res.status(…).json(…) on top of Node's response
+              const reply = Object.assign(res, {
+                status: (code: number) => { res.statusCode = code; return reply; },
+                json: (data: unknown) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(data)); return reply; },
+              });
+              try {
+                const { default: handler } = await server.ssrLoadModule('/api/gemini.ts');
+                await handler({ method: req.method, headers: req.headers, body: body ? JSON.parse(body) : {} }, reply);
+              } catch (e: any) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ error: e.message }));
+              }
+            });
+          });
+        },
+      },
+      {
         name: 'claude-dev-proxy',
         configureServer(server) {
           server.middlewares.use('/api/claude', (req, res) => {

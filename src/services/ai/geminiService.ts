@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, type Content, type Part } from "@google/genai";
+import type { Content, Part } from "@google/genai";
 import { GroundingChunk } from '../../types';
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import {
@@ -14,7 +14,6 @@ import { getSyllabusContextMessage } from '../../data/syllabusContext';
 import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusRequest, WEB_SEARCH_INSTRUCTION } from '../../data/syllabusGuide';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 
-const MODEL_NAME = 'gemini-2.5-flash';
 
 // Initialize the client
 // Note: In a real app, never expose keys on the client. This is for the generated demo environment.
@@ -888,7 +887,7 @@ ${BACKSWING_ITEM5_RULE}
       }
     }
 
-    let result;
+    let answeredBy = 'gemini';
     let text = "";
     let groundingChunks: GroundingChunk[] = [];
     let tokenUsage = 0;
@@ -909,43 +908,9 @@ ${BACKSWING_ITEM5_RULE}
     // Google Search only when the teacher asks for it (#115)
     const tools = searchWeb ? [{ googleSearch: {} }] : undefined;
 
-    // --- HYBRID EXECUTOR ---
-    // If LOCAL (DEV) -> Use Direct Client Key (Fast, no server setup needed)
-    // If PROD -> Use Serverless Proxy (Secure, hides key)
-    if (import.meta.env.DEV) {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("VITE_GEMINI_API_KEY is missing in .env.local");
-
-      const ai = new GoogleGenAI({ apiKey });
-
-      // Prepend syllabus as a context exchange so it lives in conversation
-      // history rather than the system instruction (avoids system instruction size limits).
-      const syllabusContextPair: Content[] = poseData && poseData.length > 0 ? [] : syllabusContext;
-
-      const chat = ai.chats.create({
-        model: MODEL_NAME,
-        config: {
-          systemInstruction: systemInstruction,
-          tools,
-        },
-        history: [...syllabusContextPair, ...chatHistory]
-      });
-
-      result = await chat.sendMessage({ message: parts as any });
-
-      // Safety check - ensure we have a valid response
-      if (!result) {
-        throw new Error("Gemini API returned an empty response. This is usually due to Safety Filters or Quota Limits.");
-      }
-
-      const response = result.response || result;
-      text = typeof response.text === 'function' ? response.text() :
-        (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
-
-      groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      tokenUsage = response.usageMetadata?.totalTokenCount || 0;
-
-    } else {
+    // Always through /api/gemini: in local dev Vite runs the same handler
+    // (vite.config.ts), so models, fallback and errors match the live site
+    {
       const geminiController = new AbortController();
       const geminiTimeout = setTimeout(() => geminiController.abort(), 60_000);
       const response = await fetch('/api/gemini', {
@@ -978,6 +943,7 @@ ${BACKSWING_ITEM5_RULE}
 
       const data = await response.json();
       text = data.text || '';
+      answeredBy = data.model || answeredBy;
       groundingChunks = data.groundingChunks || [];
       tokenUsage = data.tokenUsage || 0;
 
@@ -1024,7 +990,7 @@ ${BACKSWING_ITEM5_RULE}
           cleanText,
           activeSkillName || undefined,
           {
-            model: MODEL_NAME,
+            model: answeredBy,
             tokenUsage,
             hasMedia: mediaAttachments && mediaAttachments.length > 0
           }
