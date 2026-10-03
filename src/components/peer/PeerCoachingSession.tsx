@@ -608,7 +608,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       try {
         const { videosKept } = await queuePairSubmission(submission);
         setIsOfflineSaved(true);
-        // Without the clips here, "Our work" and the Practice Station can't
+        // Without the clips here, "Our progress" and the Practice Station can't
         // play them (the rest of the pair's work is still saved)
         if (!videosKept) setSubmitError("This device is too full to keep your videos, but your ticks are saved. Tell your teacher.");
       } catch (e) {
@@ -1266,7 +1266,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 <span className="text-left leading-relaxed">
                   {nextIsCoachBot
                     ? 'Your videos are saved. Next, ask Coach Bot, then each of you submits your final recording.'
-                    : 'Your videos are saved. When you\'re happy with them, each of you submits your final recording from 📋 Our work.'}
+                    : 'Your videos are saved. When you\'re happy with them, each of you submits your final recording from ⭐ Our progress.'}
                 </span>
               </div>
             )}

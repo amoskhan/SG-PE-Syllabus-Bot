@@ -24,7 +24,7 @@ import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps } from './services/offline/offlineStorage';
+import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps } from './services/offline/offlineStorage';
 import { LessonStep, PairProgress, Screen, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
@@ -352,7 +352,7 @@ const App: React.FC = () => {
   // "back to AI Coach chat" path on the home screen so the student can see teacher feedback.
   const [activePairSubmission, setActivePairSubmission] = useState<PairSubmissionRecord | null>(null);
   // This device's copy of the pair's work (clips, ticks, analyses), and the
-  // Practice Station's "Film again" / "Our work" screens (#94)
+  // Practice Station's "Film again" / "Our progress" screens (#94)
   const [pairRecord, setPairRecord] = useState<PairSubmissionRecord | null>(null);
   const [refilmPerformer, setRefilmPerformer] = useState<Performer | null>(null);
   const [isPairReviewOpen, setIsPairReviewOpen] = useState(false);
@@ -848,7 +848,7 @@ const App: React.FC = () => {
     if (activePeerSessionData) addPracticeMessage(`✋ **${performer} kept their video.** Your teacher has it already.`);
   };
 
-  // After a redo request, "Film again" from Our work: into the Practice Station, then the camera
+  // After a redo request, "Film again" from Our progress: into the Practice Station, then the camera
   const handleRedoFilmAgain = async (performer: Performer) => {
     setIsPairReviewOpen(false);
     if (lessonUsesAi) await handleResumePracticeChat();
@@ -868,7 +868,7 @@ const App: React.FC = () => {
   };
 
   // Show a step on the pair's device. A peer assessment that's already saved
-  // opens "Our work" rather than recording again (#94).
+  // opens "Our progress" rather than recording again (#94).
   const openStep = (step: LessonStep, move: 'stay' | 'next' | 'back' = 'stay') => {
     if (step.kind === 'assess' && step.assess?.method === 'peer_assessment') {
       // Moving on into a peer assessment records anew; going back to one shows what was saved
@@ -914,7 +914,7 @@ const App: React.FC = () => {
       await handlePeerSessionToChat(data);
       loadPairRecord();
     } else if (next.kind === 'complete') {
-      // The last step: Our work, where each pupil submits their final recording
+      // The last step: Our progress, where each pupil submits their final recording
       await loadPairRecord();
       setAppMode('home_screen');
       setIsPairReviewOpen(true);
@@ -1088,6 +1088,9 @@ const App: React.FC = () => {
     }
 
     setActivePairSession(merged);
+    // Keep the lesson's skill and teacher with the saved pair: after a reload,
+    // the skill finds the pair's work and the teacher id files their uploads
+    saveActivePairSession(merged).catch(e => console.warn('[Pair] could not keep the check-in:', e));
     setIsPairCheckInOpen(false);
     // A fresh check-in starts at the first step (the pair's progress is keyed by lesson and pair)
     const steps = await refreshLessonSteps(merged.lessonId, merged.skillName || 'Overhand Throw');
@@ -1121,6 +1124,16 @@ const App: React.FC = () => {
       if (!session) return;
       if (isSameSingaporeDay(session.checkedInAt, new Date())) {
         setActivePairSession(session);
+        // Saved by an earlier version without the lesson's skill: without it,
+        // the pair's work isn't found and "Our progress" disappears
+        if (!session.skillName) {
+          fetchPupilLessonSteps(session.lessonId).then(lesson => {
+            if (!lesson?.skillName) return;
+            const fixed = { ...session, skillName: lesson.skillName };
+            setActivePairSession(fixed);
+            saveActivePairSession(fixed).catch(() => { /* ignore */ });
+          });
+        }
       } else {
         clearActivePairSession().catch(() => { /* ignore */ });
       }
@@ -2099,7 +2112,7 @@ const App: React.FC = () => {
     return <Dashboard onOpenChat={() => setShowDashboard(false)} />;
   }
 
-  // Before the home screen: "Our work" opens from the home banner
+  // Before the home screen: "Our progress" opens from the home banner
   if (isPairReviewOpen && activePairSession) {
     return (
       <PairWorkReview
@@ -2199,7 +2212,7 @@ const App: React.FC = () => {
                         <span>💬</span><span>AI Coach</span>
                       </button>
                     )}
-                    {/* Saved work opens "Our work"; recording again happens from the Practice Station (#94) */}
+                    {/* Saved work opens "Our progress"; recording again happens from the Practice Station (#94) */}
                     <button
                       type="button"
                       onClick={() => { markStep('assess', 'peer_assessment'); if (pairRecord || activePairSubmission) setIsPairReviewOpen(true); else setAppMode('peer_coaching'); }}
@@ -2209,7 +2222,7 @@ const App: React.FC = () => {
                           : 'flex-1 bg-white text-emerald-700 hover:bg-emerald-50'
                       }`}
                     >
-                      <span>{pairRecord || activePairSubmission ? '📋' : '📹'}</span><span>{pairRecord || activePairSubmission ? 'Our work' : 'Start recording'}</span>
+                      <span>{pairRecord || activePairSubmission ? '⭐' : '📹'}</span><span>{pairRecord || activePairSubmission ? 'Our progress' : 'Start recording'}</span>
                     </button>
                   </div>
                 </div>
@@ -2463,7 +2476,7 @@ const App: React.FC = () => {
                 )}
               </div>
               {user && <ModelPicker selectedModel={effectiveModel} onSelect={setSelectedModel} align="right" variant="dark" />}
-              {/* Back one step: for today's lessons, the peer assessment ("Our work" once it's saved) */}
+              {/* Back one step: for today's lessons, the peer assessment ("Our progress" once it's saved) */}
               {activePairSession && stepScreen.kind === 'step' && stepScreen.number > 1 && (
                 <button
                   type="button"

@@ -66,7 +66,7 @@ const PractiseFilm: React.FC = () => {
 export const LessonStepScreen: React.FC<LessonStepScreenProps> = ({ step, number, total, pairNumber, onNext, onBack, onHome }) => {
   const copy = COPY(step);
   return (
-    <div className="h-[100dvh] w-full bg-slate-900 text-white flex flex-col overflow-hidden">
+    <div className="dark h-[100dvh] w-full bg-slate-900 text-white flex flex-col overflow-hidden">
       <div className="shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 bg-slate-950/90 border-b border-slate-800 space-y-2">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-base font-black">🍎🍌 Pair #{pairNumber}</h1>
