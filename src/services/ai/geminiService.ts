@@ -11,6 +11,7 @@ import {
 } from '../../data/gymnasticsSkillsData';
 import type { SkillMode } from '../../types';
 import { getSyllabusContextMessage } from '../../data/syllabusContext';
+import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusSection } from '../../data/syllabusGuide';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 
 const MODEL_NAME = 'gemini-2.5-flash';
@@ -227,7 +228,9 @@ export const sendMessageToGemini = async (
   isVerified?: boolean,
   sessionId?: string,
   teacherProfile?: import('../../types').TeacherProfile | null,
-  skillMode: SkillMode = 'fms'
+  skillMode: SkillMode = 'fms',
+  // A question the syllabus guide placed: send this section, not the whole syllabus
+  syllabusSection?: SyllabusSection
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
   try {
     let enhancedMessage = currentMessage;
@@ -669,15 +672,18 @@ ${checklist.join('\n')}
         .replace('**FUNDAMENTAL MOVEMENT SKILLS CHECKLIST:**', '**GYMNASTICS LOCOMOTOR SKILLS CHECKLIST:**');
     }
 
+    const sectionOnly = !!syllabusSection && !(poseData && poseData.length > 0);
     let systemInstruction = poseData && poseData.length > 0
       ? modeAwareMotionInstruction
-      : FULL_SYSTEM_INSTRUCTION_TEMPLATE
-          .replace('{{FMS_CONTEXT}}', fmsBlock);
+      : sectionOnly
+        ? SECTION_SYSTEM_INSTRUCTION
+        : FULL_SYSTEM_INSTRUCTION_TEMPLATE
+            .replace('{{FMS_CONTEXT}}', fmsBlock);
 
     // RAG RETRIEVAL: Fetch extra context from uploaded PDFs
     let ragContext = '';
     try {
-      if (currentMessage && currentMessage.trim().length > 3) {
+      if (!sectionOnly && currentMessage && currentMessage.trim().length > 3) {
         console.log("🔍 Querying Vector DB for context...");
         const ragController = new AbortController();
         const ragTimeout = setTimeout(() => ragController.abort(), 30_000);
@@ -950,6 +956,19 @@ ${BACKSWING_ITEM5_RULE}
     let groundingChunks: GroundingChunk[] = [];
     let tokenUsage = 0;
 
+    // Text questions carry the syllabus as a context exchange: one section with
+    // the last few messages when the guide placed the question, else all of it
+    const syllabusContext: Content[] = sectionOnly
+      ? [
+          { role: 'user', parts: [{ text: sectionContextMessage(syllabusSection!) }] },
+          { role: 'model', parts: [{ text: `I have read ${syllabusSection!.title} and will answer from it.` }] },
+        ]
+      : [
+          { role: 'user', parts: [{ text: getSyllabusContextMessage() }] },
+          { role: 'model', parts: [{ text: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' }] },
+        ];
+    const chatHistory = sectionOnly ? recentHistory(history) : history;
+
     // --- HYBRID EXECUTOR ---
     // If LOCAL (DEV) -> Use Direct Client Key (Fast, no server setup needed)
     // If PROD -> Use Serverless Proxy (Secure, hides key)
@@ -961,10 +980,7 @@ ${BACKSWING_ITEM5_RULE}
 
       // Prepend syllabus as a context exchange so it lives in conversation
       // history rather than the system instruction (avoids system instruction size limits).
-      const syllabusContextPair: Content[] = poseData && poseData.length > 0 ? [] : [
-        { role: 'user', parts: [{ text: getSyllabusContextMessage() }] },
-        { role: 'model', parts: [{ text: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' }] },
-      ];
+      const syllabusContextPair: Content[] = poseData && poseData.length > 0 ? [] : syllabusContext;
 
       const chat = ai.chats.create({
         model: MODEL_NAME,
@@ -972,7 +988,7 @@ ${BACKSWING_ITEM5_RULE}
           systemInstruction: systemInstruction,
           tools: [{ googleSearch: {} }],
         },
-        history: [...syllabusContextPair, ...history]
+        history: [...syllabusContextPair, ...chatHistory]
       });
 
       result = await chat.sendMessage({ message: parts as any });
@@ -1000,11 +1016,7 @@ ${BACKSWING_ITEM5_RULE}
         body: JSON.stringify({
           history: poseData && poseData.length > 0
             ? history
-            : [
-                { role: 'user', parts: [{ text: getSyllabusContextMessage() }] },
-                { role: 'model', parts: [{ text: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' }] },
-                ...history,
-              ],
+            : [...syllabusContext, ...chatHistory],
           message: parts, // Send the array of text/images
           systemInstruction: systemInstruction,
           tools: [{ googleSearch: {} }], // Request search tool

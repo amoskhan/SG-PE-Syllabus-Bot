@@ -7,6 +7,7 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, SkillMode } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
+import { resolveSyllabusQuestion } from './data/syllabusGuide';
 import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
 import { computeVideoHash } from './services/videoAnalysisCache';
 
@@ -1884,6 +1885,30 @@ const App: React.FC = () => {
       return;
     }
 
+    // Syllabus questions (#112): the guide places a typed question in one section,
+    // so only that section goes to the AI. Video and Practice Station chats keep their flow.
+    const guide = !files?.length && !isVerifying && !isPupilPractice && !newMessage.hasMedia
+      && !currentMessages.some(m => m.poseData && m.poseData.length > 0)
+      ? resolveSyllabusQuestion(newMessage.text)
+      : null;
+    if (guide?.kind === 'mismatch') {
+      // Not taught at that level: say so and offer the real sections, no AI call needed
+      const reply: Message = {
+        id: (Date.now() + 1).toString(),
+        text: `${guide.message}
+[[SKILL_CHOICES: ${guide.choices.join(', ')}]]`,
+        sender: Sender.BOT,
+        timestamp: new Date(),
+      };
+      updateSessionAndSync(originatingSessionId, session => ({
+        ...session,
+        messages: [...session.messages, reply],
+        updatedAt: new Date(),
+      }));
+      return;
+    }
+    const syllabusSection = guide?.kind === 'section' ? guide.section : undefined;
+
     setIsLoading(true);
 
     try {
@@ -1973,7 +1998,8 @@ const App: React.FC = () => {
         teacherProfile,
         studentMemory,
         user?.id,  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
-        skillMode
+        skillMode,
+        syllabusSection
       );
       } finally {
         setPupilAiRequest(null);
@@ -2031,6 +2057,7 @@ const App: React.FC = () => {
         referenceImageURI: response.referenceImageURI,
         tokenUsage: response.tokenUsage,
         modelId: effectiveModel,
+        syllabusSectionId: syllabusSection?.id,
         studentId,
         performer: metadata?.performer,
         // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
@@ -2094,7 +2121,9 @@ const App: React.FC = () => {
         text: errorText,
         sender: Sender.BOT,
         timestamp: new Date(),
-        isError: true
+        isError: true,
+        // The section's text and PDF link still help when the AI couldn't answer
+        syllabusSectionId: syllabusSection?.id,
       };
       
       updateSessionAndSync(originatingSessionId, session => ({
