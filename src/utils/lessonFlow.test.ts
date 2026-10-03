@@ -46,6 +46,16 @@ describe('validateLesson', () => {
         expect(validateLesson(lesson([step('a', { skillName: 'Forward Roll' })])).map(p => p.code)).toEqual(['unknown_skill']);
     });
 
+    it('needs a Teach step to show something', () => {
+        const teach = (showCues: boolean, showReferenceImage: boolean): LessonStep =>
+            ({ id: 't', kind: 'teach', skillName: 'Kick', teach: { media: [], showCues, showReferenceImage } });
+        expect(validateLesson(lesson([teach(false, false)])).map(p => p.code)).toEqual(['teach_empty']);
+        expect(validateLesson(lesson([teach(true, false)]))).toEqual([]);
+        // Forward Roll has no reference picture, so ticking only that shows nothing
+        expect(validateLesson(lesson([{ ...teach(false, true), skillName: 'Forward Roll' }], { mainSkill: 'Forward Roll', skillArea: 'Gymnastics' }))
+            .map(p => p.code)).toEqual(['teach_empty']);
+    });
+
     it('needs an assess step to say how it is assessed', () => {
         expect(validateLesson(lesson([{ id: 'a', kind: 'assess', skillName: 'Kick' }])).map(p => p.code)).toEqual(['no_method']);
     });

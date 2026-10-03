@@ -1,5 +1,6 @@
 import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
 import { ALL_GYMNASTICS_SKILLS, isPartnerSkill } from '../data/gymnasticsSkillsData';
+import { teachPages } from './teachPages';
 
 // The rules of a lesson's steps (GLOSSARY.md: Lesson, Lesson Step; ADR 0002).
 // A teacher builds each lesson as an ordered list of Teach, Practise and Assess
@@ -69,7 +70,7 @@ export const canUseAiAnalysis = (skillName: string): { ok: boolean; reason?: str
   return { ok: true };
 };
 
-export type LessonProblemCode = 'no_steps' | 'no_main_skill' | 'unknown_skill' | 'no_method' | 'ai_not_allowed';
+export type LessonProblemCode = 'no_steps' | 'no_main_skill' | 'unknown_skill' | 'no_method' | 'ai_not_allowed' | 'teach_empty';
 
 export interface LessonProblem {
   code: LessonProblemCode;
@@ -91,6 +92,9 @@ export const validateLesson = (lesson: {
     const n = i + 1;
     if (!KNOWN_SKILLS[lesson.skillArea].includes(step.skillName)) {
       problems.push({ code: 'unknown_skill', stepIndex: i, message: `Step ${n}: choose a ${lesson.skillArea} skill.` });
+    }
+    if (step.kind === 'teach' && teachPages(step).length === 0 && !step.teach?.media?.length) {
+      problems.push({ code: 'teach_empty', stepIndex: i, message: `Step ${n}: choose something to show pupils, such as the cues.` });
     }
     if (step.kind === 'assess' && !step.assess?.method) {
       problems.push({ code: 'no_method', stepIndex: i, message: `Step ${n}: choose how it is assessed.` });
