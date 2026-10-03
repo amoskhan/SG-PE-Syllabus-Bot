@@ -8,6 +8,14 @@ export interface PeerCueResult {
   isObserved: boolean;
 }
 
+/** The lesson step a piece of evidence came from (#92), as it was when made. */
+export interface StepRef {
+  id: string;
+  number: number;    // 1-based position in the lesson then
+  label: string;     // e.g. "Peer assessment + Coach Bot" (lessonFlow.stepLabel)
+  skillName: string; // the skill that step assessed
+}
+
 export interface AiChatAnalysisEntry {
   analysisText: string;   // verbatim AI response the student sent
   skillName: string;
@@ -23,6 +31,7 @@ export interface AiChatAnalysisEntry {
   // Sent without an AI analysis because Coach Bot couldn't analyse it:
   // analysisText is a checklist for the teacher to grade
   teacherGrades?: boolean;
+  step?: StepRef; // the step this analysis was made in (#92)
 }
 
 /** A performer's re-do, sent with their final submission (#93). */
@@ -119,6 +128,11 @@ export interface PairSubmissionRecord {
   redoFilms?: {
     apple?: RedoFilms;
     banana?: RedoFilms;
+  };
+  // The step each performer's current peer ticks came from (#92)
+  peerSteps?: {
+    apple?: StepRef;
+    banana?: StepRef;
   };
   // Coach Bot couldn't analyse this performer (AI down, no internet): they
   // can still submit, and the teacher grades it

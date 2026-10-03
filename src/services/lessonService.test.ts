@@ -22,7 +22,7 @@ const row = (over: Partial<LessonRow> = {}): LessonRow => ({
 const steps: LessonStep[] = [
     { id: 'step-1', kind: 'teach', skillName: 'Kick', instruction: 'Watch the video', teach: { media: [{ type: 'video', path: 't/l/kick.mp4' }], showCues: true, showReferenceImage: false } },
     { id: 'step-2', kind: 'practise', skillName: 'Kick', practise: { films: true } },
-    { id: 'step-3', kind: 'assess', skillName: 'Kick', assess: { method: 'teacher_alone' } },
+    { id: 'step-3', kind: 'assess', skillName: 'Kick', assess: { method: 'peer_assessment' } },
 ];
 
 describe('lessonService row mapping', () => {

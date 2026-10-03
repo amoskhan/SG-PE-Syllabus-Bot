@@ -22,7 +22,8 @@ import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 export interface CompletedPeerSession {
   pairNumber: number;
   lessonId: string;
-  skillName: string;
+  skillName: string;       // the lesson's main skill: the pair's work is filed under it
+  assessSkillName?: string; // the skill this step assesses, if different (#92)
   pairPhoto: string;
   appleVideoBlob?: Blob;
   applePoseFrames: string[];
@@ -48,6 +49,9 @@ interface PeerCoachingSessionProps {
   // False when the next step isn't the Practice Station (#87): the last
   // screen moves on instead of offering Coach Bot
   nextIsCoachBot?: boolean;
+  // The skill this step assesses (#92): its cues are the checklist. The work
+  // is still saved under skillName, the lesson's main skill.
+  cueSkillName?: string;
 }
 
 export interface RefilmedAttempt {
@@ -78,7 +82,9 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   refilmPerformer,
   onRefilmDone,
   nextIsCoachBot = true,
+  cueSkillName,
 }) => {
+  const cueSkill = cueSkillName || skillName;
   // Banana performs in the APPLE_* steps (Apple films), Apple in the BANANA_* steps
   const [step, setStep] = useState<Step>(refilmPerformer === 'Apple' ? 'SWAP_PROMPT' : 'APPLE_INTRO');
   const [isRecording, setIsRecording] = useState(false);
@@ -110,15 +116,15 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const recordedChunksRef = useRef<Blob[]>([]);
   const uploadInputBananaRef = useRef<HTMLInputElement>(null); // file upload for Banana performer
   const uploadInputAppleRef = useRef<HTMLInputElement>(null);  // file upload for Apple performer
-  const allCues: PeerSyllabusCue[] = getAllCuesForSkill(skillName);
-  const coreCues: PeerSyllabusCue[] = getCoreCuesForSkill(skillName);
+  const allCues: PeerSyllabusCue[] = getAllCuesForSkill(cueSkill);
+  const coreCues: PeerSyllabusCue[] = getCoreCuesForSkill(cueSkill);
   const displayedCues = showFullChecklist ? allCues : coreCues;
 
   // Voice Guidance on Step Changes
   useEffect(() => {
     switch (step) {
       case 'APPLE_INTRO':
-        speechService.speak(`Apple, hold the iPad. Banana, stand back and get ready for ${skillName}!`);
+        speechService.speak(`Apple, hold the iPad. Banana, stand back and get ready for ${cueSkill}!`);
         break;
       case 'APPLE_REVIEW':
         speechService.speak('Apple, watch the replay. Did Banana follow the PE syllabus cues?');
@@ -135,7 +141,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         speechService.speak('Awesome teamwork! Both partners are done. Your videos are saved.');
         break;
     }
-  }, [step, skillName]);
+  }, [step, cueSkill]);
 
   const attachStreamToVideo = (videoEl: HTMLVideoElement | null, stream: MediaStream | null) => {
     if (!videoEl || !stream) return;
@@ -651,7 +657,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           <span className="text-xl">🏃‍♂️</span>
           <div>
             <h1 className="text-sm font-black tracking-wide text-indigo-400">PAIR #{pairNumber}</h1>
-            <p className="text-[11px] text-slate-400 font-semibold">{skillName}</p>
+            <p className="text-[11px] text-slate-400 font-semibold">{cueSkill}</p>
           </div>
         </div>
 
@@ -694,7 +700,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           <div className="w-full max-w-xl flex flex-col items-center justify-between gap-3">
             <div className="w-full bg-slate-800/90 rounded-2xl p-3 text-center border border-slate-700">
               <span className="text-xs font-bold text-red-300">🍎 Apple's Turn to Record:</span>
-              <p className="text-sm font-black text-white">Point camera at Banana performing {skillName}!</p>
+              <p className="text-sm font-black text-white">Point camera at Banana performing {cueSkill}!</p>
             </div>
 
             {/* Camera Viewport */}
@@ -987,7 +993,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           <div className="w-full max-w-xl flex flex-col items-center justify-between gap-3">
             <div className="w-full bg-slate-800/90 rounded-2xl p-3 text-center border border-slate-700">
               <span className="text-xs font-bold text-amber-400">🍌 Banana's Turn to Record:</span>
-              <p className="text-sm font-black text-white">Hold camera steady! Apple is performing {skillName}.</p>
+              <p className="text-sm font-black text-white">Hold camera steady! Apple is performing {cueSkill}.</p>
             </div>
 
             <div className="relative w-full h-[46dvh] min-h-56 max-h-[620px] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
@@ -1288,6 +1294,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     pairNumber,
                     lessonId,
                     skillName,
+                    assessSkillName: cueSkill,
                     pairPhoto,
                     appleVideoBlob: appleVideoBlob || undefined,
                     applePoseFrames,

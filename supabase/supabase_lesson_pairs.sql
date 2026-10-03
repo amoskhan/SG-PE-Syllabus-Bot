@@ -16,6 +16,9 @@
 -- when the teacher assigns or changes a pair, so work sent before the pairs
 -- were set still reaches the right student.
 --
+-- All of a lesson's work is filed under its main skill (the submission's
+-- skill_name), even when a step assessed another skill (#92).
+--
 -- A re-do (#93): when a performer films again after the teacher's redo
 -- request, their re-do gets a grading of its own (redo_of = that request), for
 -- the teacher to grade. The earlier grading and its teacher review stay, so
@@ -124,7 +127,7 @@ begin
         (student_id, teacher_id, skill_name, video_url, proficiency_level, analysis_text,
          model_id, summarised, source, lesson_id, submission_id, performer, redo_of, created_at)
       values
-        (v_student, v_sub.teacher_id, coalesce(v_entry ->> 'skillName', v_sub.skill_name), v_video,
+        (v_student, v_sub.teacher_id, v_sub.skill_name, v_video,
          null,  -- no AI on a re-do: the level is the teacher's
          coalesce(v_redo ->> 'checklistText', 'Re-do: graded by the teacher.'),
          'teacher', false, 'practice_station', v_sub.lesson_id, p_submission_id, p_performer, v_redo_of,
@@ -143,7 +146,7 @@ begin
       (student_id, teacher_id, skill_name, video_url, proficiency_level, analysis_text,
        model_id, summarised, source, lesson_id, submission_id, performer, created_at)
     values
-      (v_student, v_sub.teacher_id, coalesce(v_entry ->> 'skillName', v_sub.skill_name), v_video,
+      (v_student, v_sub.teacher_id, v_sub.skill_name, v_video,
        case when v_teacher_grades then null else v_level end, v_text,
        v_entry ->> 'modelUsed', false, 'practice_station', v_sub.lesson_id, p_submission_id, p_performer,
        coalesce((v_entry ->> 'submittedAt')::timestamptz, v_sub.created_at));
@@ -152,7 +155,7 @@ begin
     update public.skill_analyses set
       student_id = v_student, video_url = coalesce(v_video, video_url),
       proficiency_level = case when v_teacher_grades then null else v_level end, analysis_text = v_text,
-      skill_name = coalesce(v_entry ->> 'skillName', skill_name),
+      skill_name = v_sub.skill_name,
       model_id = v_entry ->> 'modelUsed',
       created_at = coalesce((v_entry ->> 'submittedAt')::timestamptz, created_at),
       teacher_criteria = null, teacher_level = null, teacher_reviewed_at = null,

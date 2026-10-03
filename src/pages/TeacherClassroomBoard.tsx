@@ -36,6 +36,7 @@ import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
 import { effectiveLevel, normaliseLevel } from '../utils/gradingReview';
 import { LessonStep, currentIndex, stepLabel } from '../utils/lessonFlow';
+import type { StepRef } from '../services/offline/offlineStorage';
 import { performerLock } from '../utils/submissionLock';
 import { Student, SkillAnalysis } from '../types';
 import { getStudents } from '../services/studentService';
@@ -143,10 +144,18 @@ const AttemptStatus: React.FC<{ sentAt?: string; redoRequestedAt?: string; hasVi
   return <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${tone}`}>{text}</span>;
 };
 
+/** "Step 2 · Peer assessment + Coach Bot", plus the step's skill when it isn't the main skill (#92). */
+const StepTag: React.FC<{ step?: StepRef; mainSkill: string }> = ({ step, mainSkill }) =>
+  step ? (
+    <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300">
+      Step {step.number} · {step.label}{step.skillName && step.skillName !== mainSkill ? ` · ${step.skillName}` : ''}
+    </span>
+  ) : null;
+
 /** Compares what the tray shows of a submission, so a refresh that changed nothing doesn't reset its videos. */
 const reviewSignature = (s: PairSubmissionRecord) => JSON.stringify([
   s.appleRole.videoUrl, s.bananaRole.videoUrl, s.appleRole.cues, s.bananaRole.cues,
-  s.aiChatAnalysis, s.firstAttempt && { apple: s.firstAttempt.apple?.videoUrl, banana: s.firstAttempt.banana?.videoUrl },
+  s.aiChatAnalysis, s.firstAttempt && { apple: s.firstAttempt.apple?.videoUrl, banana: s.firstAttempt.banana?.videoUrl }, s.peerSteps,
   s.aiTeacherReport?.generatedAt, s.appleSentAt, s.bananaSentAt, s.redoRequestedAt, s.status, s.teacherFeedback, s.teacherStar,
 ]);
 
@@ -1049,11 +1058,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   </span>
                 </div>
                 {pupilPicker(activeReviewSub, 'banana')}
-                <AttemptStatus
-                  sentAt={activeReviewSub.bananaSentAt}
-                  redoRequestedAt={activeReviewSub.redoRequestedAt}
-                  hasVideo={!!(activeReviewSub.appleRole.videoBlob || activeReviewSub.appleRole.videoUrl)}
-                />
+                <div className="flex flex-wrap gap-1.5">
+                  <AttemptStatus
+                    sentAt={activeReviewSub.bananaSentAt}
+                    redoRequestedAt={activeReviewSub.redoRequestedAt}
+                    hasVideo={!!(activeReviewSub.appleRole.videoBlob || activeReviewSub.appleRole.videoUrl)}
+                  />
+                  <StepTag step={activeReviewSub.peerSteps?.banana} mainSkill={activeReviewSub.skillName} />
+                </div>
                 <VideoBlobPlayer
                   blob={activeReviewSub.appleRole.videoBlob}
                   videoUrl={activeReviewSub.appleRole.videoUrl}
@@ -1092,11 +1104,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   </span>
                 </div>
                 {pupilPicker(activeReviewSub, 'apple')}
-                <AttemptStatus
-                  sentAt={activeReviewSub.appleSentAt}
-                  redoRequestedAt={activeReviewSub.redoRequestedAt}
-                  hasVideo={!!(activeReviewSub.bananaRole.videoBlob || activeReviewSub.bananaRole.videoUrl)}
-                />
+                <div className="flex flex-wrap gap-1.5">
+                  <AttemptStatus
+                    sentAt={activeReviewSub.appleSentAt}
+                    redoRequestedAt={activeReviewSub.redoRequestedAt}
+                    hasVideo={!!(activeReviewSub.bananaRole.videoBlob || activeReviewSub.bananaRole.videoUrl)}
+                  />
+                  <StepTag step={activeReviewSub.peerSteps?.apple} mainSkill={activeReviewSub.skillName} />
+                </div>
                 <VideoBlobPlayer
                   blob={activeReviewSub.bananaRole.videoBlob}
                   videoUrl={activeReviewSub.bananaRole.videoUrl}
@@ -1221,7 +1236,15 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                         </span>
                       </div>
                       <div className="p-4 bg-slate-50 dark:bg-zinc-900/60">
-                        <p className="text-[11px] font-bold text-slate-400 mb-1.5">{entry.skillName}</p>
+                        <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                          <p className="text-[11px] font-bold text-slate-400">{entry.skillName}</p>
+                          <StepTag step={entry.step} mainSkill={activeReviewSub.skillName} />
+                        </div>
+                        {entry.skillName && entry.skillName !== activeReviewSub.skillName && (
+                          <p className="mb-2 text-[11px] text-slate-500 dark:text-slate-400">
+                            Graded as {entry.skillName}. Filed under {activeReviewSub.skillName}, the lesson's main skill, on the pupil's record.
+                          </p>
+                        )}
                         {/* The pupil filmed again after this analysis: show the attempt it was about (#94) */}
                         {entry.analysedClip && (
                           <div className="mb-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900">
