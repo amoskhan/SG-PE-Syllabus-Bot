@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Analytics } from "@vercel/analytics/react";
 import SessionSidebar from './components/layout/SessionSidebar';
 import ChatInput from './components/chat/ChatInput';
@@ -24,7 +24,10 @@ import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken } from './services/offline/offlineStorage';
+import { getActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress } from './services/offline/offlineStorage';
+import { LessonStep, PairProgress, findLessonStep, nextScreen, progressFor, stepsOrLegacy } from './utils/lessonFlow';
+import { StepBar } from './components/steps/StepBar';
+import { LessonStepScreen } from './components/steps/LessonStepScreen';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
@@ -320,7 +323,7 @@ const App: React.FC = () => {
   const [skillMode, setSkillMode] = useState<SkillMode>('fms');
 
   // Seesaw-Style Classroom & Peer-Coaching States
-  const [appMode, setAppMode] = useState<'home_screen' | 'chat' | 'teacher_board' | 'peer_coaching'>('home_screen');
+  const [appMode, setAppMode] = useState<'home_screen' | 'chat' | 'teacher_board' | 'peer_coaching' | 'pupil_step'>('home_screen');
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isPairCheckInOpen, setIsPairCheckInOpen] = useState(false);
   const [scannedLessonData, setScannedLessonData] = useState<{ lessonId: string; title: string; skillName: string; teacherId?: string; pairCount?: number }>({
@@ -353,6 +356,27 @@ const App: React.FC = () => {
   const [pairRecord, setPairRecord] = useState<PairSubmissionRecord | null>(null);
   const [refilmPerformer, setRefilmPerformer] = useState<Performer | null>(null);
   const [isPairReviewOpen, setIsPairReviewOpen] = useState(false);
+
+  // ── The pupil step runner (#85; lessonFlow.ts) ────────────────────────────
+  // A pair's device walks the lesson's steps in order. Pupil devices can't
+  // fetch a lesson's steps yet, so every lesson runs its legacy steps (peer
+  // assessment, then the Practice Station), which is today's flow.
+  const pairSkillName = activePairSession?.skillName || scannedLessonData.skillName || 'Overhand Throw';
+  const lessonSteps: LessonStep[] = useMemo(() => stepsOrLegacy(null, pairSkillName), [pairSkillName]);
+  const [pairProgress, setPairProgressState] = useState<PairProgress | null>(null);
+  useEffect(() => {
+    setPairProgressState(activePairSession ? getPairProgress(activePairSession.lessonId, activePairSession.pairNumber) : null);
+  }, [activePairSession?.lessonId, activePairSession?.pairNumber]);
+  const setPairProgress = (progress: PairProgress) => {
+    setPairProgressState(progress);
+    if (activePairSession) savePairProgress(activePairSession.lessonId, activePairSession.pairNumber, progress);
+  };
+  const stepScreen = nextScreen(lessonSteps, pairProgress);
+  /** Mark the pair as on the first step of this kind (when a screen is opened directly). */
+  const markStep = (kind: LessonStep['kind'], method?: NonNullable<LessonStep['assess']>['method']) => {
+    const i = findLessonStep(lessonSteps, kind, method);
+    if (i >= 0) setPairProgress({ stepId: lessonSteps[i].id, index: i });
+  };
 
   const handlePeerSessionToChat = async (data: CompletedPeerSession) => {
     setPupilUsage({ apple: {}, banana: {} });
@@ -787,6 +811,45 @@ const App: React.FC = () => {
     setAppMode('peer_coaching');
   };
 
+  // Show a step on the pair's device. A peer assessment that's already saved
+  // opens "Our work" rather than recording again (#94).
+  const openStep = (step: LessonStep) => {
+    if (step.kind === 'assess' && step.assess?.method === 'peer_assessment') {
+      if (pairRecord || activePairSubmission) {
+        setAppMode('home_screen');
+        setIsPairReviewOpen(true);
+      } else {
+        setAppMode('peer_coaching');
+      }
+    } else if (step.kind === 'assess' && step.assess?.method === 'ai_analysis') {
+      handleResumePracticeChat();
+    } else {
+      setAppMode('pupil_step');
+    }
+  };
+
+  const goToStep = (move: 'stay' | 'next' | 'back') => {
+    const screen = nextScreen(lessonSteps, pairProgress, move);
+    setPairProgress(progressFor(screen, lessonSteps));
+    if (screen.kind === 'complete') setAppMode('home_screen');
+    else openStep(screen.step);
+  };
+
+  // A peer assessment is done: on to the next step. Into the Practice Station
+  // straight away (with the automatic AI peer feedback) when that comes next.
+  const handlePeerStepDone = async (data: CompletedPeerSession) => {
+    const next = nextScreen(lessonSteps, pairProgress, 'next');
+    if (next.kind === 'step' && next.step.kind === 'assess' && next.step.assess?.method === 'ai_analysis') {
+      setPairProgress(progressFor(next, lessonSteps));
+      await handlePeerSessionToChat(data);
+      loadPairRecord();
+    } else {
+      setActivePeerSessionData(data);
+      await loadPairRecord();
+      goToStep('next');
+    }
+  };
+
   // While in a Practice Station, poll the pair's submission row for a teacher comment.
   useEffect(() => {
     const src = activePairSession ?? (activePeerSessionData
@@ -870,6 +933,7 @@ const App: React.FC = () => {
     if (!pair) return;
     const skillName = pair.skillName || activePairSubmission?.skillName || scannedLessonData.skillName || 'Overhand Throw';
     const sub = activePairSubmission;
+    markStep('assess', 'ai_analysis');
 
     if (activePeerSessionData?.pairNumber !== pair.pairNumber) setPupilUsage({ apple: {}, banana: {} });
     setActivePeerSessionData({
@@ -948,7 +1012,14 @@ const App: React.FC = () => {
 
     setActivePairSession(merged);
     setIsPairCheckInOpen(false);
-    setAppMode('peer_coaching');
+    // A fresh check-in starts at the first step (the pair's progress is keyed by lesson and pair)
+    const steps = stepsOrLegacy(null, merged.skillName || 'Overhand Throw');
+    const first = nextScreen(steps, null);
+    if (first.kind === 'step') {
+      savePairProgress(merged.lessonId, merged.pairNumber, progressFor(first, steps));
+      setPairProgressState(progressFor(first, steps));
+    }
+    setAppMode(first.kind === 'step' && first.step.kind !== 'assess' ? 'pupil_step' : 'peer_coaching');
   };
 
   const handleSignalPairNeedsHelp = () => {
@@ -1961,7 +2032,7 @@ const App: React.FC = () => {
         onKeep={handleKeep}
         onFilmAgain={handleRedoFilmAgain}
         onOpenPracticeStation={() => { setIsPairReviewOpen(false); handleResumePracticeChat(); }}
-        onStartRecording={() => { setIsPairReviewOpen(false); setAppMode('peer_coaching'); }}
+        onStartRecording={() => { setIsPairReviewOpen(false); markStep('assess', 'peer_assessment'); setAppMode('peer_coaching'); }}
         onClose={() => setIsPairReviewOpen(false)}
       />
     );
@@ -2012,6 +2083,7 @@ const App: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-black text-sm leading-tight">Pair #{activePairSession.pairNumber} — active session</p>
                       <p className="text-emerald-100/90 text-xs font-medium truncate">
+                        {stepScreen.kind === 'step' && lessonSteps.length > 1 && `Step ${stepScreen.number} of ${stepScreen.total} · `}
                         {activePairSubmission && redoIsOpen(activePairSubmission)
                           ? '🔄 Your teacher asked you to try again'
                           : stageFor('Apple').stage === 'submitted' && stageFor('Banana').stage === 'submitted'
@@ -2045,7 +2117,7 @@ const App: React.FC = () => {
                     {/* Saved work opens "Our work"; recording again happens from the Practice Station (#94) */}
                     <button
                       type="button"
-                      onClick={() => (pairRecord || activePairSubmission ? setIsPairReviewOpen(true) : setAppMode('peer_coaching'))}
+                      onClick={() => { markStep('assess', 'peer_assessment'); if (pairRecord || activePairSubmission) setIsPairReviewOpen(true); else setAppMode('peer_coaching'); }}
                       className={`px-3 py-2.5 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                         pairRecord || activePairSubmission
                           ? 'flex-1 bg-emerald-500/40 hover:bg-emerald-500/60 text-white border border-emerald-300/40'
@@ -2182,9 +2254,37 @@ const App: React.FC = () => {
     );
   }
 
-  if (appMode === 'peer_coaching' && activePairSession) {
+  if (appMode === 'pupil_step' && activePairSession && stepScreen.kind === 'step') {
     return (
       <div className="relative h-[100dvh] w-full overflow-hidden bg-slate-900">
+        <LessonStepScreen
+          step={stepScreen.step}
+          number={stepScreen.number}
+          total={stepScreen.total}
+          pairNumber={activePairSession.pairNumber}
+          onNext={() => goToStep('next')}
+          onBack={() => goToStep('back')}
+          onHome={() => setAppMode('home_screen')}
+        />
+        <TeacherHelpBeacon pairNumber={activePairSession.pairNumber} onSignalHelp={handleSignalPairNeedsHelp} />
+      </div>
+    );
+  }
+
+  if (appMode === 'peer_coaching' && activePairSession) {
+    return (
+      <div className="relative h-[100dvh] w-full overflow-hidden bg-slate-900 flex flex-col">
+        {/* The step bar, except when filming one performer again (#94) */}
+        {!refilmPerformer && stepScreen.kind === 'step' && lessonSteps.length > 1 && (
+          <StepBar
+            step={stepScreen.step}
+            number={stepScreen.number}
+            total={stepScreen.total}
+            onBack={() => goToStep('back')}
+            className="shrink-0 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 bg-slate-950 border-b border-slate-800"
+          />
+        )}
+        <div className="flex-1 min-h-0">
         <PeerCoachingSession
           pairNumber={activePairSession.pairNumber}
           lessonId={activePairSession.lessonId}
@@ -2197,16 +2297,14 @@ const App: React.FC = () => {
             // The pair stays active for the lesson day, so a redo request shows on Home
             setAppMode('home_screen');
           }}
-          onSendToCoachBot={async (data) => {
-            await handlePeerSessionToChat(data);
-            loadPairRecord();
-          }}
+          onSendToCoachBot={handlePeerStepDone}
           onExit={() => {
             const wasRefilm = !!refilmPerformer;
             setRefilmPerformer(null);
             setAppMode(wasRefilm ? 'chat' : 'home_screen');
           }}
         />
+        </div>
         <TeacherHelpBeacon pairNumber={activePairSession.pairNumber} onSignalHelp={handleSignalPairNeedsHelp} />
       </div>
     );
@@ -2270,20 +2368,24 @@ const App: React.FC = () => {
                 <p className="text-sm sm:text-base font-black text-white truncate">
                   🍎🍌 Pair {activePeerSessionData.pairNumber} · {activePeerSessionData.skillName}
                 </p>
-                {(appleTotal > 0 || bananaTotal > 0) && (
+                {(appleTotal > 0 || bananaTotal > 0 || (activePairSession && lessonSteps.length > 1)) && (
                   <p className="text-[11px] sm:text-xs font-bold text-slate-300 truncate">
-                    Partner ticks: 🍎 {appleMet}/{appleTotal} · 🍌 {bananaMet}/{bananaTotal}
+                    {activePairSession && stepScreen.kind === 'step' && lessonSteps.length > 1 && `Step ${stepScreen.number} of ${stepScreen.total} · `}
+                    {(appleTotal > 0 || bananaTotal > 0) && `Partner ticks: 🍎 ${appleMet}/${appleTotal} · 🍌 ${bananaMet}/${bananaTotal}`}
                   </p>
                 )}
               </div>
               {user && <ModelPicker selectedModel={effectiveModel} onSelect={setSelectedModel} align="right" variant="dark" />}
-              <button
-                type="button"
-                onClick={() => setAppMode('peer_coaching')}
-                className="h-10 px-3.5 shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white rounded-xl text-sm font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>🎥</span><span>Record</span>
-              </button>
+              {/* Back one step: for today's lessons, the peer assessment ("Our work" once it's saved) */}
+              {activePairSession && stepScreen.kind === 'step' && stepScreen.number > 1 && (
+                <button
+                  type="button"
+                  onClick={() => goToStep('back')}
+                  className="h-10 px-3.5 shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white rounded-xl text-sm font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>←</span><span>Step {stepScreen.number - 1}</span>
+                </button>
+              )}
               {/* Teachers testing the pupil flow can jump back to their board */}
               {user && (
                 <button
