@@ -57,9 +57,9 @@ Dual-write pattern: localStorage (instant UX) + Supabase (cloud sync). On page l
 
 ### Syllabus Q&A System
 
-The **syllabus guide** (`src/data/syllabusGuide.ts`, `guideStep()`) asks up to 4 chip questions (Level → Area → Focus → Need, each with "Just answer"), built by the app with no AI call, then sends the AI one section plus the last 6 messages. Its state rides on bot messages (`Message.guide`), so a reply or follow-up carries on from it. Questions it can't place (e.g. pedagogy and assessment, until #117) still get the whole syllabus. Covers Primary, Secondary and Pre-U.
+The **syllabus guide** (`src/data/syllabusGuide.ts`, `guideStep()`) asks up to 4 chip questions (Level → Area → Focus → Need, each with "Just answer"), built by the app with no AI call, then sends the AI one section plus the last 6 messages. Its state rides on bot messages (`Message.guide`), so a reply or follow-up carries on from it. It covers Primary, Secondary, Pre-U and Teaching & Assessment (pedagogy, assessment, glossary). The whole syllabus is never sent: a message the guide doesn't place (e.g. "hello") goes to the AI with no syllabus, and an uncovered question gets the "Search the web" button.
 
-The entire 2024 PE Syllabus is stored as text in `src/data/syllabusData.ts`. `src/data/syllabusContext.ts` (`getSyllabusContextMessage()`) pulls out the relevant sections and sends them with the conversation. The FMS database with 10 skills and proficiency rubrics is in `src/data/fundamentalMovementSkillsData.ts`.
+The entire 2024 PE Syllabus is stored as text in `src/data/syllabusData.ts`; the syllabus guide cuts its sections out by their headings and page footers. The FMS database with 10 skills and proficiency rubrics is in `src/data/fundamentalMovementSkillsData.ts`.
 
 **Special response tags** the frontend parses:
 - `[[SKILL_CHOICES: Option1, Option2]]` → rendered as clickable chip buttons
@@ -168,7 +168,6 @@ Y-axis convention: **0 = top of frame, 1 = bottom**. So a smaller Y value = high
 | `src/components/chat/ChatMessage.tsx` | Renders a single message — parses `[[SKILL_CHOICES]]` into chip buttons |
 | `src/data/fundamentalMovementSkillsData.ts` | FMS skill checklists, proficiency rubric, reference image paths |
 | `src/data/syllabusData.ts` | Full 2024 MOE PE Syllabus as plain text |
-| `src/data/syllabusContext.ts` | Pulls syllabus sections out of `syllabusData.ts` for the AI (`getSyllabusContextMessage()`) |
 | `src/data/syllabusGuide.ts` | Places a typed syllabus question in ONE section (text, printed/PDF page) so only that section goes to the AI; the hosted PDF is `public/syllabus/pe-syllabus-2024.pdf` (PDF page = printed + 5) |
 | `src/data/skillExamples.ts` | Few-shot grading examples injected into Phase 2 prompts |
 | `src/hooks/useAuth.ts` | Supabase Auth with Google OAuth |

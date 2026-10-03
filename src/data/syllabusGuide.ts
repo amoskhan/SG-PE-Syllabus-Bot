@@ -69,9 +69,10 @@ const cleanText = (from: number, to: number): string => {
 // ── Sections ────────────────────────────────────────────────────────────────
 const DASH = String.raw`\s*[–—\-?�]\s*`;
 
-type Area = 'athletics' | 'dance' | 'games' | 'gymnastics' | 'swimming' | 'pa' | 'outdoor' | 'phs' | 'cce';
+type Area = 'athletics' | 'dance' | 'games' | 'gymnastics' | 'swimming' | 'pa' | 'outdoor' | 'phs' | 'cce' | 'pedagogy' | 'assessment' | 'glossary';
 type Focus = 'net-barrier' | 'striking-fielding' | 'territorial-invasion';
-type Stage = 'primary' | 'secondary' | 'preu';
+/** 'ta' is Teaching & Assessment: pedagogy, assessment and the glossary, for every level */
+type Stage = 'primary' | 'secondary' | 'preu' | 'ta';
 
 const AREA_NAMES: Record<Area, string> = {
   athletics: 'Athletics',
@@ -83,6 +84,9 @@ const AREA_NAMES: Record<Area, string> = {
   outdoor: 'Outdoor Education',
   phs: 'Physical Health and Safety',
   cce: 'Character and Citizenship Education',
+  pedagogy: 'Pedagogy',
+  assessment: 'Assessment',
+  glossary: 'Glossary',
 };
 
 /** The learning areas each stage has, in the syllabus's order */
@@ -90,6 +94,7 @@ const STAGE_AREAS: Record<Stage, Area[]> = {
   primary: ['athletics', 'dance', 'games', 'gymnastics', 'swimming', 'outdoor', 'phs', 'cce'],
   secondary: ['pa', 'outdoor', 'phs', 'cce'],
   preu: ['pa', 'phs', 'cce'],
+  ta: ['pedagogy', 'assessment', 'glossary'],
 };
 
 const FOCUS_NAMES: Record<Focus, string> = {
@@ -140,6 +145,23 @@ const OE_MODULES: [string, string, RegExp][] = [
 ];
 const moduleId = (module: string) => `sec-oe-${module.toLowerCase().replace(/\s+/g, '-')}`;
 
+/** The pedagogy chapter's parts: chip, heading in the text, words that name it */
+const PEDAGOGY_PARTS: [string, string, RegExp][] = [
+  ['Teaching practices', 'PEDAGOGY', /\bteaching practices?\b|\bSTP\b|\bcurriculum philosophy\b|\blesson observation\b/i],
+  ['Understanding students', 'UNDERSTANDING STUDENTS', /\bunderstanding students\b|\bspecial (educational )?needs\b/i],
+  ['Teaching styles (Mosston)', 'PEDAGOGICAL APPROACHES AND STRATEGIES', /\bmosston\b|\bspectrum\b|\bteaching styles?\b/i],
+  ['Movement Education', 'Movement Education', /\bmovement education\b/i],
+  ['Game-based approach', 'Game-Based Approach', /\bgame[- ]based\b|\bTGfU\b|\bgames? sense\b|\bteaching games for understanding\b/i],
+  ['Place-responsive pedagogy', 'Place-Responsive Pedagogy', /\bplace[- ]responsive\b/i],
+  ['Nonlinear pedagogy', 'Nonlinear Pedagogy', /\bnon-?linear\b/i],
+  ['Experiential learning', 'Experiential Learning Approach', /\bexperiential\b/i],
+  ['Inquiry-based learning', 'Inquiry-Based Learning Approach', /\binquiry\b/i],
+  ['Direct instruction', 'Direct Instruction', /\bdirect instruction\b/i],
+  ['Affective learning', 'LEVERAGING AFFECTIVE LEARNING OPPORTUNITIES', /\baffective\b/i],
+  ['Use of technology', 'USE OF TECHNOLOGY IN LEARNING', /\btechnology\b|\bICT\b|\bdigital\b/i],
+];
+const pedagogyId = (part: string) => `ta-pedagogy-${part.toLowerCase().replace(/[^a-z]+/g, '-').replace(/-$/, '')}`;
+
 /** Primary headings as they appear in the text, each on a line of its own. */
 const LEVEL_HEADINGS: Partial<Record<Area, string>> = {
   athletics: 'ATHLETICS',
@@ -168,7 +190,10 @@ const lineStart = (text: string, from: number): number => {
 const PRIMARY_START = TEXT.indexOf('2. PRIMARY LEVEL SYLLABUS CONTENT\n2.1 Overview');
 const SECONDARY_START = TEXT.indexOf('3. SECONDARY LEVEL SYLLABUS CONTENT\n3.1 Overview');
 const PREU_START = TEXT.indexOf('4. PRE-UNIVERSITY LEVEL SYLLABUS CONTENT', SECONDARY_START);
-const PEDAGOGY_START = lineStart('PEDAGOGY\n\nSINGAPORE CURRICULUM PHILOSOPHY', PREU_START);
+const PEDAGOGY_START = lineStart('5.\n\nPEDAGOGY\n', PREU_START);
+const ASSESSMENT_START = lineStart('6.\n\nASSESSMENT\n', PEDAGOGY_START);
+const GLOSSARY_START = lineStart('7.\n\nGLOSSARY\n', ASSESSMENT_START);
+const REFERENCES_START = lineStart('8.\n\nREFERENCES\n', GLOSSARY_START);
 
 /**
  * Where each section starts. A section runs to the next of these (or of the
@@ -223,6 +248,16 @@ start('sec-cce', TEXT.indexOf('3.3 Character and Citizenship Education', SECONDA
 start('preu-phs', lineStart('LEARNING OUTCOMES\n', lineStart('Physical Health and Safety\nPhysical Health and Safety ', PREU_START)), 'Pre-University – Physical Health and Safety: learning outcomes');
 start('preu-cce', TEXT.indexOf('4.3 Character and Citizenship Education', PREU_START), 'Character and Citizenship Education: developmental milestones (Pre-University)');
 
+// Teaching & Assessment: the pedagogy chapter in parts, then assessment and the glossary
+for (const [part, heading] of PEDAGOGY_PARTS) {
+  start(pedagogyId(part), part === 'Teaching practices' ? PEDAGOGY_START : lineStart(`${heading}\n`, PEDAGOGY_START), `Pedagogy: ${part}`);
+}
+start('ta-assessment', ASSESSMENT_START, 'Assessment in PE: purpose, principles, the four-stage process and reporting');
+start('ta-glossary', GLOSSARY_START, 'Glossary of terms');
+
+// The syllabus's introduction answers a question with nothing chosen yet
+start('syllabus-overview', TEXT.indexOf('1. INTRODUCTION\n1.1 Curriculum Framework'), 'Introduction: the PE curriculum framework');
+
 /**
  * Each area opens with its name as a heading, then a sentence starting with
  * that name ("Dance\nDance develops…"). These end the last section before them.
@@ -230,11 +265,12 @@ start('preu-cce', TEXT.indexOf('4.3 Character and Citizenship Education', PREU_S
 const AREA_INTROS = [...TEXT.matchAll(/\n(Dance|Games and Sports|Gymnastics|Swimming|Outdoor Education|Physical Health and Safety)\n\1 /g)]
   .map((m) => (m.index ?? 0) + 1);
 
-const CUTS = [...STARTS.map((s) => s.index), ...AREA_INTROS, SECONDARY_START, PREU_START, PEDAGOGY_START].sort((a, b) => a - b);
+const CUTS = [...STARTS.map((s) => s.index), ...AREA_INTROS, PRIMARY_START, SECONDARY_START, PREU_START, PEDAGOGY_START, ASSESSMENT_START, GLOSSARY_START, REFERENCES_START]
+  .sort((a, b) => a - b);
 
 const SECTIONS = new Map<string, SyllabusSection>(
   STARTS.map(({ id, index, title }) => {
-    const end = CUTS.find((c) => c > index) ?? PEDAGOGY_START;
+    const end = CUTS.find((c) => c > index) ?? REFERENCES_START;
     const printedPage = printedPageAt(index);
     return [id, { id, title, printedPage, pdfPage: printedPage + PDF_PAGE_OFFSET, text: cleanText(index, end) }];
   }),
@@ -246,13 +282,17 @@ export const getSyllabusSection = (id: string): SyllabusSection | undefined => S
 const AREA_WORDS: [Area, RegExp][] = [
   ['athletics', /\bathletics?\b/i],
   ['dance', /\bdanc(e|es|ing)\b/i],
-  ['games', /\bgames?\b|\bsports?\b/i],
+  ['games', /\bgames?\b(?![- ]based)|\bsports?\b/i],
   ['gymnastics', /\bgym(nastics?)?\b/i],
   ['swimming', /\bswim(ming)?\b|\baquatics?\b/i],
   ['pa', /\bphysical activit(y|ies)\b/i],
   ['outdoor', /\boutdoor\b|\bOE\b|\borienteering\b|\bcamping\b/],
   ['phs', /\bphysical health\b|\bPHS\b|\bhealth and safety\b|\bnutrition\b|\bhygiene\b/i],
   ['cce', /\bCCE\b|\bcharacter\b|\bcitizenship\b|\bvalues\b|\bsocial[- ]emotional\b/i],
+  ['pedagogy', /\bpedagog\w*|\bteaching (approach|strateg)\w*/i],
+  // "Assessment" alone is what a teacher needs for an area; these ask about assessment itself
+  ['assessment', /\bassessment (principles|purpose|process)\b|\bfour[- ]stage\b|\bqualitative descriptors?\b|\bQDs?\b|\bhow (should|do|can) (i|we|teachers) assess (in )?PE\b|\b(PE|holistic) assessment\b|\bassessment in PE\b/i],
+  ['glossary', /\bglossary\b|\bdefin(e|ition)s?\b|\bwhat is meant by\b/i],
 ];
 
 const CATEGORY_WORDS: [Focus, RegExp][] = [
@@ -302,11 +342,11 @@ const SKILL_NAMES = new RegExp(`\\b(${[...ALL_FMS_SKILLS, ...ALL_GYMNASTICS_SKIL
  * A level as the teacher picks it. 'Primary', 'Secondary' and 'P5/6' stand
  * for several levels that share one answer.
  */
-export type Level = 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6' | 'P5/6' | 'Primary' | 'Lower Sec' | 'Upper Sec' | 'Secondary' | 'Pre-U';
-const LEVELS: Level[] = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'Lower Sec', 'Upper Sec', 'Pre-U'];
+export type Level = 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6' | 'P5/6' | 'Primary' | 'Lower Sec' | 'Upper Sec' | 'Secondary' | 'Pre-U' | 'Teaching & Assessment';
+const LEVELS: Level[] = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'Lower Sec', 'Upper Sec', 'Pre-U', 'Teaching & Assessment'];
 
 const stageOf = (level: Level): Stage =>
-  level === 'Pre-U' ? 'preu' : level === 'Lower Sec' || level === 'Upper Sec' || level === 'Secondary' ? 'secondary' : 'primary';
+  level === 'Teaching & Assessment' ? 'ta' : level === 'Pre-U' ? 'preu' : level === 'Lower Sec' || level === 'Upper Sec' || level === 'Secondary' ? 'secondary' : 'primary';
 /** The primary year, if the level is one */
 const yearOf = (level?: Level): number | undefined => (level && /^P[1-6]$/.test(level) ? Number(level[1]) : undefined);
 /** The levels a picked level stands for */
@@ -317,6 +357,7 @@ const coveredBy = (level: Level): Level[] =>
         : [level];
 
 const levelOf = (q: string): Level | undefined => {
+  if (/\bteaching (&|and) assessment\b/i.test(q)) return 'Teaching & Assessment';
   if (/\bpre-?u(ni(versity)?)?\b|\bjc\b|\bjunior college\b|\bmillennia\b|\bpost[- ]sec(ondary)?\b/i.test(q)) return 'Pre-U';
   const p = q.match(/\b(?:p|pri|primary)\s*([1-6])\b/i);
   if (p) return `P${p[1]}` as Level;
@@ -335,6 +376,7 @@ interface Parsed {
   categories: Focus[];
   sport?: string;
   module?: string;
+  part?: string;
   group?: string;
   need?: Need;
 }
@@ -343,10 +385,17 @@ const parse = (q: string): Parsed => {
   const categories = CATEGORY_WORDS.filter(([, re]) => re.test(q)).map(([f]) => f);
   const sport = SPORTS.find(([, , , re]) => re.test(q))?.[0];
   const module = OE_MODULES.find(([, , re]) => re.test(q))?.[0];
-  const areas = new Set(AREA_WORDS.filter(([, re]) => re.test(q)).map(([a]) => a));
+  const part = PEDAGOGY_PARTS.find(([, , re]) => re.test(q))?.[0];
+  const chip = (Object.keys(AREA_NAMES) as Area[]).find((a) => AREA_NAMES[a].toLowerCase() === q.trim().toLowerCase());
+  const areas = new Set(chip ? [chip] : AREA_WORDS.filter(([, re]) => re.test(q)).map(([a]) => a));
   if (categories.length) areas.add('games');
   if (sport) areas.add(sport === 'track-and-field' ? 'athletics' : 'games');
   if (module) areas.add('outdoor');
+  // "Teaching games for understanding" names a pedagogy, not the Games area
+  if (part) {
+    areas.delete('games');
+    areas.add('pedagogy');
+  }
   // "Physical activities" and "games" are one area at secondary
   if (areas.has('pa') && areas.has('games')) areas.delete('games');
   return {
@@ -355,8 +404,9 @@ const parse = (q: string): Parsed => {
     categories,
     sport,
     module,
+    part,
     group: SKILL_GROUPS.find(([, re]) => re.test(q))?.[0],
-    need: NEED_WORDS.find(([, re]) => re.test(q))?.[0],
+    need: chip || /\bteaching (&|and) assessment\b/i.test(q) ? undefined : NEED_WORDS.find(([, re]) => re.test(q))?.[0],
   };
 };
 
@@ -435,6 +485,10 @@ const sectionIdFor = (state: GuideState): string | undefined => {
   const s = atStage(state);
   if (!s.level || !s.area) return undefined;
   const stage = stageOf(s.level);
+  if (stage === 'ta') {
+    if (s.area === 'pedagogy') return pedagogyId(s.focus ?? 'Teaching practices');
+    return s.area === 'assessment' ? 'ta-assessment' : s.area === 'glossary' ? 'ta-glossary' : undefined;
+  }
   if (stage === 'primary') {
     if (s.area === 'swimming') return 'primary-swimming';
     if (s.area === 'cce') return 'primary-cce';
@@ -512,7 +566,7 @@ const keep = (s: GuideState): GuideState => ({ level: s.level, area: s.area, foc
 const answer = (state: GuideState): GuideStep => {
   const s = atStage(state);
   const id = sectionIdFor(s);
-  const section = id ? SECTIONS.get(id) : undefined;
+  const section = (id && SECTIONS.get(id)) || SECTIONS.get('syllabus-overview');
   if (!section) return UNPLACED;
   const focus = s.focus && !isCategory(s.focus) && s.area === 'games' ? s.focus : undefined;
   return { kind: 'section', request: { section, need: s.need, focus }, state: { ...keep(s), sectionId: section.id } };
@@ -552,10 +606,13 @@ const next = (state: GuideState): GuideStep => {
   if (stage !== 'primary' && s.area === 'pa' && !s.sport) {
     return ask(s, 'focus', 'Which physical activity?', SPORTS.map(([, name]) => name));
   }
+  if (stage === 'ta' && s.area === 'pedagogy' && !s.focus) {
+    return ask(s, 'focus', 'Which part of pedagogy?', PEDAGOGY_PARTS.map(([part]) => part));
+  }
   if (stage === 'secondary' && s.area === 'outdoor' && !s.focus) {
     return ask(s, 'focus', 'Which Outdoor Education module?', OE_MODULES.map(([m]) => m));
   }
-  if (!s.need) return ask(s, 'need', 'What do you need?', [...NEEDS]);
+  if (!s.need && stage !== 'ta') return ask(s, 'need', 'What do you need?', [...NEEDS]);
   return answer(s);
 };
 
@@ -567,11 +624,13 @@ const merge = (s: GuideState, p: Parsed): GuideState => {
   const changedTopic = level !== s.level || !sameArea;
   const focus = p.categories.length === 1 ? p.categories[0]
     : p.module ? p.module
+      : p.part ? p.part
       : (area === 'games' || area === 'pa') && p.group && !p.sport ? p.group
         : sameArea && !p.sport ? s.focus : undefined;
+  const mergedArea = sameArea && s.area ? s.area : area;
   return {
-    level,
-    area: sameArea && s.area ? s.area : area,
+    level: mergedArea && STAGE_AREAS.ta.includes(mergedArea) ? 'Teaching & Assessment' : level,
+    area: mergedArea,
     focus,
     sport: p.sport ?? (sameArea ? s.sport : undefined),
     need: p.need ?? s.need,
@@ -588,8 +647,10 @@ const says = (p: Parsed) => p.level !== undefined || p.areas.length > 0 || !!p.n
 export const guideStep = (text: string, saved?: GuideState): GuideStep => {
   // Chats saved before secondary was added kept the primary year as a number
   const previous = saved && typeof saved.level === 'number' ? { ...saved, level: `P${saved.level}` as Level } : saved;
-  const p = parse(text);
-  if (p.categories.length > 1 || p.areas.length > 1) return previous?.step ? next(previous) : UNPLACED;
+  const parsed = parse(text);
+  // Two areas named: ask which, rather than guess
+  const twoAreas = parsed.categories.length > 1 || parsed.areas.length > 1;
+  const p: Parsed = twoAreas ? { ...parsed, areas: [], categories: [], sport: undefined, module: undefined, part: undefined } : parsed;
   // A question about an FMS or gymnastics skill belongs to the skill checklists
   const isSkillQuestion = SKILL_NAMES.test(text) && p.level === undefined && p.areas.length === 0;
 
@@ -604,6 +665,8 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
   // A follow-up to a guide answer stays on that section unless it names a new level or area
   if (previous?.sectionId) {
     if (isSkillQuestion) return UNPLACED;
+    // A broad new question ("what should I teach?") starts the questions again
+    if (p.level === undefined && p.areas.length === 0 && SYLLABUS_INTENT.test(text)) return guideStep(text);
     if (p.level === undefined && p.areas.length === 0) {
       return answer({ ...previous, need: p.need ?? previous.need, focus: p.group && previous.area === 'games' ? p.group : previous.focus });
     }
@@ -611,7 +674,7 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
   }
 
   // A new message
-  if (p.level === undefined && p.areas.length === 0 && (isSkillQuestion || !(p.need || SYLLABUS_INTENT.test(text)))) {
+  if (!twoAreas && p.level === undefined && p.areas.length === 0 && (isSkillQuestion || !(p.need || SYLLABUS_INTENT.test(text)))) {
     return UNPLACED;
   }
   return next(merge({ asked: 0 }, p));

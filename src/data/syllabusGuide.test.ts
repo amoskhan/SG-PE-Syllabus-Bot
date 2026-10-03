@@ -9,7 +9,7 @@ import {
   sectionPdfLink,
   takeNotInSyllabus,
 } from './syllabusGuide';
-import { getSyllabusContextMessage } from './syllabusContext';
+import { PE_SYLLABUS_TEXT } from './syllabusData';
 
 /** Ask, then tap "Just answer" at every question, until the guide answers */
 const answerOf = (question: string) => {
@@ -107,7 +107,7 @@ describe('asking before answering', () => {
   it('asks a vague syllabus question for the level first, then the area, then what is needed', () => {
     const level = asks(guideStep('What are the learning outcomes?'));
     expect(level.step).toBe('level');
-    expect(level.choices).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'Lower Sec', 'Upper Sec', 'Pre-U', JUST_ANSWER]);
+    expect(level.choices).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'Lower Sec', 'Upper Sec', 'Pre-U', 'Teaching & Assessment', JUST_ANSWER]);
 
     const { asked, step } = conversation('What should I teach?', 'P2', 'Dance', 'Teaching cues');
     expect(asked).toEqual(['level', 'area', 'need']);
@@ -157,7 +157,8 @@ describe('asking before answering', () => {
 
   it('answers straight away on Just answer, from what it knows', () => {
     const area = asks(guideStep('P4 outcomes'));
-    expect(guideStep(JUST_ANSWER, area.state).kind).toBe('unplaced'); // no area yet: whole syllabus
+    // No area yet: the syllabus's introduction
+    expect(guideStep(JUST_ANSWER, area.state)).toMatchObject({ kind: 'section', request: { section: { id: 'syllabus-overview' } } });
     const need = asks(guideStep('P4 dance'));
     expect(guideStep(JUST_ANSWER, need.state)).toMatchObject({ kind: 'section', request: { section: { id: 'p4-dance' } } });
   });
@@ -223,6 +224,12 @@ describe('follow-ups after an answer', () => {
     expect(guideStep('and P4 dance?', answered())).toMatchObject({ kind: 'section', request: { section: { id: 'p4-dance' } } });
   });
 
+  it('starts the questions again for a broad new question', () => {
+    const tgfu = guideStep('what is TGfU?');
+    if (tgfu.kind !== 'section') throw new Error(tgfu.kind);
+    expect(asks(guideStep('what should i teach?', tgfu.state)).step).toBe('level');
+  });
+
   it('lets a skill-checklist question leave the syllabus section', () => {
     expect(guideStep('what are the critical elements of the Overhand Throw?', answered()).kind).toBe('unplaced');
   });
@@ -232,7 +239,6 @@ describe('questions it leaves to the rest of the app', () => {
   it.each([
     'hello',
     'critical elements of the overhand throw',
-    'P4 dance and gymnastics',
   ])('"%s"', (question) => {
     expect(guideStep(question).kind).toBe('unplaced');
   });
@@ -338,7 +344,7 @@ describe('what the AI is sent for a section', () => {
     expect(context).toContain('p. 36');
     expect(context).toContain('The teacher needs: Outcomes');
     expect(context).toContain(request.section.text);
-    expect(context.length).toBeLessThan(getSyllabusContextMessage().length / 10);
+    expect(context.length).toBeLessThan(PE_SYLLABUS_TEXT.length / 20);
   });
 
   it('names the P1–4 Games focus', () => {
@@ -371,5 +377,80 @@ describe('when the syllabus does not cover the question', () => {
       text: '1. Roll using the underhand pattern.',
       notInSyllabus: false,
     });
+  });
+});
+
+describe('Teaching & Assessment', () => {
+  // Printed pages read off the 2024 PDF
+  it.each([
+    ['what are the Singapore Teaching Practices?', 211, 'ta-pedagogy-teaching-practices'],
+    ['how should I assess PE?', 224, 'ta-assessment'],
+    ['glossary', 230, 'ta-glossary'],
+  ])('"%s" → printed p. %i', (question, printedPage, id) => {
+    const s = section(question);
+    expect(s.id).toBe(id);
+    expect(s.printedPage).toBe(printedPage);
+  });
+
+  it('answers "what is TGfU?" from the Game-Based Approach, without asking anything', () => {
+    const step = guideStep('what is TGfU?');
+    expect(step).toMatchObject({ kind: 'section', request: { section: { id: 'ta-pedagogy-game-based-approach' } } });
+    if (step.kind !== 'section') return;
+    expect(step.request.section.text).toMatch(/^Game-Based Approach/);
+    expect(step.request.section.text).not.toContain('Place-Responsive Pedagogy');
+  });
+
+  it('asks which part of pedagogy, and never the level or the need', () => {
+    const part = asks(guideStep('pedagogy'));
+    expect(part.prompt).toBe('Which part of pedagogy?');
+    expect(part.choices).toContain('Inquiry-based learning');
+    expect(part.choices).toHaveLength(13);
+    expect(guideStep('Inquiry-based learning', part.state)).toMatchObject({
+      kind: 'section',
+      request: { section: { id: 'ta-pedagogy-inquiry-based-learning' } },
+    });
+  });
+
+  it('is a level chip, then offers Pedagogy, Assessment and Glossary', () => {
+    const { asked, step } = conversation('What should I teach?', 'Teaching & Assessment', 'Assessment');
+    expect(asked).toEqual(['level', 'area']);
+    expect(step).toMatchObject({ kind: 'section', request: { section: { id: 'ta-assessment' } } });
+    const area = asks(guideStep('Teaching & Assessment', asks(guideStep('What should I teach?')).state));
+    expect(area.choices).toEqual(['Pedagogy', 'Assessment', 'Glossary', JUST_ANSWER]);
+  });
+
+  it('treats a pedagogy named with a level as Teaching & Assessment', () => {
+    expect(section('P4 TGfU').id).toBe('ta-pedagogy-game-based-approach');
+  });
+
+  it('keeps "assessment" as a need for a learning area', () => {
+    expect(guideStep('P4 dance assessment')).toMatchObject({
+      kind: 'section',
+      request: { need: 'Assessment', section: { id: 'p4-dance' } },
+    });
+  });
+
+  it.each([
+    ['use of technology in PE', 'ASSESSMENT'],
+    ['how should I assess PE?', 'GLOSSARY'],
+    ['glossary', 'REFERENCES'],
+    ['pre-u CCE', 'PEDAGOGY'],
+  ])('ends %s before the next chapter', (question, next) => {
+    const text = section(question).text;
+    expect(text).not.toContain(next);
+    expect(text).not.toMatch(/\n\d\.$/);
+  });
+});
+
+describe('no more whole-syllabus answers', () => {
+  it('asks which area when a question names two', () => {
+    const area = asks(guideStep('P4 dance and gymnastics'));
+    expect(area.step).toBe('area');
+    expect(area.state.level).toBe('P4');
+  });
+
+  it('answers "Just answer" with nothing chosen from the introduction', () => {
+    const level = asks(guideStep('What are the learning outcomes?'));
+    expect(guideStep(JUST_ANSWER, level.state)).toMatchObject({ kind: 'section', request: { section: { id: 'syllabus-overview' } } });
   });
 });

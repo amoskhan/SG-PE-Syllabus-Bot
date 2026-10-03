@@ -10,7 +10,6 @@ import {
   GYMNASTICS_REFERENCE_IMAGES,
 } from '../../data/gymnasticsSkillsData';
 import type { SkillMode } from '../../types';
-import { getSyllabusContextMessage } from '../../data/syllabusContext';
 import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusRequest, WEB_SEARCH_INSTRUCTION } from '../../data/syllabusGuide';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 
@@ -37,11 +36,12 @@ Every text response MUST be short. Teachers read on mobile. They are busy.
 ═══════════════════════════════════════
 RULE 2 — SYLLABUS QUESTIONS
 ═══════════════════════════════════════
-The app asks the teacher for the level, learning area and what they need before
-most syllabus questions reach you. Answer the question directly from the syllabus
-reference. Do NOT offer menus or choices and do NOT use [[SKILL_CHOICES]] for
-syllabus questions. If a question is too broad to answer briefly, give the short
-answer and say which level or learning area would narrow it.
+The app finds the syllabus section for every syllabus question and sends it to
+you with the question. No syllabus section is attached to this message, so do not
+quote or invent syllabus outcomes. If the question needs the syllabus, say in one
+sentence that you could not find it there and suggest naming the level and
+learning area, then end with [[NOT_IN_SYLLABUS]] on its own line. Do NOT offer
+menus or choices and do NOT use [[SKILL_CHOICES]] for syllabus questions.
 
 ═══════════════════════════════════════
 RULE 3 — SKILL CRITERIA QUERY
@@ -892,18 +892,14 @@ ${BACKSWING_ITEM5_RULE}
     let groundingChunks: GroundingChunk[] = [];
     let tokenUsage = 0;
 
-    // Text questions carry the syllabus as a context exchange: one section with
-    // the last few messages when the guide placed the question, else all of it.
-    // A web search sends no syllabus: the teacher asked because it isn't in there.
-    const syllabusContext: Content[] = searchWeb ? [] : sectionOnly
+    // A syllabus question carries its one section as a context exchange, with the
+    // last few messages. Anything else (and a web search) carries no syllabus.
+    const syllabusContext: Content[] = sectionOnly
       ? [
           { role: 'user', parts: [{ text: sectionContextMessage(syllabusRequest!) }] },
           { role: 'model', parts: [{ text: `I have read ${syllabusRequest!.section.title} and will answer from it.` }] },
         ]
-      : [
-          { role: 'user', parts: [{ text: getSyllabusContextMessage() }] },
-          { role: 'model', parts: [{ text: 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.' }] },
-        ];
+      : [];
     const chatHistory = sectionOnly || searchWeb ? recentHistory(history) : history;
     // Google Search only when the teacher asks for it (#115)
     const tools = searchWeb ? [{ googleSearch: {} }] : undefined;

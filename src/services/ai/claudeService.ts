@@ -4,7 +4,6 @@
 
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
-import { getSyllabusContextMessage } from '../../data/syllabusContext';
 import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusRequest } from '../../data/syllabusGuide';
 import { getFewShotExamples } from '../../data/skillExamples';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
@@ -39,11 +38,12 @@ Every text response MUST be short. Teachers read on mobile. They are busy.
 ═══════════════════════════════════════
 RULE 2 — SYLLABUS QUESTIONS
 ═══════════════════════════════════════
-The app asks the teacher for the level, learning area and what they need before
-most syllabus questions reach you. Answer the question directly from the syllabus
-reference. Do NOT offer menus or choices and do NOT use [[SKILL_CHOICES]] for
-syllabus questions. If a question is too broad to answer briefly, give the short
-answer and say which level or learning area would narrow it.
+The app finds the syllabus section for every syllabus question and sends it to
+you with the question. No syllabus section is attached to this message, so do not
+quote or invent syllabus outcomes. If the question needs the syllabus, say in one
+sentence that you could not find it there and suggest naming the level and
+learning area, then end with [[NOT_IN_SYLLABUS]] on its own line. Do NOT offer
+menus or choices and do NOT use [[SKILL_CHOICES]] for syllabus questions.
 
 ═══════════════════════════════════════
 RULE 3 — SKILL CRITERIA QUERY
@@ -824,27 +824,24 @@ ${BACKSWING_ITEM5_RULE}
         }
 
         // ── Build messages array ─────────────────────────────────────────────
-        // Inject syllabus context for text-only queries (mirrors Gemini syllabusContextPair):
-        // one section when the syllabus guide placed the question, else the whole syllabus.
-        // The large syllabus message (~80K tokens) is marked for prompt caching so repeated
-        // requests read from cache rather than re-tokenising, staying within rate limits.
+        // A syllabus question carries its one section (mirrors Gemini syllabusContext),
+        // marked for prompt caching so follow-ups on the same section read from cache.
+        // Anything else carries no syllabus.
         type MessageWithContent = { role: string; content: string | AnthropicContentBlock[] };
-        const syllabusPrefix: MessageWithContent[] = (poseData && poseData.length > 0) ? [] : [
+        const syllabusPrefix: MessageWithContent[] = !sectionOnly ? [] : [
             {
                 role: 'user',
                 content: [
                     {
                         type: 'text' as const,
-                        text: sectionOnly ? sectionContextMessage(syllabusRequest!) : getSyllabusContextMessage(),
+                        text: sectionContextMessage(syllabusRequest!),
                         cache_control: { type: 'ephemeral' as const },
                     },
                 ],
             },
             {
                 role: 'assistant',
-                content: sectionOnly
-                    ? `I have read ${syllabusRequest!.section.title} and will answer from it.`
-                    : 'I have read the full Singapore MOE PE Syllabus 2024 and am ready to answer questions based on it.',
+                content: `I have read ${syllabusRequest!.section.title} and will answer from it.`,
             },
         ];
 
