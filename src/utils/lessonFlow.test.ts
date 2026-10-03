@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     LessonStep, canUseAiAnalysis, defaultSteps, legacySteps, nextScreen, progressFor,
-    runsAiPeerFeedback, stepsOrLegacy, validateLesson,
+    runsAiPeerFeedback, stepsOrLegacy, validateLesson, followMainSkill,
 } from './lessonFlow';
 
 const step = (id: string, over: Partial<LessonStep> = {}): LessonStep =>
@@ -120,5 +120,20 @@ describe('runsAiPeerFeedback', () => {
 
     it('never runs in a lesson without one', () => {
         expect(runsAiPeerFeedback([step('a'), peer('b')])).toBe(false);
+    });
+});
+
+describe('followMainSkill', () => {
+    const fms = ['Kick', 'Overhand Throw', 'Chest Pass'];
+
+    it('moves steps on the old main skill to the new one, and keeps a warm-up on its own skill', () => {
+        const steps = [step('a', { skillName: 'Chest Pass' }), peer('b', 'Kick'), ai('c', 'Kick')];
+        expect(followMainSkill(steps, 'Kick', 'Overhand Throw', fms).map(s => s.skillName))
+            .toEqual(['Chest Pass', 'Overhand Throw', 'Overhand Throw']);
+    });
+
+    it('moves a step whose skill is not in the new learning area', () => {
+        expect(followMainSkill([peer('a', 'Kick')], 'Overhand Throw', 'Forward Roll', ['Forward Roll', 'Cartwheel'])[0].skillName)
+            .toBe('Forward Roll');
     });
 });

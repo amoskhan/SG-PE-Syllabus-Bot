@@ -1,5 +1,6 @@
 import { supabase } from "./db/supabaseClient";
 import { PairSubmissionRecord, getSubmission, putSubmission, getLessonPass } from "./offline/offlineStorage";
+import type { LessonStep } from "../utils/lessonFlow";
 
 export async function backupSubmissionToSupabase(
   submission: PairSubmissionRecord,
@@ -247,6 +248,23 @@ export async function keepPupilWork(fields: {
     return "error";
   }
   return data === "claimed" || data === "invalid_lesson" ? data : "ok";
+}
+
+/**
+ * The steps of today's lesson (#87), with its pass. Null when refused (wrong
+ * pass, not today) or offline; steps null = the legacy flow.
+ */
+export async function fetchPupilLessonSteps(
+  lessonId: string,
+): Promise<{ skillName: string; steps: LessonStep[] | null } | null> {
+  const pass = getLessonPass(lessonId);
+  if (!pass) return null;
+  const { data, error } = await supabase.rpc("pupil_lesson_steps", { p_lesson_id: lessonId, p_pass: pass });
+  if (error || !data) {
+    if (error) console.warn("[CloudSync] pupil_lesson_steps error:", error);
+    return null;
+  }
+  return { skillName: data.skill_name, steps: Array.isArray(data.steps) ? data.steps : null };
 }
 
 /** A pair's own submission, proven by its claim token. Null if none or not theirs. */

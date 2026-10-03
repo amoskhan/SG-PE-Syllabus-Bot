@@ -36,6 +36,11 @@ describe('performerStage', () => {
             .toEqual({ stage: 'ready', canKeep: false, canFilmAgain: true, canSubmitFinal: true });
     });
 
+    it('needs no analysis in a lesson without an AI analysis step', () => {
+        expect(performerStage(work({ hasClip: true, ticked: true, aiInLesson: false })))
+            .toEqual({ stage: 'ready', canKeep: false, canFilmAgain: true, canSubmitFinal: true });
+    });
+
     it('allows only one re-film before the final submission', () => {
         expect(performerStage(work({ hasClip: true, ticked: true, hasAnalysis: true, refilmed: true })))
             .toEqual({ canKeep: false, stage: 'ready', canFilmAgain: false, canSubmitFinal: true });

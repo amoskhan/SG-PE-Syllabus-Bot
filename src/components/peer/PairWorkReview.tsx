@@ -5,7 +5,8 @@ import MarkdownRenderer from '../chat/MarkdownRenderer';
 
 // "Our work": what a pair has done so far (#94). Shows each performer's
 // video(s), the peer checklist, the AI analysis and the teacher's feedback.
-// Filming again and the final submission happen in the Practice Station.
+// Filming again and the final submission happen in the Practice Station, or
+// here in a lesson without one (#87).
 // After a redo request each performer chooses here first (#93): Keep what was
 // sent, or Film again.
 //
@@ -22,7 +23,13 @@ interface PairWorkReviewProps {
   stageFor: (p: Performer) => PerformerStage & { redo: boolean };
   onKeep: (p: Performer) => void | Promise<void>;
   onFilmAgain: (p: Performer) => void;
+  // A lesson without a Practice Station: film again and submit from here
+  actionsHere?: boolean;
+  onSubmitFinal?: (p: Performer) => Promise<void>;
   onOpenPracticeStation: () => void;
+  // The bottom button: the Practice Station by default, "Next step" in a
+  // lesson without one, or null when there's nowhere to go but Home
+  continueLabel?: string | null;
   onStartRecording: () => void;
   onClose: () => void;
 }
@@ -103,7 +110,9 @@ const PerformerPanel: React.FC<{
   onDevice: boolean;
   onKeep: (p: Performer) => void | Promise<void>;
   onFilmAgain: (p: Performer) => void;
-}> = ({ performer, record, stage, onDevice, onKeep, onFilmAgain }) => {
+  actionsHere?: boolean;
+  onSubmitFinal?: (p: Performer) => Promise<void>;
+}> = ({ performer, record, stage, onDevice, onKeep, onFilmAgain, actionsHere, onSubmitFinal }) => {
   const [busy, setBusy] = useState(false);
   const k = performerKey(performer);
   const attempt = currentAttempt(record, performer);
@@ -156,6 +165,28 @@ const PerformerPanel: React.FC<{
         </div>
       )}
 
+      {/* No Practice Station in this lesson: film again and submit here */}
+      {actionsHere && onDevice && !stage.canKeep && stage.stage !== 'submitted' && stage.stage !== 'not_started' && (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={busy || !stage.canFilmAgain}
+            onClick={() => onFilmAgain(performer)}
+            className="h-12 rounded-2xl bg-slate-700 hover:bg-slate-600 active:scale-[0.98] text-sm font-black disabled:opacity-40"
+          >
+            📹 Film again
+          </button>
+          <button
+            type="button"
+            disabled={busy || !stage.canSubmitFinal}
+            onClick={async () => { setBusy(true); try { await onSubmitFinal?.(performer); } finally { setBusy(false); } }}
+            className="h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-sm font-black disabled:opacity-40"
+          >
+            📤 Submit final
+          </button>
+        </div>
+      )}
+
       <div className={`rounded-3xl border-2 ${t.ring} ${t.soft} p-3`}>
         <p className="text-xs font-bold text-slate-300 mb-2 px-1">{first ? 'Final attempt' : 'Your video'}</p>
         <ClipPlayer blob={attempt.videoBlob} label={performer} sent={sent || !!attempt.videoUrl} />
@@ -196,7 +227,10 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
   stageFor,
   onKeep,
   onFilmAgain,
+  actionsHere,
+  onSubmitFinal,
   onOpenPracticeStation,
+  continueLabel = '💬 Go to the Practice Station',
   onStartRecording,
   onClose,
 }) => {
@@ -259,7 +293,7 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
                   );
                 })}
               </div>
-              <PerformerPanel performer={tab} record={record} stage={stageFor(tab)} onDevice={onDevice} onKeep={onKeep} onFilmAgain={onFilmAgain} />
+              <PerformerPanel performer={tab} record={record} stage={stageFor(tab)} onDevice={onDevice} onKeep={onKeep} onFilmAgain={onFilmAgain} actionsHere={actionsHere} onSubmitFinal={onSubmitFinal} />
             </>
           ) : (
             <div className="flex flex-col items-center text-center gap-2 py-16">
@@ -273,13 +307,13 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
       {/* Bottom action, clear of the phone's home bar */}
       <div className="shrink-0 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] bg-slate-950/95 border-t border-slate-800">
         <div className="w-full max-w-xl mx-auto">
-          {record && onDevice ? (
+          {record && onDevice && continueLabel ? (
             <button
               type="button"
               onClick={onOpenPracticeStation}
               className="w-full h-14 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-2xl text-base font-black shadow-lg shadow-indigo-900/40"
             >
-              💬 Go to the Practice Station
+              {continueLabel}
             </button>
           ) : !record ? (
             <button

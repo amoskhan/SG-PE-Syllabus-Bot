@@ -21,6 +21,7 @@ export interface PerformerWork {
   lock: PerformerLock;  // from the teacher's copy (submissionLock.ts)
   redoFilms: number;    // films made since the current redo request
   analysisFailed?: boolean; // Coach Bot couldn't analyse: they can submit without it
+  aiInLesson?: boolean;     // false: the lesson has no AI analysis step (#87), so none is needed
 }
 
 export type Stage = 'not_started' | 'redo_choice' | 'needs_ticks' | 'needs_analysis' | 'ready' | 'submitted';
@@ -47,7 +48,7 @@ export const performerStage = (w: PerformerWork): PerformerStage => {
   const canFilmAgain = w.hasClip && !w.refilmed;
   if (!w.hasClip) return { stage: 'not_started', ...NOTHING };
   if (!w.ticked) return { stage: 'needs_ticks', ...NOTHING, canFilmAgain };
-  if (!w.hasAnalysis && !w.analysisFailed) return { stage: 'needs_analysis', ...NOTHING, canFilmAgain };
+  if (!w.hasAnalysis && !w.analysisFailed && w.aiInLesson !== false) return { stage: 'needs_analysis', ...NOTHING, canFilmAgain };
   return { stage: 'ready', ...NOTHING, canFilmAgain, canSubmitFinal: true };
 };
 
@@ -106,5 +107,7 @@ const teacherChecklistText = (intro: string, criteria: string[]) => [
 export const redoChecklistText = (criteria: string[]) => teacherChecklistText(
   '**Re-do** after the teacher asked for another try. There is no AI analysis on a re-do: the teacher grades it.', criteria);
 
-export const noAnalysisChecklistText = (criteria: string[]) => teacherChecklistText(
-  "**No AI analysis:** Coach Bot couldn't analyse this attempt, so the teacher grades it.", criteria);
+export const noAnalysisChecklistText = (criteria: string[], why: 'failed' | 'no_ai_in_lesson' = 'failed') => teacherChecklistText(
+  why === 'failed'
+    ? "**No AI analysis:** Coach Bot couldn't analyse this attempt, so the teacher grades it."
+    : '**No AI analysis:** this lesson has no AI analysis step, so the teacher grades it.', criteria);

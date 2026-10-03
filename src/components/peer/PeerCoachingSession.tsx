@@ -45,6 +45,9 @@ interface PeerCoachingSessionProps {
   // attempt back instead of running the whole pair flow.
   refilmPerformer?: 'Apple' | 'Banana';
   onRefilmDone?: (attempt: RefilmedAttempt) => void;
+  // False when the next step isn't the Practice Station (#87): the last
+  // screen moves on instead of offering Coach Bot
+  nextIsCoachBot?: boolean;
 }
 
 export interface RefilmedAttempt {
@@ -74,6 +77,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   onExit,
   refilmPerformer,
   onRefilmDone,
+  nextIsCoachBot = true,
 }) => {
   // Banana performs in the APPLE_* steps (Apple films), Apple in the BANANA_* steps
   const [step, setStep] = useState<Step>(refilmPerformer === 'Apple' ? 'SWAP_PROMPT' : 'APPLE_INTRO');
@@ -1260,7 +1264,9 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               <div className="my-4 p-3 bg-emerald-950/60 border border-emerald-500/40 rounded-2xl text-xs text-emerald-300 flex items-center gap-2">
                 <span className="text-lg">💾</span>
                 <span className="text-left leading-relaxed">
-                  Your videos are saved. Next, ask Coach Bot, then each of you submits your final recording.
+                  {nextIsCoachBot
+                    ? 'Your videos are saved. Next, ask Coach Bot, then each of you submits your final recording.'
+                    : 'Your videos are saved. When you\'re happy with them, each of you submits your final recording from 📋 Our work.'}
                 </span>
               </div>
             )}
@@ -1296,7 +1302,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               }}
               className="mt-4 w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-98 text-white font-black rounded-2xl text-base shadow-xl shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer animate-pulse"
             >
-              <span>🤖 Ask Coach Bot to Analyze Movement</span>
+              <span>{nextIsCoachBot ? '🤖 Ask Coach Bot to Analyze Movement' : 'Next step'}</span>
               <span>➔</span>
             </button>
 
