@@ -1,4 +1,5 @@
 import { supabase } from "./db/supabaseClient";
+import { LessonStep, stepsOrLegacy } from "../utils/lessonFlow";
 
 // Planned lessons live in Supabase (see supabase_lessons.sql) so a teacher can
 // plan at home and run the lesson on the school laptop. Which lesson is on the
@@ -13,19 +14,23 @@ export interface Lesson {
   level: string; // 'P1'..'P6', or '' if not set
   objective: string;
   skillArea: SkillArea;
-  skillName: string;
+  skillName: string; // the main skill: pupils' work is filed under it
   pairCount: number;
+  // The steps pupils' devices walk through (lessonFlow.ts). A lesson planned
+  // before steps existed reads as the legacy flow.
+  steps: LessonStep[];
   pupilPass: string; // secret carried in the class QR (see supabase_lesson_pass.sql)
   createdAt: string;
 }
 
-export type LessonDraft = Omit<Lesson, "id" | "createdAt" | "pupilPass">;
+// Steps are optional until the Lesson Planner builds them: none = the legacy flow
+export type LessonDraft = Omit<Lesson, "id" | "createdAt" | "pupilPass" | "steps"> & { steps?: LessonStep[] };
 
 export const LEVELS = ["P1", "P2", "P3", "P4", "P5", "P6"];
 export const DEFAULT_PAIR_COUNT = 15;
 export const MAX_PAIR_COUNT = 30;
 
-interface LessonRow {
+export interface LessonRow {
   id: string;
   lesson_date: string;
   class_name: string;
@@ -35,10 +40,11 @@ interface LessonRow {
   skill_name: string;
   pair_count: number;
   pupil_pass: string | null;
+  steps?: LessonStep[] | null;
   created_at: string;
 }
 
-const fromRow = (r: LessonRow): Lesson => ({
+export const fromRow = (r: LessonRow): Lesson => ({
   id: r.id,
   lessonDate: r.lesson_date,
   className: r.class_name,
@@ -48,7 +54,20 @@ const fromRow = (r: LessonRow): Lesson => ({
   skillName: r.skill_name,
   pairCount: r.pair_count,
   pupilPass: r.pupil_pass ?? "",
+  steps: stepsOrLegacy(r.steps, r.skill_name),
   createdAt: r.created_at,
+});
+
+/** The columns a teacher writes when saving a lesson. */
+export const toRow = (d: LessonDraft) => ({
+  lesson_date: d.lessonDate,
+  class_name: d.className.trim(),
+  level: d.level || null,
+  objective: d.objective.trim() || null,
+  skill_area: d.skillArea,
+  skill_name: d.skillName,
+  pair_count: d.pairCount,
+  steps: d.steps?.length ? d.steps : null,
 });
 
 /** Only [a-z0-9-]: the id is also a Storage folder name and part of pair ids. */
@@ -83,18 +102,15 @@ export async function fetchLessons(): Promise<Lesson[]> {
 export async function createLesson(draft: LessonDraft): Promise<Lesson> {
   const { data, error } = await supabase
     .from("lessons")
-    .insert({
-      id: makeLessonId(draft),
-      lesson_date: draft.lessonDate,
-      class_name: draft.className.trim(),
-      level: draft.level || null,
-      objective: draft.objective.trim() || null,
-      skill_area: draft.skillArea,
-      skill_name: draft.skillName,
-      pair_count: draft.pairCount,
-    })
+    .insert({ id: makeLessonId(draft), ...toRow(draft) })
     .select()
     .single();
+  if (error) throw new Error(error.message);
+  return fromRow(data as LessonRow);
+}
+
+export async function updateLesson(id: string, draft: LessonDraft): Promise<Lesson> {
+  const { data, error } = await supabase.from("lessons").update(toRow(draft)).eq("id", id).select().single();
   if (error) throw new Error(error.message);
   return fromRow(data as LessonRow);
 }

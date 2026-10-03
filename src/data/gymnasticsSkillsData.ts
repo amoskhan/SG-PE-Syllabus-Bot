@@ -283,6 +283,13 @@ export const GYMNASTICS_PARTNER_BALANCE_SKILLS: string[] = [
     'Partner Counterbalance', 'Partner Counter-tension',
 ];
 
+/**
+ * Skills done by two pupils together. The AI analyses one performer at a time,
+ * so these can't use AI analysis (lessonFlow.ts).
+ */
+export const PARTNER_SKILLS: ReadonlySet<string> = new Set(GYMNASTICS_PARTNER_BALANCE_SKILLS);
+export const isPartnerSkill = (skillName: string) => PARTNER_SKILLS.has(skillName);
+
 export const GYMNASTICS_ROLLING_SKILLS: string[] = [
     'Rocking', 'Egg Roll', 'Straddle Roll', 'Log Roll', 'Forward Roll', 'Backward Roll',
 ];

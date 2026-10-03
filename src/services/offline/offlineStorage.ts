@@ -1,4 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import type { PairProgress } from '../../utils/lessonFlow';
 import { decodeBlobs, encodeBlobs, stripBlobs } from './storedBlobs';
 
 export interface PeerCueResult {
@@ -230,6 +231,30 @@ export const getLessonPass = (lessonId: string): string | null => {
     return localStorage.getItem(lessonPassKey(lessonId));
   } catch {
     return null;
+  }
+};
+
+// ─── Pair Step Progress ──────────────────────────────────────────────────────
+// Which lesson step a pair is on (lessonFlow.ts), kept per lesson and pair so a
+// reload or the device sleeping brings them back to the same step.
+
+const pairStepKey = (lessonId: string, pairNumber: number) => `pe_pair_step_${lessonId}_p${pairNumber}`;
+
+export const getPairProgress = (lessonId: string, pairNumber: number): PairProgress | null => {
+  try {
+    const raw = localStorage.getItem(pairStepKey(lessonId, pairNumber));
+    const p = raw ? JSON.parse(raw) : null;
+    return p && typeof p.index === 'number' ? { stepId: typeof p.stepId === 'string' ? p.stepId : undefined, index: p.index } : null;
+  } catch {
+    return null;
+  }
+};
+
+export const savePairProgress = (lessonId: string, pairNumber: number, progress: PairProgress): void => {
+  try {
+    localStorage.setItem(pairStepKey(lessonId, pairNumber), JSON.stringify(progress));
+  } catch {
+    // Storage blocked — the pair starts from their first step after a reload
   }
 };
 

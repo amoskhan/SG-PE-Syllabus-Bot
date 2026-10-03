@@ -31,3 +31,12 @@ create policy "Teachers manage own lessons" on public.lessons
 
 create index if not exists lessons_teacher_date_idx
   on public.lessons (teacher_id, lesson_date desc);
+
+-- A lesson's steps (#85; GLOSSARY.md: Lesson Step, ADR 0002): the ordered
+-- Teach / Practise / Assess steps pupils' devices walk through, always read
+-- and written as a whole (see src/utils/lessonFlow.ts for their shape).
+-- Null = a lesson planned before steps existed: it runs as it always has
+-- (peer assessment, then the Practice Station). skill_name is the main skill.
+alter table public.lessons
+  add column if not exists steps jsonb
+  check (steps is null or jsonb_typeof(steps) = 'array');
