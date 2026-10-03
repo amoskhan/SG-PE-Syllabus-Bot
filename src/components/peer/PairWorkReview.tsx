@@ -3,7 +3,7 @@ import type { AttemptSnapshot, PairSubmissionRecord, PeerCueResult } from '../..
 import { currentAttempt, Performer, performerKey, PerformerStage, Stage } from '../../utils/pairWork';
 import MarkdownRenderer from '../chat/MarkdownRenderer';
 
-// "Our work": what a pair has done so far (#94). Shows each performer's
+// "Our progress": what a pair has done so far (#94). Shows each performer's
 // video(s), the peer checklist, the AI analysis and the teacher's feedback.
 // Filming again and the final submission happen in the Practice Station, or
 // here in a lesson without one (#87).
@@ -11,7 +11,9 @@ import MarkdownRenderer from '../chat/MarkdownRenderer';
 // sent, or Film again.
 //
 // The page body doesn't scroll (index.html), so this screen is a fixed-height
-// column whose middle part scrolls.
+// column whose middle part scrolls. It's always dark: the "dark" class makes
+// the Coach Bot analysis (MarkdownRenderer) use its light text here even when
+// the phone is in light mode.
 
 interface PairWorkReviewProps {
   pairNumber: number;
@@ -237,11 +239,11 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
   const [tab, setTab] = useState<Performer>('Banana');
 
   return (
-    <div className="h-[100dvh] w-full bg-slate-900 text-white flex flex-col overflow-hidden">
+    <div className="dark h-[100dvh] w-full bg-slate-900 text-white flex flex-col overflow-hidden">
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 bg-slate-950/90 border-b border-slate-800">
         <div className="min-w-0">
-          <h1 className="text-base font-black text-white">📋 Our work · Pair #{pairNumber}</h1>
+          <h1 className="text-base font-black text-white">⭐ Our progress · Pair #{pairNumber}</h1>
           <p className="text-xs text-slate-400 font-semibold truncate">{skillName}</p>
         </div>
         <button
