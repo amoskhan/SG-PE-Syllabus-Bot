@@ -8,6 +8,7 @@ import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, Skil
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
 import { guideStep, takeNotInSyllabus } from './data/syllabusGuide';
+import { chatTitle, questionTitle } from './utils/chatTitles';
 import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
 import { computeVideoHash } from './services/videoAnalysisCache';
 
@@ -1860,7 +1861,7 @@ const App: React.FC = () => {
     let newTitle: string | undefined = undefined;
     if (currentMessages.length <= 1) { // 1 because "Welcome" message is already there
       if (text && text.trim().length > 0) {
-        newTitle = text.substring(0, 30) + (text.length > 30 ? '...' : '');
+        newTitle = questionTitle(text);
       } else if (skillContext) {
         newTitle = `Analysis: ${skillContext}`;
       } else if (mediaAttachments && mediaAttachments.length > 0) {
@@ -2109,6 +2110,15 @@ const App: React.FC = () => {
         return {
           ...session,
           messages: [...finalMessages, botMessage],
+          // Named after what the chat turned out to be about
+          title: chatTitle({
+            current: session.title,
+            firstQuestion: session.messages.find(m => m.sender === Sender.USER)?.text ?? '',
+            topic: syllabusRequest?.section.topic,
+            need: syllabusRequest?.need,
+            skill: proficiencyLevel ? skillContext : undefined,
+            web: webSearch,
+          }),
           updatedAt: new Date()
         };
       });
@@ -2158,6 +2168,13 @@ const App: React.FC = () => {
       updateSessionAndSync(originatingSessionId, session => ({
         ...session,
         messages: [...session.messages, errorMessage],
+        // The section is known even when the AI failed
+        title: chatTitle({
+          current: session.title,
+          firstQuestion: session.messages.find(m => m.sender === Sender.USER)?.text ?? '',
+          topic: syllabusRequest?.section.topic,
+          need: syllabusRequest?.need,
+        }),
         updatedAt: new Date()
       }));
     } finally {
