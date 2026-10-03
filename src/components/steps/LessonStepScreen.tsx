@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LessonStep } from '../../utils/lessonFlow';
 import { StepBar } from './StepBar';
+import { TeachPager } from './TeachPager';
+import { teachPages } from '../../utils/teachPages';
 
 // The pupil screen for a step that isn't peer assessment or the Practice
 // Station (those have their own screens): Teach, Practise, and an Assess step
-// done by the teacher alone. A Practise step can let pupils film each other to
+// done by the teacher alone. A Teach step shows its pages (#88). A Practise step can let pupils film each other to
 // watch back (#87); that video stays on the device and is never sent.
 //
 // The page body doesn't scroll (index.html), so the middle of this screen does.
@@ -75,6 +77,18 @@ export const LessonStepScreen: React.FC<LessonStepScreenProps> = ({ step, number
         <StepBar step={step} number={number} total={total} onBack={onBack} />
       </div>
 
+      {step.kind === 'teach' ? (
+        // Teach (#88): the pages fill the screen; the cues page scrolls on its own
+        <div className="flex-1 min-h-0 w-full max-w-xl mx-auto px-4 py-4 flex flex-col gap-3">
+          <h2 className="shrink-0 text-xl font-black leading-tight">{copy.icon} {copy.title}</h2>
+          {step.instruction && (
+            <p className="shrink-0 rounded-2xl bg-indigo-500/15 border border-indigo-400/40 px-4 py-2.5 text-sm font-bold text-indigo-50">
+              {step.instruction}
+            </p>
+          )}
+          <TeachPager key={step.id} pages={teachPages(step)} />
+        </div>
+      ) : (
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
         <div className="w-full max-w-xl mx-auto px-4 py-8 flex flex-col items-center text-center gap-4">
           <span className="text-6xl">{copy.icon}</span>
@@ -88,6 +102,7 @@ export const LessonStepScreen: React.FC<LessonStepScreenProps> = ({ step, number
           {step.kind === 'practise' && step.practise?.films && <PractiseFilm key={step.id} />}
         </div>
       </div>
+      )}
 
       <div className="shrink-0 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] bg-slate-950/95 border-t border-slate-800">
         <button
