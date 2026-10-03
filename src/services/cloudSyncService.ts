@@ -406,6 +406,32 @@ export interface PairCheckInRow {
   needs_help: boolean;
   checked_in_at: string;
   claim_token?: string | null;
+  // The step the pair is on (#91; supabase_pair_steps.sql)
+  step_id?: string | null;
+  step_index?: number | null;
+  step_finished?: boolean | null;
+}
+
+/**
+ * Tell the teacher's board which step this pair is on (#91). Best effort: the
+ * board just shows the last step it heard about.
+ */
+export async function reportPairStep(
+  lessonId: string,
+  pairNumber: number,
+  claimToken: string,
+  progress: { stepId?: string; index: number },
+): Promise<void> {
+  const { error } = await supabase.rpc("pupil_set_step", {
+    p_lesson_id: lessonId,
+    p_pass: getLessonPass(lessonId),
+    p_pair_number: pairNumber,
+    p_claim_token: claimToken,
+    p_step_id: progress.stepId ?? null,
+    p_step_index: progress.index,
+    p_finished: !progress.stepId, // past the last step (lessonFlow.progressFor)
+  });
+  if (error) console.warn("[CloudSync] pupil_set_step error:", error);
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

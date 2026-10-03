@@ -35,6 +35,7 @@ import { mediaPaths, removeTeachMedia } from '../services/teachMediaService';
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
 import { effectiveLevel, normaliseLevel } from '../utils/gradingReview';
+import { LessonStep, currentIndex, stepLabel } from '../utils/lessonFlow';
 import { performerLock } from '../utils/submissionLock';
 import { Student, SkillAnalysis } from '../types';
 import { getStudents } from '../services/studentService';
@@ -116,6 +117,17 @@ const VideoBlobPlayer: React.FC<{ blob?: Blob; videoUrl?: string; performer: str
       />
     </div>
   );
+};
+
+const STEP_ICON = (s: LessonStep) =>
+  s.kind === 'teach' ? '👀' : s.kind === 'practise' ? '🏃' : s.assess?.method === 'ai_analysis' ? '🤖' : '📋';
+
+/** Where a pair is in the lesson (#91): a step index, 'finished', or null before it reports. */
+const pairStepAt = (steps: LessonStep[], ci?: PairCheckInRow): number | 'finished' | null => {
+  if (!ci) return null;
+  if (ci.step_finished) return 'finished';
+  if (!ci.step_id && ci.step_index == null) return null;
+  return currentIndex(steps, { stepId: ci.step_id ?? undefined, index: ci.step_index ?? 0 });
 };
 
 /** Whether a performer's video in the tray is their final one (#86, Submit final is the pupil's choice). */
@@ -661,6 +673,32 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 </span>
               </div>
 
+              {/* The lesson's steps, and how many pairs are on each (#91) */}
+              {lesson.steps.length > 0 && (
+                <ol className="mb-4 flex flex-wrap gap-2">
+                  {lesson.steps.map((s, i) => {
+                    const here = checkIns.filter((c) => pairStepAt(lesson.steps, c) === i).length;
+                    return (
+                      <li key={s.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold ${
+                        here ? 'border-indigo-300 bg-indigo-50 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200'
+                             : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-zinc-800 dark:bg-zinc-800/40 dark:text-slate-300'}`}>
+                        <span className="w-5 h-5 rounded-full bg-white dark:bg-zinc-900 border border-current/20 text-[10px] font-black flex items-center justify-center">{i + 1}</span>
+                        <span>{STEP_ICON(s)} {stepLabel(s)}</span>
+                        {s.skillName !== lesson.skillName && <span className="font-semibold opacity-70">· {s.skillName}</span>}
+                        <span className={`ml-0.5 px-1.5 rounded-full text-[10px] ${here ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500 dark:bg-zinc-700 dark:text-slate-400'}`}>
+                          {here}
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {checkIns.some((c) => c.step_finished) && (
+                    <li className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 text-xs font-bold">
+                      🏁 Finished <span className="px-1.5 rounded-full text-[10px] bg-emerald-600 text-white">{checkIns.filter((c) => c.step_finished).length}</span>
+                    </li>
+                  )}
+                </ol>
+              )}
+
               {/* One tile per pair in this lesson */}
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
                 {Array.from({ length: lesson.pairCount }, (_, i) => i + 1).map((num) => {
@@ -720,6 +758,18 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                       }`}>
                         {needsHelp ? 'Needs Help!' : isChecked ? 'Ready! 🚶‍♂️' : 'Waiting…'}
                       </span>
+                      {/* Where this pair is in the lesson (#91) */}
+                      {(() => {
+                        const at = pairStepAt(lesson.steps, ci);
+                        if (at === null) return null;
+                        return (
+                          <span className={`mt-1 max-w-full truncate px-1.5 py-0.5 rounded-md text-[9px] font-black ${
+                            at === 'finished' ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'}`}
+                            title={at === 'finished' ? 'Finished the lesson' : `Step ${at + 1}: ${stepLabel(lesson.steps[at])}`}>
+                            {at === 'finished' ? '🏁 Done' : `${STEP_ICON(lesson.steps[at])} Step ${at + 1}`}
+                          </span>
+                        );
+                      })()}
                     </div>
                   );
                 })}
