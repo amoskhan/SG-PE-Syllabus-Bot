@@ -7,7 +7,7 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, SkillMode } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
-import { guideStep, takeNotInSyllabus, takeSectionTag } from './data/syllabusGuide';
+import { type GuideStep, guideStep, takeNotInSyllabus, takeSectionTag } from './data/syllabusGuide';
 import { chatTitle, questionTitle } from './utils/chatTitles';
 import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
 import { computeVideoHash } from './services/videoAnalysisCache';
@@ -1741,6 +1741,7 @@ const App: React.FC = () => {
       studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean;
       performer?: 'Apple' | 'Banana'; // Practice Station "Analyse": whose performance is graded
       webSearch?: boolean; // The teacher tapped "Search the web": Gemini with Google Search, no syllabus
+      guideCard?: { messageId: string; step: GuideStep; picks: string[] }; // The question card is done (#131)
     }
   ) => {
     // LOCK TARGET SESSION ID context to heavily prevent "chat-swapping" side effects
@@ -1804,7 +1805,21 @@ const App: React.FC = () => {
 
     // Get fresh messages from state (not from closure)
     const currentSessionNow = sessionsRef.current.find(s => s.id === originatingSessionId);
-    const currentMessages = currentSessionNow?.messages || [];
+    const sessionMessages = currentSessionNow?.messages || [];
+    // The question card (#131) leaves the chat once it is done or the teacher types
+    // instead: the chat keeps only the teacher's question and the answer. A finished
+    // card answers the question before it, so that question is this message.
+    const lastBotMessage = sessionMessages.filter(m => m.sender === Sender.BOT).at(-1);
+    const cardIndex = metadata?.guideCard
+      ? sessionMessages.findIndex(m => m.id === metadata.guideCard!.messageId)
+      : sessionMessages.at(-1)?.guideQuestion ? sessionMessages.length - 1 : -1;
+    const cardQuestion = metadata?.guideCard
+      ? sessionMessages.slice(0, Math.max(cardIndex, 0)).reverse().find(m => m.sender === Sender.USER)
+      : undefined;
+    if (metadata?.guideCard && !cardQuestion) return;
+    const currentMessages = cardQuestion
+      ? sessionMessages.slice(0, sessionMessages.indexOf(cardQuestion))
+      : sessionMessages.filter((_, i) => i !== cardIndex);
 
     // Logic for Auto-Verification / Skill Correction
     if (!isVerifying && text) {
@@ -1859,8 +1874,8 @@ const App: React.FC = () => {
       mediaAttachments = processed.attachments;
     }
 
-    const newMessageId = Date.now().toString();
-    const newMessage: Message = {
+    const newMessageId = cardQuestion?.id ?? Date.now().toString();
+    const newMessage: Message = cardQuestion ?? {
       id: newMessageId,
       text: text || (mediaAttachments ? 'Analyze this movement' : ''),
       sender: Sender.USER,
@@ -1875,8 +1890,9 @@ const App: React.FC = () => {
     // Auto-Title Logic on First Message
     let newTitle: string | undefined = undefined;
     if (currentMessages.length <= 1) { // 1 because "Welcome" message is already there
-      if (text && text.trim().length > 0) {
-        newTitle = questionTitle(text);
+      const typed = cardQuestion?.text ?? text;
+      if (typed && typed.trim().length > 0) {
+        newTitle = questionTitle(typed);
       } else if (skillContext) {
         newTitle = `Analysis: ${skillContext}`;
       } else if (mediaAttachments && mediaAttachments.length > 0) {
@@ -1916,22 +1932,23 @@ const App: React.FC = () => {
     // syllabus map (#130). A message it can't place gets the map alone. It carries
     // on from the guide state on the last bot message. Video, skill-checklist and
     // Practice Station chats keep their flow.
-    const lastBotMessage = currentMessages.filter(m => m.sender === Sender.BOT).at(-1);
     const webSearch = !!metadata?.webSearch;
-    const guide = !webSearch && !files?.length && !isVerifying && !isPupilPractice && !newMessage.hasMedia
+    const guide = metadata?.guideCard ? metadata.guideCard.step : !webSearch && !files?.length && !isVerifying && !isPupilPractice && !newMessage.hasMedia
       && !currentMessages.some(m => m.poseData && m.poseData.length > 0)
       ? guideStep(newMessage.text, lastBotMessage?.guide)
       : null;
     if (guide?.kind === 'ask' || guide?.kind === 'mismatch') {
-      // A clarifying question, or something not taught at that level: chips, no AI call needed
+      // A clarifying question (the question card), or something not taught at that
+      // level (chips): no AI call needed
       const reply: Message = {
         id: (Date.now() + 1).toString(),
         text: guide.kind === 'ask'
-          ? `${guide.prompt}\n[[SKILL_CHOICES: ${guide.choices.join(', ')}]]`
+          ? guide.prompt
           : `${guide.message}\n[[SKILL_CHOICES: ${guide.choices.join(', ')}]]`,
         sender: Sender.BOT,
         timestamp: new Date(),
         guide: guide.kind === 'ask' ? guide.state : undefined,
+        guideQuestion: guide.kind === 'ask' ? guide : undefined,
       };
       updateSessionAndSync(originatingSessionId, session => ({
         ...session,
@@ -2001,6 +2018,8 @@ const App: React.FC = () => {
 
       // Prepare current message context
       let promptText = newMessage.text;
+      // What the teacher picked in the question card
+      if (metadata?.guideCard?.picks.length) promptText += `\n\n(${metadata.guideCard.picks.join(' · ')})`;
       if (newMessage.media) {
         const docs = newMessage.media.filter(a => a.type === 'document' && a.textContent);
         if (docs.length > 0) {
@@ -2226,6 +2245,11 @@ const App: React.FC = () => {
   const handleAnalyzeConfirm = (message: Message) => {
     const skillName = message.predictedSkill || "Movement";
     handleSendMessage("Analyze Now", undefined, { skillName: skillName, isVerified: true });
+  };
+
+  // The question card is done: answer the question it asked about, as one message
+  const handleGuideFinish = (card: Message, step: GuideStep, picks: string[]) => {
+    handleSendMessage('', undefined, { guideCard: { messageId: card.id, step, picks } });
   };
 
   const handleSelectSkill = (skillName: string) => {
@@ -2799,6 +2823,7 @@ const App: React.FC = () => {
               <ChatMessage
                 key={msg.id}
                 message={msg}
+                onGuideFinish={msg.guideQuestion && msg === messages.at(-1) ? handleGuideFinish : undefined}
                 onUpdateMessage={(updatedMsg) => {
                   updateSessionAndSync(currentSessionIdRef.current, session => ({
                     ...session,

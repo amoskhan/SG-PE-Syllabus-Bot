@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { Message, Sender, SkillMode } from '../../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import SyllabusSource from './SyllabusSource';
+import GuideCard from './GuideCard';
+import type { GuideStep } from '../../data/syllabusGuide';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 import { generatePDF } from '../../services/pdfService';
 import { ALL_FMS_SKILLS } from '@/data/fundamentalMovementSkillsData';
@@ -38,11 +40,13 @@ interface ChatMessageProps {
   onSelectMultipleSkills?: (skillNames: string[]) => void;
   onShowAllSkills?: () => void;
   onSubmitChecklistToTeacher?: (message: Message) => Promise<void>;
+  /** Given only to the open guide question: it then shows as the question card */
+  onGuideFinish?: (message: Message, step: GuideStep, picks: string[]) => void;
   disabled?: boolean;
   skillMode?: SkillMode;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSearchWeb, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, disabled = false, skillMode = 'fms' }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onAnalyze, onSelectSkill, onSearchWeb, onSelectMultipleSkills, onShowAllSkills, onSubmitChecklistToTeacher, onGuideFinish, disabled = false, skillMode = 'fms' }) => {
   const [checklistSubmitState, setChecklistSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle');
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null);
@@ -136,7 +140,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onUpdateMessage, onA
                 : 'bg-gradient-to-br from-slate-900 to-slate-800 text-white dark:from-zinc-900 dark:to-zinc-850 dark:text-zinc-100 border border-slate-900/90 dark:border-zinc-800/80 shadow-md rounded-tr-xs'
               }`}>
 
-              {isBot ? (
+              {isBot && message.guideQuestion && onGuideFinish ? (
+                <GuideCard
+                  key={message.id}
+                  question={message.guideQuestion}
+                  onFinish={(step, picks) => onGuideFinish(message, step, picks)}
+                  disabled={disabled}
+                />
+              ) : isBot ? (
                 <MarkdownRenderer content={message.text.replace(/\[\[SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/\[\[MULTI_SKILL_CHOICES:\s*([^\]]+)\]\]/g, '').replace(/3\.\s+\*?\*?Best\s+Model\s+Tip\*?\*?:[^\n]+(\n|$)/gi, '')} />
               ) : (
                 <p className="whitespace-pre-wrap text-sm md:text-[15px] leading-relaxed">{message.text}</p>
