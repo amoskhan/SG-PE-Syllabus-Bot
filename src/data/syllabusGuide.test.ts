@@ -101,6 +101,27 @@ describe('the sections a question can reach', () => {
     expect(s.text).toMatch(/^Games and Sports\nGames and Sports promote/);
     expect(s.text).not.toContain('PRIMARY 1');
   });
+
+  it('takes a Games skill alone as the Games area', () => {
+    expect(answerOf('P2 kicking')).toMatchObject({ section: { id: 'p2-games' }, focus: 'Kicking and trapping' });
+  });
+
+  it.each([
+    'which primary level do students learn kicking? search web if don’t know',
+    'when do students learn kicking?',
+    'which level do pupils learn dribbling',
+  ])('answers "%s" from P1–4 Games together, so the AI can say which level', (question) => {
+    const s = section(question);
+    expect(s.id).toBe('primary-games-p1-4');
+    expect(s.printedPage).toBe(32);
+    expect(s.text).toContain('Kick a stationary ball using a smooth running approach');
+    expect(s.text).toMatch(/PRIMARY 2\s*[–-]\s*GAMES AND SPORTS/);
+    expect(s.text).not.toMatch(/PRIMARY 5/);
+  });
+
+  it('keeps a roll in gymnastics as gymnastics', () => {
+    expect(section('P3 gymnastics forward roll').id).toBe('p3-gymnastics');
+  });
 });
 
 describe('asking before answering', () => {

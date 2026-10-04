@@ -292,6 +292,20 @@ const SECTIONS = new Map<string, SyllabusSection>(
   }),
 );
 
+// "Which level learns kicking?": P1–4 Games together, so the AI can see where a skill first appears
+const primaryGames = [1, 2, 3, 4].map((level) => SECTIONS.get(levelId('games', level))).filter((x): x is SyllabusSection => !!x);
+if (primaryGames.length) {
+  const { printedPage, pdfPage } = primaryGames[0];
+  SECTIONS.set('primary-games-p1-4', {
+    id: 'primary-games-p1-4',
+    title: 'Primary 1 to 4 – Games and Sports: learning outcomes',
+    topic: 'P1–4 Games',
+    printedPage,
+    pdfPage,
+    text: primaryGames.map((x) => x.text).join('\n\n'),
+  });
+}
+
 export const getSyllabusSection = (id: string): SyllabusSection | undefined => SECTIONS.get(id);
 
 // ── Reading the question ────────────────────────────────────────────────────
@@ -404,7 +418,10 @@ const parse = (q: string): Parsed => {
   const part = PEDAGOGY_PARTS.find(([, , re]) => re.test(q))?.[0];
   const chip = (Object.keys(AREA_NAMES) as Area[]).find((a) => AREA_NAMES[a].toLowerCase() === q.trim().toLowerCase());
   const areas = new Set(chip ? [chip] : AREA_WORDS.filter(([, re]) => re.test(q)).map(([a]) => a));
+  const group = SKILL_GROUPS.find(([, re]) => re.test(q))?.[0];
   if (categories.length) areas.add('games');
+  // "Kicking" or "dribbling" alone is a Games skill; beside another area ("forward roll" in gymnastics) it isn't
+  if (group && !areas.size && !SKILL_NAMES.test(q)) areas.add('games');
   if (sport) areas.add(sport === 'track-and-field' ? 'athletics' : 'games');
   if (module) areas.add('outdoor');
   // "Teaching games for understanding" names a pedagogy, not the Games area
@@ -421,7 +438,7 @@ const parse = (q: string): Parsed => {
     sport,
     module,
     part,
-    group: SKILL_GROUPS.find(([, re]) => re.test(q))?.[0],
+    group,
     need: chip || /\bteaching (&|and) assessment\b/i.test(q) ? undefined : NEED_WORDS.find(([, re]) => re.test(q))?.[0],
   };
 };
@@ -499,6 +516,8 @@ const atStage = (s: GuideState): GuideState => {
 /** The section for what is known, or none yet */
 const sectionIdFor = (state: GuideState): string | undefined => {
   const s = atStage(state);
+  // A skill asked about across the primary years ("which level learns kicking?")
+  if (s.area === 'games' && s.focus && !isCategory(s.focus) && (!s.level || s.level === 'Primary')) return 'primary-games-p1-4';
   if (!s.level || !s.area) return undefined;
   const stage = stageOf(s.level);
   if (stage === 'ta') {
