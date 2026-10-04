@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  allSyllabusSections,
   type GuideState,
   type GuideStep,
   guideStep,
@@ -7,6 +8,7 @@ import {
   recentHistory,
   sectionContextMessage,
   sectionPdfLink,
+  syllabusMap,
   takeNotInSyllabus,
 } from './syllabusGuide';
 import { PE_SYLLABUS_TEXT } from './syllabusData';
@@ -452,5 +454,40 @@ describe('no more whole-syllabus answers', () => {
   it('answers "Just answer" with nothing chosen from the introduction', () => {
     const level = asks(guideStep('What are the learning outcomes?'));
     expect(guideStep(JUST_ANSWER, level.state)).toMatchObject({ kind: 'section', request: { section: { id: 'syllabus-overview' } } });
+  });
+});
+
+describe('the syllabus map', () => {
+  const line = (topic: string) => syllabusMap().split('\n').find((l) => l.startsWith(`${topic} (p.`));
+
+  it('shows where kicking is taught: P2 Games, printed p. 33', () => {
+    expect(line('P2 Games')).toMatch(/^P2 Games \(p\. 33\): .*Kicking: kick/);
+  });
+
+  it('labels P3 Games outcomes, whose skill headings all come before the lists', () => {
+    expect(line('P3 Games')).toMatch(/Throwing and Catching: throw .*\| Kicking and trapping \(with body part\): trap foot/);
+    expect(line('P3 Games')).toMatch(/\| Dribbling: dribble/);
+  });
+
+  const mapped = allSyllabusSections()
+    .filter((s) => s.id !== 'syllabus-overview')
+    .sort((a, b) => a.printedPage - b.printedPage);
+
+  it('has one line per section, leaving out the introduction', () => {
+    expect(syllabusMap().split('\n')).toHaveLength(mapped.length);
+  });
+
+  it("gives each section's own printed page, in page order", () => {
+    syllabusMap().split('\n').forEach((l, i) => {
+      expect(l.startsWith(`${mapped[i].topic} (p. ${mapped[i].printedPage}): `)).toBe(true);
+    });
+  });
+
+  it('says something about every section', () => {
+    expect(syllabusMap().split('\n').filter((l) => l.split('): ')[1]?.trim().length < 20)).toEqual([]);
+  });
+
+  it('stays under ~6k tokens (about 4 characters a token)', () => {
+    expect(syllabusMap().length / 4).toBeLessThan(6000);
   });
 });
