@@ -7,7 +7,7 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, SkillMode } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
-import { guideStep, takeNotInSyllabus } from './data/syllabusGuide';
+import { guideStep, takeNotInSyllabus, takeSectionTag } from './data/syllabusGuide';
 import { chatTitle, questionTitle } from './utils/chatTitles';
 import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
 import { computeVideoHash } from './services/videoAnalysisCache';
@@ -1912,9 +1912,10 @@ const App: React.FC = () => {
     }
 
     // Syllabus questions (#112): the guide asks up to 4 chip questions, then places
-    // the question in one section, so only that section goes to the AI. It carries
-    // on from the guide state on the last bot message. Video and Practice Station
-    // chats keep their flow.
+    // the question in one section, so only that section goes to the AI, with the
+    // syllabus map (#130). A message it can't place gets the map alone. It carries
+    // on from the guide state on the last bot message. Video, skill-checklist and
+    // Practice Station chats keep their flow.
     const lastBotMessage = currentMessages.filter(m => m.sender === Sender.BOT).at(-1);
     const webSearch = !!metadata?.webSearch;
     const guide = !webSearch && !files?.length && !isVerifying && !isPupilPractice && !newMessage.hasMedia
@@ -2085,7 +2086,15 @@ const App: React.FC = () => {
       }
 
       // The AI tags an answer the syllabus doesn't cover; the teacher may then search the web
-      const { text: answerText, notInSyllabus } = takeNotInSyllabus(response.text);
+      const { text: untaggedText, notInSyllabus } = takeNotInSyllabus(response.text);
+      // A syllabus answer may name its section from the map: show that one, and stay on it
+      const { text: answerText, section: namedSection } = syllabusRequest
+        ? takeSectionTag(untaggedText)
+        : { text: untaggedText, section: undefined };
+      const shownSection = namedSection ?? syllabusRequest?.section;
+      const answerGuide = namedSection && namedSection.id !== syllabusRequest?.section?.id
+        ? { asked: 0, sectionId: namedSection.id }
+        : guideAnswerState;
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: answerText,
@@ -2097,8 +2106,8 @@ const App: React.FC = () => {
         modelId: answeringModel,
         offerWebSearch: notInSyllabus && !webSearch && !newMessage.hasMedia && !isPupilPractice,
         fromWebSearch: webSearch || undefined,
-        syllabusSectionId: syllabusRequest?.section.id,
-        guide: guideAnswerState,
+        syllabusSectionId: shownSection?.id,
+        guide: answerGuide,
         studentId,
         performer: metadata?.performer,
         // hasMedia is true if: user uploaded media OR we have pose data/analysis frames
@@ -2129,7 +2138,7 @@ const App: React.FC = () => {
           title: chatTitle({
             current: session.title,
             firstQuestion: session.messages.find(m => m.sender === Sender.USER)?.text ?? '',
-            topic: syllabusRequest?.section.topic,
+            topic: shownSection?.topic,
             need: syllabusRequest?.need,
             skill: proficiencyLevel ? skillContext : undefined,
             web: webSearch,
@@ -2176,7 +2185,7 @@ const App: React.FC = () => {
         timestamp: new Date(),
         isError: true,
         // The section's text and PDF link still help when the AI couldn't answer
-        syllabusSectionId: syllabusRequest?.section.id,
+        syllabusSectionId: syllabusRequest?.section?.id,
         guide: guideAnswerState,
       };
       
@@ -2187,7 +2196,7 @@ const App: React.FC = () => {
         title: chatTitle({
           current: session.title,
           firstQuestion: session.messages.find(m => m.sender === Sender.USER)?.text ?? '',
-          topic: syllabusRequest?.section.topic,
+          topic: syllabusRequest?.section?.topic,
           need: syllabusRequest?.need,
         }),
         updatedAt: new Date()

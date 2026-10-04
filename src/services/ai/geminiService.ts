@@ -10,7 +10,7 @@ import {
   GYMNASTICS_REFERENCE_IMAGES,
 } from '../../data/gymnasticsSkillsData';
 import type { SkillMode } from '../../types';
-import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusRequest, WEB_SEARCH_INSTRUCTION } from '../../data/syllabusGuide';
+import { recentHistory, sectionContextMessage, SYLLABUS_SYSTEM_INSTRUCTION, type SyllabusRequest, WEB_SEARCH_INSTRUCTION } from '../../data/syllabusGuide';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 
 
@@ -612,7 +612,7 @@ ${checklist.join('\n')}
       : searchWeb
         ? WEB_SEARCH_INSTRUCTION
         : sectionOnly
-        ? SECTION_SYSTEM_INSTRUCTION
+        ? SYLLABUS_SYSTEM_INSTRUCTION
         : FULL_SYSTEM_INSTRUCTION_TEMPLATE
             .replace('{{FMS_CONTEXT}}', fmsBlock);
 
@@ -892,12 +892,14 @@ ${BACKSWING_ITEM5_RULE}
     let groundingChunks: GroundingChunk[] = [];
     let tokenUsage = 0;
 
-    // A syllabus question carries its one section as a context exchange, with the
-    // last few messages. Anything else (and a web search) carries no syllabus.
-    const syllabusContext: Content[] = sectionOnly
+    // A syllabus question carries the map (in the instruction) and, if the guide
+    // placed it, its one section as a context exchange, with the last few
+    // messages. Anything else (and a web search) carries no syllabus.
+    const section = sectionOnly ? syllabusRequest!.section : undefined;
+    const syllabusContext: Content[] = section
       ? [
-          { role: 'user', parts: [{ text: sectionContextMessage(syllabusRequest!) }] },
-          { role: 'model', parts: [{ text: `I have read ${syllabusRequest!.section.title} and will answer from it.` }] },
+          { role: 'user', parts: [{ text: sectionContextMessage({ ...syllabusRequest!, section }) }] },
+          { role: 'model', parts: [{ text: `I have read ${section.title} and will answer from it.` }] },
         ]
       : [];
     const chatHistory = sectionOnly || searchWeb ? recentHistory(history) : history;

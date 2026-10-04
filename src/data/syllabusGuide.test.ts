@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  allSyllabusSections,
   type GuideState,
   type GuideStep,
   guideStep,
@@ -7,7 +8,10 @@ import {
   recentHistory,
   sectionContextMessage,
   sectionPdfLink,
+  syllabusMap,
+  SYLLABUS_SYSTEM_INSTRUCTION,
   takeNotInSyllabus,
+  takeSectionTag,
 } from './syllabusGuide';
 import { PE_SYLLABUS_TEXT } from './syllabusData';
 
@@ -15,8 +19,8 @@ import { PE_SYLLABUS_TEXT } from './syllabusData';
 const answerOf = (question: string) => {
   let step = guideStep(question);
   for (let i = 0; step.kind === 'ask' && i < 5; i++) step = guideStep(JUST_ANSWER, step.state);
-  if (step.kind !== 'section') throw new Error(`"${question}" did not reach a section (${step.kind})`);
-  return step.request;
+  if (step.kind !== 'section' || !step.request.section) throw new Error(`"${question}" did not reach a section (${step.kind})`);
+  return { ...step.request, section: step.request.section };
 };
 const section = (question: string) => answerOf(question).section;
 
@@ -157,8 +161,9 @@ describe('asking before answering', () => {
 
   it('answers straight away on Just answer, from what it knows', () => {
     const area = asks(guideStep('P4 outcomes'));
-    // No area yet: the syllabus's introduction
-    expect(guideStep(JUST_ANSWER, area.state)).toMatchObject({ kind: 'section', request: { section: { id: 'syllabus-overview' } } });
+    // No area yet: the map alone
+    const mapOnly = guideStep(JUST_ANSWER, area.state);
+    expect(mapOnly.kind === 'section' && mapOnly.request.section).toBeUndefined();
     const need = asks(guideStep('P4 dance'));
     expect(guideStep(JUST_ANSWER, need.state)).toMatchObject({ kind: 'section', request: { section: { id: 'p4-dance' } } });
   });
@@ -236,11 +241,8 @@ describe('follow-ups after an answer', () => {
 });
 
 describe('questions it leaves to the rest of the app', () => {
-  it.each([
-    'hello',
-    'critical elements of the overhand throw',
-  ])('"%s"', (question) => {
-    expect(guideStep(question).kind).toBe('unplaced');
+  it('leaves skill-checklist questions to the skill checklists', () => {
+    expect(guideStep('critical elements of the overhand throw').kind).toBe('unplaced');
   });
 });
 
@@ -350,7 +352,7 @@ describe('what the AI is sent for a section', () => {
   it('names the P1–4 Games focus', () => {
     const { step } = conversation('P2 games', 'Dribbling', 'Lesson ideas');
     if (step.kind !== 'section') throw new Error(step.kind);
-    expect(sectionContextMessage(step.request)).toContain('Focus on: Dribbling.');
+    expect(sectionContextMessage({ ...step.request, section: step.request.section! })).toContain('Focus on: Dribbling.');
   });
 
   it('keeps only the last 6 messages of the conversation', () => {
@@ -449,8 +451,104 @@ describe('no more whole-syllabus answers', () => {
     expect(area.state.level).toBe('P4');
   });
 
-  it('answers "Just answer" with nothing chosen from the introduction', () => {
+  it('answers "Just answer" with nothing chosen from the map alone', () => {
     const level = asks(guideStep('What are the learning outcomes?'));
-    expect(guideStep(JUST_ANSWER, level.state)).toMatchObject({ kind: 'section', request: { section: { id: 'syllabus-overview' } } });
+    expect(guideStep(JUST_ANSWER, level.state)).toEqual({ kind: 'section', request: { need: 'Outcomes' }, state: expect.anything() });
+  });
+});
+
+describe('the syllabus map', () => {
+  const line = (topic: string) => syllabusMap().split('\n').find((l) => l.startsWith(`${topic} (p.`));
+
+  it('shows where kicking is taught: P2 Games, printed p. 33', () => {
+    expect(line('P2 Games')).toMatch(/^P2 Games \(p\. 33\): .*Kicking: kick/);
+  });
+
+  it('labels P3 Games outcomes, whose skill headings all come before the lists', () => {
+    expect(line('P3 Games')).toMatch(/Throwing and Catching: throw .*\| Kicking and trapping \(with body part\): trap foot/);
+    expect(line('P3 Games')).toMatch(/\| Dribbling: dribble/);
+  });
+
+  const mapped = allSyllabusSections()
+    .filter((s) => s.id !== 'syllabus-overview')
+    .sort((a, b) => a.printedPage - b.printedPage);
+
+  it('has one line per section, leaving out the introduction', () => {
+    expect(syllabusMap().split('\n')).toHaveLength(mapped.length);
+  });
+
+  it("gives each section's own printed page, in page order", () => {
+    syllabusMap().split('\n').forEach((l, i) => {
+      expect(l.startsWith(`${mapped[i].topic} (p. ${mapped[i].printedPage}): `)).toBe(true);
+    });
+  });
+
+  it('says something about every section', () => {
+    expect(syllabusMap().split('\n').filter((l) => l.split('): ')[1]?.trim().length < 20)).toEqual([]);
+  });
+
+  it('stays under ~6k tokens (about 4 characters a token)', () => {
+    expect(syllabusMap().length / 4).toBeLessThan(6000);
+  });
+});
+
+/** The map alone: a syllabus answer with no section */
+const mapOnly = (step: GuideStep) => step.kind === 'section' && !step.request.section;
+
+describe('questions answered from the map', () => {
+  it.each([
+    'Which primary level do students learn kicking?',
+    'When do students learn kicking?',
+    'When do pupils learn to strike?',
+    'Is athletics taught at P2?',
+    'What comes after P4 gymnastics?',
+    'Where in the syllabus is the overhand throw?',
+  ])('"%s" skips the chip questions', (question) => {
+    expect(mapOnly(guideStep(question))).toBe(true);
+  });
+
+  it('gives a message the guide cannot place the map', () => {
+    expect(mapOnly(guideStep('hello'))).toBe(true);
+    expect(mapOnly(guideStep('can you catch my typo'))).toBe(true);
+  });
+
+  it('starts over with the map when a where-question replies to a chip question', () => {
+    const level = asks(guideStep('What are the learning outcomes?'));
+    expect(mapOnly(guideStep('when do students learn kicking?', level.state))).toBe(true);
+  });
+
+  it('keeps the section with the map for a where-question after an answer', () => {
+    const p4 = guideStep('P4 dance outcomes');
+    if (p4.kind !== 'section') throw new Error(p4.kind);
+    expect(guideStep('what comes after this?', p4.state)).toMatchObject({ request: { section: { id: 'p4-dance' } } });
+  });
+
+  it('stays on the section an answer named from the map', () => {
+    expect(guideStep('give me lesson ideas', { asked: 0, sectionId: 'p2-games' })).toMatchObject({
+      kind: 'section',
+      request: { section: { id: 'p2-games' }, need: 'Lesson ideas' },
+    });
+  });
+});
+
+describe('the section an answer names', () => {
+  it('finds it by its name in the map, and takes the tag out', () => {
+    expect(takeSectionTag('Kicking is first taught at P2.\n[[SECTION: P2 Games]]')).toMatchObject({
+      text: 'Kicking is first taught at P2.',
+      section: { id: 'p2-games', printedPage: 33 },
+    });
+  });
+
+  it('copes with a different case or a page number', () => {
+    expect(takeSectionTag('x [[SECTION: p2 games (p. 33)]]').section?.id).toBe('p2-games');
+  });
+
+  it('ignores a name that is not a section, but still hides the tag', () => {
+    expect(takeSectionTag('x\n[[SECTION: P9 Juggling]]')).toEqual({ text: 'x', section: undefined });
+  });
+
+  it('puts the map in the instruction, never the whole syllabus', () => {
+    expect(SYLLABUS_SYSTEM_INSTRUCTION).toContain(syllabusMap());
+    expect(SYLLABUS_SYSTEM_INSTRUCTION.length).toBeLessThan(PE_SYLLABUS_TEXT.length / 10);
   });
 });

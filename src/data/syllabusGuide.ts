@@ -293,6 +293,193 @@ const SECTIONS = new Map<string, SyllabusSection>(
 );
 
 export const getSyllabusSection = (id: string): SyllabusSection | undefined => SECTIONS.get(id);
+export const allSyllabusSections = (): SyllabusSection[] => [...SECTIONS.values()];
+
+// ── The syllabus map (#130) ─────────────────────────────────────────────────
+// One line per section, so the AI knows where everything sits in the syllabus
+// ("kicking first appears in P2 Games, p. 33") whichever section it is sent.
+// Cut from the sections' own text; the prototype is on branch prototype/syllabus-map.
+const MAP_WORDS_PER_OUTCOME = 6;
+const MAP_OUTCOMES_PER_SECTION = 5;
+
+const MAP_FILLER = /\b(the|a|an|using|of|to|and|with|in|on|for|by|at|into|from|towards?|their|its|one's|that|which|who|will|be|is|are|e\.g\.,?)\b/gi;
+/** Footnote numbers stuck to a word ("minutes7", "overhand15") */
+const FOOTNOTE = /([a-z’)])\d{1,3}\b/g;
+
+/** An outcome cut to its first clause, without filler words */
+const shortOutcome = (outcome: string): string =>
+  outcome.replace(/\s+/g, ' ').replace(FOOTNOTE, '$1').replace(/\bmovement( pattern)?\b/gi, '').replace(/\(.*?\)/g, '')
+    .split(/[,;:.](?:\s|$)/)[0]
+    .replace(MAP_FILLER, ' ').replace(/\s+/g, ' ').trim()
+    .split(' ').slice(0, MAP_WORDS_PER_OUTCOME).join(' ').toLowerCase();
+
+/** Short lines above a numbered list that aren't a skill heading */
+const NOT_SKILL_HEADING = /^(Movement Skills and Concepts|Learning Outcome|Strand|Sending( and Receiving)?|Propelling\d*|Skill execution|Games-related Concept)$/i;
+
+const joinHeading = (lines: string[]): string => lines.join(' ').replace(FOOTNOTE, '$1');
+
+/**
+ * Headings run together in a table's first column, split where a line starts
+ * a new one: ["Kicking and", "trapping", "Striking and", "Trapping"] → 2 headings.
+ * A line carries on the one before when it starts in lower case, or the one
+ * before ends in "and", "&", "/" or "," or has an unclosed bracket.
+ */
+const splitHeadings = (lines: string[]): string[] => {
+  const headings: string[][] = [];
+  for (const line of lines) {
+    const sofar = headings.at(-1)?.join(' ') ?? '';
+    const carriesOn = sofar && (!/^[A-Z]/.test(line) || /(\band|&|\/|,)$/.test(sofar)
+      || (sofar.match(/\(/g) ?? []).length > (sofar.match(/\)/g) ?? []).length);
+    if (carriesOn) headings.at(-1)!.push(line);
+    else headings.push([line]);
+  }
+  return headings.map(joinHeading);
+};
+
+/**
+ * Numbered outcomes ("1. Kick using…"), each under its skill heading, if any.
+ * A list takes the heading just above it. Some tables (P3 Games) give every
+ * heading first, then the lists: a list with no heading above takes the next
+ * of those.
+ */
+const numberedOutcomes = (text: string): { heading: string; text: string }[] => {
+  const out: { heading: string; text: string }[] = [];
+  let heading = '';
+  let headingLines: string[] = [];
+  /** Headings seen earlier, not yet given to a list */
+  let earlier: string[] = [];
+  let current: { heading: string; text: string } | undefined;
+  const finish = () => {
+    if (current) out.push(current);
+    current = undefined;
+  };
+  for (const line of text.split('\n').map((l) => l.trim())) {
+    const numbered = line.match(/^(\d{1,2})\.\s+(\S.*)$/);
+    if (numbered) {
+      finish();
+      if (numbered[1] === '1' && headingLines.length) {
+        heading = joinHeading(headingLines);
+        earlier = [];
+      } else if (numbered[1] === '1') {
+        heading = earlier.shift() ?? heading;
+      }
+      headingLines = [];
+      current = { heading, text: numbered[2] };
+    } else if (!line) {
+      finish();
+    } else if (current) {
+      current.text += ` ${line}`;
+    } else if (line.length < 30 && !/[.•:]/.test(line) && !NOT_SKILL_HEADING.test(line) && line !== line.toUpperCase()) {
+      headingLines.push(line);
+    } else {
+      earlier.push(...splitHeadings(headingLines));
+      headingLines = [];
+    }
+  }
+  finish();
+  return out;
+};
+
+/** The outcomes grouped by skill heading; every group keeps at least one, the rest share what's left */
+const outcomesSummary = (text: string): string => {
+  const groups = new Map<string, string[]>();
+  for (const { heading, text: outcome } of numberedOutcomes(text)) {
+    const items = groups.get(heading) ?? [];
+    const short = shortOutcome(outcome);
+    if (!items.includes(short)) items.push(short);
+    groups.set(heading, items);
+  }
+  const lists = [...groups.values()];
+  const shown = lists.map(() => 1);
+  let left = MAP_OUTCOMES_PER_SECTION - shown.length;
+  for (let round = 1; left > 0 && lists.some((items) => items.length > round); round++) {
+    lists.forEach((items, i) => {
+      if (left > 0 && items.length > round) {
+        shown[i]++;
+        left--;
+      }
+    });
+  }
+  return [...groups].map(([heading, items], i) => (heading ? `${heading}: ` : '') + items.slice(0, shown[i]).join('; ')).join(' | ');
+};
+
+/** PHS strand names, which the PDF's table sometimes puts between a bullet and its outcome */
+const PHS_STRAND = /^(Physical Fitness|Safety and Risk Management|Nutrition|Personal Hygiene and Self-Care)$/;
+
+/** Bulleted outcomes ("• Know the components of a balanced diet."), for levels without numbered ones */
+const bulletPoints = (text: string): string[] =>
+  text.split(/\n\s*•\s*/).slice(1)
+    .map((b) => {
+      const [first, next = ''] = b.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim());
+      return PHS_STRAND.test(first) ? next : first;
+    })
+    .filter((b) => b.length > 15);
+
+const bulletsSummary = (text: string): string =>
+  [...new Set(bulletPoints(text).map(shortOutcome))].slice(0, MAP_OUTCOMES_PER_SECTION).join('; ');
+
+/** The tactical problems a P5/6 games category is taught through */
+const TACTICAL_PROBLEM = /^(Winning the Point|Sending into Space|Setting up an Attack|Defending against an Attack|Maintaining Possession|Attacking the Goal|Defending Space|Defending the Goal|Regaining Possession|Getting on Base|Advancing Runners|Scoring Runs|Preventing Scoring|Keeping Possession[^\n]*)$/gim;
+
+/** P5/6 category tables: their tactical problems and situational games (1v1, 2v2…) */
+const categorySummary = (text: string): string => {
+  const problems = [...new Set([...text.matchAll(TACTICAL_PROBLEM)].map((m) => m[1].trim()))];
+  const games = [...new Set([...text.matchAll(/\b(\d)\s?v\s?(\d)\b/g)].map((m) => `${m[1]}v${m[2]}`))];
+  return `${problems.join('; ')}${games.length ? ` (games: ${games.join(', ')})` : ''}`;
+};
+
+/** Glossary terms: each a short paragraph ("Active\nEngagement") followed by its longer definition */
+const glossaryTerms = (text: string): string[] => {
+  const paragraphs = text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim());
+  return paragraphs.filter((p, i) =>
+    p.length < 60 && /^[A-Z]/.test(p) && !/\d/.test(p) && !/[.:,]$/.test(p) && p !== 'GLOSSARY' && (paragraphs[i + 1] ?? '').length > p.length);
+};
+
+/**
+ * Hand-written lines for sections that are prose or tables, not lists of
+ * outcomes: cut from their text, these came out empty or as half a sentence.
+ * Each says only what that section says.
+ */
+const MAP_LINES: Record<string, string> = {
+  'primary-games-overview': 'how primary games progress: P1-3 basic manipulative skills and movement patterns; P4 combination skills (catch, dribble, throw) while defended; P5-6 three games categories (net-barrier, striking-fielding, territorial-invasion) taught through situational games (1v1, 2v2); games-related concepts per category',
+  'primary-cce': 'CCE developmental milestones (social-emotional competencies) for Lower, Middle and Upper Primary under each core value: respect, responsibility, resilience, integrity, care, harmony; not for grading',
+  'sec-pa-overview': 'choosing secondary physical activities: at least 5 per student, from at least 2 games categories, at least 1 individual/dual; each at least 16 hours with a culminating event; activities by category (e.g. basketball, football, badminton, volleyball, softball, swimming, track & field); school-designed activities',
+  'sec-oe-overview': 'secondary Outdoor Education: strands outdoor living, sense of place, risk assessment and management; modules navigation, outdoor cooking, shelter building, trip planning (by end of Sec 1 for the 4D3N camp, by end of Sec 3 for the 5D4N camp); themes, lesson design',
+  'sec-cce': 'CCE developmental milestones (social-emotional competencies) for Secondary under each core value: respect, responsibility, resilience, integrity, care, harmony; not for grading',
+  'preu-pa-overview': 'choosing Pre-U physical activities: at least 5 per student, at least 1 individual/dual and 1 team, own choice, at least 1 recreational competition; each at least 10 hours with a culminating event; revisit secondary activities or learn new ones',
+  'preu-cce': 'CCE developmental milestones (social-emotional competencies) for Pre-U under each core value: respect, responsibility, resilience, integrity, care, harmony; not for grading',
+  'ta-pedagogy-teaching-practices': 'Singapore Curriculum Philosophy and Singapore Teaching Practice; 4 teaching processes: positive classroom culture, lesson preparation, lesson enactment, assessment and feedback; PE Lesson Observation Tool (PELOT, 24 teaching areas)',
+  'ta-pedagogy-understanding-students': 'learner profiles and differentiated instruction (content, process, product, environment; 4 guidelines); students with special educational needs (learning, physical, social-behavioural, sensory)',
+  'ta-pedagogy-teaching-styles-mosston': "Mosston's spectrum: 11 teaching styles A-K; reproduction cluster A-E (command, practice, reciprocal, self-check, inclusion); production cluster F-K (guided, convergent, divergent discovery; learner designed, learner initiated, self teach); teacher and learner roles",
+  'ta-pedagogy-movement-education': "Laban's movement concepts: body, space, effort, relationship; small-step progression to a dance or gymnastics sequence; modified small-sided games",
+  'ta-pedagogy-game-based-approach': "Game-Based Approach (TGfU, Tactical Games, Game Sense): 'what, why, when' before 'how'; modified games (sampling, representation, exaggeration, tactical complexity); teacher facilitates by questioning",
+  'ta-pedagogy-place-responsive-pedagogy': 'Outdoor Education: five pedagogical foci from P1 to Sec 3 (being present in places, engaging with places, representing places, holistic understanding, civic engagement); building personal connections with places',
+  'ta-pedagogy-nonlinear-pedagogy': 'Nonlinear Pedagogy: manipulate task, performer and environment constraints so learners explore their own movement solutions; representativeness, attentional focus, functional variability',
+  'ta-pedagogy-experiential-learning': "Kolb's experiential learning cycle: concrete experience, reflective observation, abstract conceptualisation, active experimentation; e.g. outdoor cooking; teacher and student roles",
+  'ta-pedagogy-inquiry-based-learning': 'inquiry-based learning: students pose questions, gather and analyse information, draw conclusions, collaborate, reflect; open or structured inquiry; in games tactics and PHS',
+  'ta-pedagogy-direct-instruction': 'direct instruction: task-oriented clear goals, skills broken into parts, demonstration, active monitoring, immediate specific feedback; for hierarchical basic skills and safety',
+  'ta-pedagogy-affective-learning': 'five affective learning opportunities: explicit teaching, content setting, communication styles, didactic interactions, teachable moments; how to use each in a lesson',
+  'ta-pedagogy-use-of-technology': 'technology in PE: Student Learning Space (SLS), Key Applications of Technology, video and collaboration tools for feedback, critical use of health information and fitness apps',
+  'ta-assessment': 'assessment purpose and 4 principles; the four-stage process (plan learning intentions and success criteria, ongoing assessment, analyse evidence, share attainment); P1-2 reporting by Holistic Development Profile (qualitative descriptors); P3 onwards school-chosen reporting; rubrics',
+};
+
+const mapBody = (s: SyllabusSection): string => {
+  if (MAP_LINES[s.id]) return MAP_LINES[s.id];
+  if (s.id === 'ta-glossary') return `terms: ${glossaryTerms(s.text).join(', ')}`;
+  if (s.id.startsWith('p5-6-')) return categorySummary(s.text);
+  if (numberedOutcomes(s.text).length >= 2) return outcomesSummary(s.text);
+  return bulletsSummary(s.text);
+};
+
+const mapLine = (s: SyllabusSection): string => `${s.topic} (p. ${s.printedPage}): ${mapBody(s)}`;
+
+/** The whole syllabus in one line per section, in page order */
+export const syllabusMap = (): string =>
+  [...SECTIONS.values()]
+    .filter((s) => s.id !== 'syllabus-overview')
+    .sort((a, b) => a.printedPage - b.printedPage)
+    .map(mapLine)
+    .join('\n');
 
 // ── Reading the question ────────────────────────────────────────────────────
 const AREA_WORDS: [Area, RegExp][] = [
@@ -349,6 +536,12 @@ const NEED_GUIDANCE: Record<Need, string> = {
 
 /** Words that make a message a syllabus question even without a level or area */
 const SYLLABUS_INTENT = /\bsyllabus\b|\bcurriculum\b|\blearning areas?\b|\bscheme of work\b|\bwhat (should|do|can) (i|we|my \w+|pupils|students|they) (teach|learn|cover)\b/i;
+
+/**
+ * Questions about where something sits in the syllabus (which level, when,
+ * what comes next): the map answers these, so the guide asks no chip questions.
+ */
+const WHERE_INTENT = /\b(which|what|at what) (primary |secondary |sec |pre-u )?(level|year|age|class|stage)s?\b|\bwhen (do|does|are|is|should|will|can|would)\b.*\b(learn|learnt|learned|taught|teach|introduced|start|begin)|\bwhat comes (after|before|next)\b|\bwhere in the syllabus\b|\b(taught|covered|learnt|learned|introduced) (at|in) (p[1-6]|primary|secondary|sec|pre-u)\b/i;
 
 /** FMS and gymnastics skill names: questions about these go to the skill checklists, not the guide */
 const SKILL_NAMES = new RegExp(`\\b(${[...ALL_FMS_SKILLS, ...ALL_GYMNASTICS_SKILLS]
@@ -449,9 +642,12 @@ export interface GuideState {
   sectionId?: string;
 }
 
-/** A section with what the teacher wants from it, for the AI */
+/**
+ * A syllabus question for the AI: the section it is about, if the guide placed
+ * it, with what the teacher wants from it. The syllabus map always goes too.
+ */
 export interface SyllabusRequest {
-  section: SyllabusSection;
+  section?: SyllabusSection;
   need?: Need;
   focus?: string;
 }
@@ -461,7 +657,7 @@ export type GuideStep =
   | { kind: 'section'; request: SyllabusRequest; state: GuideState }
   /** The question names something that isn't taught at that level; the chips are real sections */
   | { kind: 'mismatch'; message: string; choices: string[] }
-  /** Not a question the guide can place: the caller keeps the whole-syllabus answer */
+  /** A skill-checklist question: the caller keeps its own flow */
   | { kind: 'unplaced' };
 
 const UNPLACED: GuideStep = { kind: 'unplaced' };
@@ -579,11 +775,15 @@ const levelChoices = (s: GuideState): Level[] => {
 
 const keep = (s: GuideState): GuideState => ({ level: s.level, area: s.area, focus: s.focus, sport: s.sport, need: s.need, asked: s.asked });
 
+/** The map alone: a question about where things sit, or one the guide can't place */
+const mapAnswer = (need?: Need): GuideStep => ({ kind: 'section', request: { need }, state: { asked: 0 } });
+
 const answer = (state: GuideState): GuideStep => {
   const s = atStage(state);
-  const id = sectionIdFor(s);
-  const section = (id && SECTIONS.get(id)) || SECTIONS.get('syllabus-overview');
-  if (!section) return UNPLACED;
+  // A follow-up to an answer that named its section from the map stays on it
+  const id = sectionIdFor(s) ?? s.sectionId;
+  const section = id ? SECTIONS.get(id) : undefined;
+  if (!section) return { kind: 'section', request: { need: s.need }, state: keep(s) };
   const focus = s.focus && !isCategory(s.focus) && s.area === 'games' ? s.focus : undefined;
   return { kind: 'section', request: { section, need: s.need, focus }, state: { ...keep(s), sectionId: section.id } };
 };
@@ -670,9 +870,12 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
   // A question about an FMS or gymnastics skill belongs to the skill checklists
   const isSkillQuestion = SKILL_NAMES.test(text) && p.level === undefined && p.areas.length === 0;
 
+  const isWhereQuestion = WHERE_INTENT.test(text);
+
   // Replying to a guide question
   if (previous?.step) {
     if (text.trim().toLowerCase() === JUST_ANSWER.toLowerCase()) return answer(previous);
+    if (isWhereQuestion) return mapAnswer(p.need);
     if (says(p) && !isSkillQuestion) return next(merge(previous, p));
     // Didn't answer the question: treat it as a new message
     return guideStep(text);
@@ -680,6 +883,7 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
 
   // A follow-up to a guide answer stays on that section unless it names a new level or area
   if (previous?.sectionId) {
+    if (isWhereQuestion) return answer({ ...previous, need: p.need ?? previous.need });
     if (isSkillQuestion) return UNPLACED;
     // A broad new question ("what should I teach?") starts the questions again
     if (p.level === undefined && p.areas.length === 0 && SYLLABUS_INTENT.test(text)) return guideStep(text);
@@ -690,8 +894,9 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
   }
 
   // A new message
+  if (isWhereQuestion) return mapAnswer(p.need);
   if (!twoAreas && p.level === undefined && p.areas.length === 0 && (isSkillQuestion || !(p.need || SYLLABUS_INTENT.test(text)))) {
-    return UNPLACED;
+    return isSkillQuestion ? UNPLACED : mapAnswer(p.need);
   }
   return next(merge({ asked: 0 }, p));
 };
@@ -701,14 +906,28 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
 export const SECTION_HISTORY_LENGTH = 6;
 export const recentHistory = <T>(history: T[]): T[] => history.slice(-SECTION_HISTORY_LENGTH);
 
-export const SECTION_SYSTEM_INSTRUCTION = `You are the Singapore PE Syllabus Assistant for MOE Singapore's 2024 PE Syllabus.
-The teacher's question is about ONE section of the syllabus, given to you in full. Answer from that section only.
-- Shape the answer to what the teacher needs (given with the section).
-- Be brief: teachers read on a phone. Use at most 5 bullet points or 4 sentences, except when listing outcomes; then give every outcome in the section, numbered, in the syllabus's own words.
-- The section's full text and a link to its PDF page are shown under your answer, so do not paste the whole section unless asked.
+/** Ends an answer that points to a section other than the one sent (or none) */
+export const SECTION_TAG = /\[\[SECTION:\s*([^\]]+?)\s*\]\]/g;
+
+/**
+ * The instruction for every syllabus answer. It carries the map, so the AI
+ * knows where everything sits whichever section (if any) comes with the question.
+ */
+export const SYLLABUS_SYSTEM_INSTRUCTION = `You are the Singapore PE Syllabus Assistant for MOE Singapore's 2024 PE Syllabus.
+Below is a MAP of the whole syllabus: one line per section, with its name, printed page and its outcomes cut to a few words. When the app has placed the question in a section, that section's full text comes with the question.
+- Answer from the section's full text when one is given and it covers the question. Shape the answer to what the teacher needs (given with the section).
+- Use the map for where things sit: which level or section teaches something, when it first appears, what comes before or after, which page to look at. When something is taught at several levels, give the first and where it carries on.
+- Map lines are cut short: never quote them as the syllabus's words or list outcomes from them. To give outcomes, name the section and its page.
+- When your answer points to one section that is not the one given in full (or none was given), end with [[SECTION: <its name exactly as in the map>]] on its own line, e.g. [[SECTION: P2 Games]]. The app then shows that section's full text and PDF link.
+- Be brief: teachers read on a phone. Use at most 5 bullet points or 4 sentences, except when listing outcomes from a section's full text; then give every outcome in the section, numbered, in the syllabus's own words.
+- A section's full text and PDF link are shown under your answer, so do not paste the whole section unless asked.
 - Answer directly. Do not offer menus or choices, and do not use [[SKILL_CHOICES]].
-- If the section does not answer the question, say so in one sentence, then end with [[NOT_IN_SYLLABUS]] on its own line.
-- Tone: direct, professional, Singapore PE context. No filler phrases.`;
+- A greeting or thanks: reply in one short sentence.
+- If neither the section nor the map answers the question, say so in one sentence, then end with [[NOT_IN_SYLLABUS]] on its own line.
+- Tone: direct, professional, Singapore PE context. No filler phrases.
+
+SYLLABUS MAP
+${syllabusMap()}`;
 
 /**
  * The AI ends an answer with this tag when the syllabus doesn't cover the
@@ -729,7 +948,8 @@ The teacher asked you to search the web because MOE's 2024 PE Syllabus does not 
 - Prefer official and Singapore sources (MOE, SportSG, national sports associations).
 - Tone: direct, professional. No filler phrases.`;
 
-export const sectionContextMessage = ({ section, need, focus }: SyllabusRequest): string =>
+/** The section sent with a question, for a request that has one */
+export const sectionContextMessage = ({ section, need, focus }: SyllabusRequest & { section: SyllabusSection }): string =>
   [
     `SINGAPORE MOE PE SYLLABUS 2024 — ${section.title} (syllabus p. ${section.printedPage})`,
     need ? `The teacher needs: ${need}. ${NEED_GUIDANCE[need]}` : '',
@@ -738,5 +958,15 @@ export const sectionContextMessage = ({ section, need, focus }: SyllabusRequest)
   ]
     .filter(Boolean)
     .join('\n\n');
+
+const SECTION_BY_NAME = new Map([...SECTIONS.values()].flatMap((s) => [[s.topic.toLowerCase(), s], [s.id, s]]));
+
+/** The answer without its [[SECTION: …]] tag, and the section the tag names, if it is a real one */
+export const takeSectionTag = (text: string): { text: string; section?: SyllabusSection } => {
+  const named = [...text.matchAll(SECTION_TAG)]
+    .map((m) => SECTION_BY_NAME.get(m[1].replace(/\s*\(p\.?\s*\d+\)$/i, '').replace(/\s+/g, ' ').toLowerCase()))
+    .find(Boolean);
+  return { text: text.replace(SECTION_TAG, '').trim(), section: named };
+};
 
 export const sectionPdfLink = (s: Pick<SyllabusSection, 'pdfPage'>): string => `${SYLLABUS_PDF_URL}#page=${s.pdfPage}`;

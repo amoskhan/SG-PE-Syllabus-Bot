@@ -4,7 +4,7 @@
 
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
-import { recentHistory, sectionContextMessage, SECTION_SYSTEM_INSTRUCTION, type SyllabusRequest } from '../../data/syllabusGuide';
+import { recentHistory, sectionContextMessage, SYLLABUS_SYSTEM_INSTRUCTION, type SyllabusRequest } from '../../data/syllabusGuide';
 import { getFewShotExamples } from '../../data/skillExamples';
 import { backswingCheck, BACKSWING_ITEM5_RULE } from './backswingCheck';
 import { supabase } from '../db/supabaseClient';
@@ -570,7 +570,7 @@ REMINDER: The list above has ${checklist.length} items (1 through ${checklist.le
                 .replace(PROFICIENCY_RUBRIC, activeRubric)
                 .replace('Valid names: ' + Object.keys(SKILL_REFERENCE_IMAGES).join(', '), 'Valid names: ' + Object.keys(activeReferenceImages).join(', '))
             : sectionOnly
-                ? SECTION_SYSTEM_INSTRUCTION
+                ? SYLLABUS_SYSTEM_INSTRUCTION
                 : FULL_SYSTEM_INSTRUCTION_TEMPLATE.replace('{{FMS_CONTEXT}}', fmsBlock)
                     .replace('Valid names: ' + Object.keys(SKILL_REFERENCE_IMAGES).join(', '), 'Valid names: ' + Object.keys(activeReferenceImages).join(', '));
 
@@ -824,24 +824,26 @@ ${BACKSWING_ITEM5_RULE}
         }
 
         // ── Build messages array ─────────────────────────────────────────────
-        // A syllabus question carries its one section (mirrors Gemini syllabusContext),
+        // A syllabus question carries the map (in the cached system prompt) and, if
+        // the guide placed it, its one section (mirrors Gemini syllabusContext),
         // marked for prompt caching so follow-ups on the same section read from cache.
         // Anything else carries no syllabus.
         type MessageWithContent = { role: string; content: string | AnthropicContentBlock[] };
-        const syllabusPrefix: MessageWithContent[] = !sectionOnly ? [] : [
+        const section = sectionOnly ? syllabusRequest!.section : undefined;
+        const syllabusPrefix: MessageWithContent[] = !section ? [] : [
             {
                 role: 'user',
                 content: [
                     {
                         type: 'text' as const,
-                        text: sectionContextMessage(syllabusRequest!),
+                        text: sectionContextMessage({ ...syllabusRequest!, section }),
                         cache_control: { type: 'ephemeral' as const },
                     },
                 ],
             },
             {
                 role: 'assistant',
-                content: `I have read ${syllabusRequest!.section.title} and will answer from it.`,
+                content: `I have read ${section.title} and will answer from it.`,
             },
         ];
 
