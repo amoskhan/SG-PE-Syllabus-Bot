@@ -537,6 +537,12 @@ const NEED_GUIDANCE: Record<Need, string> = {
 /** Words that make a message a syllabus question even without a level or area */
 const SYLLABUS_INTENT = /\bsyllabus\b|\bcurriculum\b|\blearning areas?\b|\bscheme of work\b|\bwhat (should|do|can) (i|we|my \w+|pupils|students|they) (teach|learn|cover)\b/i;
 
+/**
+ * Questions about where something sits in the syllabus (which level, when,
+ * what comes next): the map answers these, so the guide asks no chip questions.
+ */
+const WHERE_INTENT = /\b(which|what|at what) (primary |secondary |sec |pre-u )?(level|year|age|class|stage)s?\b|\bwhen (do|does|are|is|should|will|can|would)\b.*\b(learn|learnt|learned|taught|teach|introduced|start|begin)|\bwhat comes (after|before|next)\b|\bwhere in the syllabus\b|\b(taught|covered|learnt|learned|introduced) (at|in) (p[1-6]|primary|secondary|sec|pre-u)\b/i;
+
 /** FMS and gymnastics skill names: questions about these go to the skill checklists, not the guide */
 const SKILL_NAMES = new RegExp(`\\b(${[...ALL_FMS_SKILLS, ...ALL_GYMNASTICS_SKILLS]
   .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
@@ -636,9 +642,12 @@ export interface GuideState {
   sectionId?: string;
 }
 
-/** A section with what the teacher wants from it, for the AI */
+/**
+ * A syllabus question for the AI: the section it is about, if the guide placed
+ * it, with what the teacher wants from it. The syllabus map always goes too.
+ */
 export interface SyllabusRequest {
-  section: SyllabusSection;
+  section?: SyllabusSection;
   need?: Need;
   focus?: string;
 }
@@ -648,7 +657,7 @@ export type GuideStep =
   | { kind: 'section'; request: SyllabusRequest; state: GuideState }
   /** The question names something that isn't taught at that level; the chips are real sections */
   | { kind: 'mismatch'; message: string; choices: string[] }
-  /** Not a question the guide can place: the caller keeps the whole-syllabus answer */
+  /** A skill-checklist question: the caller keeps its own flow */
   | { kind: 'unplaced' };
 
 const UNPLACED: GuideStep = { kind: 'unplaced' };
@@ -766,11 +775,15 @@ const levelChoices = (s: GuideState): Level[] => {
 
 const keep = (s: GuideState): GuideState => ({ level: s.level, area: s.area, focus: s.focus, sport: s.sport, need: s.need, asked: s.asked });
 
+/** The map alone: a question about where things sit, or one the guide can't place */
+const mapAnswer = (need?: Need): GuideStep => ({ kind: 'section', request: { need }, state: { asked: 0 } });
+
 const answer = (state: GuideState): GuideStep => {
   const s = atStage(state);
-  const id = sectionIdFor(s);
-  const section = (id && SECTIONS.get(id)) || SECTIONS.get('syllabus-overview');
-  if (!section) return UNPLACED;
+  // A follow-up to an answer that named its section from the map stays on it
+  const id = sectionIdFor(s) ?? s.sectionId;
+  const section = id ? SECTIONS.get(id) : undefined;
+  if (!section) return { kind: 'section', request: { need: s.need }, state: keep(s) };
   const focus = s.focus && !isCategory(s.focus) && s.area === 'games' ? s.focus : undefined;
   return { kind: 'section', request: { section, need: s.need, focus }, state: { ...keep(s), sectionId: section.id } };
 };
@@ -857,9 +870,12 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
   // A question about an FMS or gymnastics skill belongs to the skill checklists
   const isSkillQuestion = SKILL_NAMES.test(text) && p.level === undefined && p.areas.length === 0;
 
+  const isWhereQuestion = WHERE_INTENT.test(text);
+
   // Replying to a guide question
   if (previous?.step) {
     if (text.trim().toLowerCase() === JUST_ANSWER.toLowerCase()) return answer(previous);
+    if (isWhereQuestion) return mapAnswer(p.need);
     if (says(p) && !isSkillQuestion) return next(merge(previous, p));
     // Didn't answer the question: treat it as a new message
     return guideStep(text);
@@ -867,6 +883,7 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
 
   // A follow-up to a guide answer stays on that section unless it names a new level or area
   if (previous?.sectionId) {
+    if (isWhereQuestion) return answer({ ...previous, need: p.need ?? previous.need });
     if (isSkillQuestion) return UNPLACED;
     // A broad new question ("what should I teach?") starts the questions again
     if (p.level === undefined && p.areas.length === 0 && SYLLABUS_INTENT.test(text)) return guideStep(text);
@@ -877,8 +894,9 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
   }
 
   // A new message
+  if (isWhereQuestion) return mapAnswer(p.need);
   if (!twoAreas && p.level === undefined && p.areas.length === 0 && (isSkillQuestion || !(p.need || SYLLABUS_INTENT.test(text)))) {
-    return UNPLACED;
+    return isSkillQuestion ? UNPLACED : mapAnswer(p.need);
   }
   return next(merge({ asked: 0 }, p));
 };
@@ -888,14 +906,28 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
 export const SECTION_HISTORY_LENGTH = 6;
 export const recentHistory = <T>(history: T[]): T[] => history.slice(-SECTION_HISTORY_LENGTH);
 
-export const SECTION_SYSTEM_INSTRUCTION = `You are the Singapore PE Syllabus Assistant for MOE Singapore's 2024 PE Syllabus.
-The teacher's question is about ONE section of the syllabus, given to you in full. Answer from that section only.
-- Shape the answer to what the teacher needs (given with the section).
-- Be brief: teachers read on a phone. Use at most 5 bullet points or 4 sentences, except when listing outcomes; then give every outcome in the section, numbered, in the syllabus's own words.
-- The section's full text and a link to its PDF page are shown under your answer, so do not paste the whole section unless asked.
+/** Ends an answer that points to a section other than the one sent (or none) */
+export const SECTION_TAG = /\[\[SECTION:\s*([^\]]+?)\s*\]\]/g;
+
+/**
+ * The instruction for every syllabus answer. It carries the map, so the AI
+ * knows where everything sits whichever section (if any) comes with the question.
+ */
+export const SYLLABUS_SYSTEM_INSTRUCTION = `You are the Singapore PE Syllabus Assistant for MOE Singapore's 2024 PE Syllabus.
+Below is a MAP of the whole syllabus: one line per section, with its name, printed page and its outcomes cut to a few words. When the app has placed the question in a section, that section's full text comes with the question.
+- Answer from the section's full text when one is given and it covers the question. Shape the answer to what the teacher needs (given with the section).
+- Use the map for where things sit: which level or section teaches something, when it first appears, what comes before or after, which page to look at. When something is taught at several levels, give the first and where it carries on.
+- Map lines are cut short: never quote them as the syllabus's words or list outcomes from them. To give outcomes, name the section and its page.
+- When your answer points to one section that is not the one given in full (or none was given), end with [[SECTION: <its name exactly as in the map>]] on its own line, e.g. [[SECTION: P2 Games]]. The app then shows that section's full text and PDF link.
+- Be brief: teachers read on a phone. Use at most 5 bullet points or 4 sentences, except when listing outcomes from a section's full text; then give every outcome in the section, numbered, in the syllabus's own words.
+- A section's full text and PDF link are shown under your answer, so do not paste the whole section unless asked.
 - Answer directly. Do not offer menus or choices, and do not use [[SKILL_CHOICES]].
-- If the section does not answer the question, say so in one sentence, then end with [[NOT_IN_SYLLABUS]] on its own line.
-- Tone: direct, professional, Singapore PE context. No filler phrases.`;
+- A greeting or thanks: reply in one short sentence.
+- If neither the section nor the map answers the question, say so in one sentence, then end with [[NOT_IN_SYLLABUS]] on its own line.
+- Tone: direct, professional, Singapore PE context. No filler phrases.
+
+SYLLABUS MAP
+${syllabusMap()}`;
 
 /**
  * The AI ends an answer with this tag when the syllabus doesn't cover the
@@ -916,7 +948,8 @@ The teacher asked you to search the web because MOE's 2024 PE Syllabus does not 
 - Prefer official and Singapore sources (MOE, SportSG, national sports associations).
 - Tone: direct, professional. No filler phrases.`;
 
-export const sectionContextMessage = ({ section, need, focus }: SyllabusRequest): string =>
+/** The section sent with a question, for a request that has one */
+export const sectionContextMessage = ({ section, need, focus }: SyllabusRequest & { section: SyllabusSection }): string =>
   [
     `SINGAPORE MOE PE SYLLABUS 2024 — ${section.title} (syllabus p. ${section.printedPage})`,
     need ? `The teacher needs: ${need}. ${NEED_GUIDANCE[need]}` : '',
@@ -925,5 +958,15 @@ export const sectionContextMessage = ({ section, need, focus }: SyllabusRequest)
   ]
     .filter(Boolean)
     .join('\n\n');
+
+const SECTION_BY_NAME = new Map([...SECTIONS.values()].flatMap((s) => [[s.topic.toLowerCase(), s], [s.id, s]]));
+
+/** The answer without its [[SECTION: …]] tag, and the section the tag names, if it is a real one */
+export const takeSectionTag = (text: string): { text: string; section?: SyllabusSection } => {
+  const named = [...text.matchAll(SECTION_TAG)]
+    .map((m) => SECTION_BY_NAME.get(m[1].replace(/\s*\(p\.?\s*\d+\)$/i, '').replace(/\s+/g, ' ').toLowerCase()))
+    .find(Boolean);
+  return { text: text.replace(SECTION_TAG, '').trim(), section: named };
+};
 
 export const sectionPdfLink = (s: Pick<SyllabusSection, 'pdfPage'>): string => `${SYLLABUS_PDF_URL}#page=${s.pdfPage}`;
