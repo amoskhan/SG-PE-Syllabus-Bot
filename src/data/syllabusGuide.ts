@@ -814,22 +814,25 @@ const next = (state: GuideState): GuideStep => {
     const areas = STAGE_AREAS[stage].filter((a) => a !== 'athletics' || !year || year >= 4);
     return ask(s, 'area', 'Which learning area?', areas.map((a) => AREA_NAMES[a]));
   }
-  if (stage === 'primary' && s.area === 'games' && !s.focus) {
-    const year = yearOf(s.level);
-    if (s.level === 'P5/6' || (year && year >= 5)) return ask(s, 'focus', 'Which games category?', Object.values(FOCUS_NAMES));
-    if (year) return ask(s, 'focus', 'Which skills?', SKILL_GROUPS.map(([g]) => g));
-  }
-  if (stage !== 'primary' && s.area === 'pa' && !s.sport) {
-    return ask(s, 'focus', 'Which physical activity?', SPORTS.map(([, name]) => name));
-  }
-  if (stage === 'ta' && s.area === 'pedagogy' && !s.focus) {
-    return ask(s, 'focus', 'Which part of pedagogy?', PEDAGOGY_PARTS.map(([part]) => part));
-  }
-  if (stage === 'secondary' && s.area === 'outdoor' && !s.focus) {
-    return ask(s, 'focus', 'Which Outdoor Education module?', OE_MODULES.map(([m]) => m));
-  }
+  const focus = focusQuestion(s);
+  if (focus) return ask(s, 'focus', focus[0], focus[1]);
   if (!s.need && stage !== 'ta') return ask(s, 'need', 'What do you need?', [...NEEDS]);
   return answer(s);
+};
+
+/** The focus question for a level and area that has one, as [prompt, choices] */
+const focusQuestion = (s: GuideState): [string, string[]] | undefined => {
+  if (!s.level) return undefined;
+  const stage = stageOf(s.level);
+  if (stage === 'primary' && s.area === 'games' && !s.focus) {
+    const year = yearOf(s.level);
+    if (s.level === 'P5/6' || (year && year >= 5)) return ['Which games category?', Object.values(FOCUS_NAMES)];
+    if (year) return ['Which skills?', SKILL_GROUPS.map(([g]) => g)];
+  }
+  if (stage !== 'primary' && s.area === 'pa' && !s.sport) return ['Which physical activity?', SPORTS.map(([, name]) => name)];
+  if (stage === 'ta' && s.area === 'pedagogy' && !s.focus) return ['Which part of pedagogy?', PEDAGOGY_PARTS.map(([part]) => part)];
+  if (stage === 'secondary' && s.area === 'outdoor' && !s.focus) return ['Which Outdoor Education module?', OE_MODULES.map(([m]) => m)];
+  return undefined;
 };
 
 /** Fill what the message says into what is known; a new level or area starts a new topic */
@@ -899,6 +902,82 @@ export const guideStep = (text: string, saved?: GuideState): GuideStep => {
     return isSkillQuestion ? UNPLACED : mapAnswer(p.need);
   }
   return next(merge({ asked: 0 }, p));
+};
+
+// ── The question card (#131) ────────────────────────────────────────────────
+/** What each need gives the teacher, for its option in the question card */
+const NEED_HINTS: Record<Need, string> = {
+  Outcomes: 'What pupils should learn, in the syllabus’s own words',
+  'Lesson ideas': 'Activities that teach the outcomes',
+  'Teaching cues': 'Short cues to say to pupils',
+  Assessment: 'What to look for, and quick ways to check',
+  Differentiation: 'Easier and harder versions of the activities',
+};
+
+const DESCRIPTION_LENGTH = 90;
+
+/** Cut to a whole word or list item, with "…" when something was left out */
+const clip = (text: string): string => {
+  if (text.length <= DESCRIPTION_LENGTH) return text;
+  const cut = text.slice(0, DESCRIPTION_LENGTH);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(', '), cut.lastIndexOf('; '), cut.lastIndexOf(' ')))}…`;
+};
+
+/** Map outcomes without their skill heading, bullets, or empty items */
+const outcomesOnly = (parts: string[]): string =>
+  parts.map((p) => p.replace(/^[^:]{3,60}: /, '')).join('; ')
+    .replace(/•|\bLearning Outcomes\b/g, ' ').split(';').map((o) => o.replace(/\s+/g, ' ').trim()).filter(Boolean).join('; ');
+
+/**
+ * A section's map line as a description: its skill headings, or its first
+ * outcomes when the headings say little (a sport's "Offence" and "Defence").
+ * With a skill group, the outcomes under that group's headings.
+ */
+const sectionDescription = (section: SyllabusSection, group?: RegExp, prefix = ''): string => {
+  const parts = mapBody(section).replace(/^terms: /, '').split(' | ');
+  const grouped = group ? parts.filter((p) => group.test(p.split(': ')[0])) : [];
+  if (grouped.length) return clip(prefix + outcomesOnly(grouped));
+  const headings = parts.map((p) => p.match(/^([^:]{3,60}): /)?.[1]).filter((h): h is string => !!h);
+  const telling = headings.length >= 2 && !headings.some((h) => /^(Offence|Defence)/i.test(h));
+  return clip(prefix + (telling ? headings.join(', ') : outcomesOnly(parts)));
+};
+
+/**
+ * A one-line description of each option of a guide question, from the
+ * syllabus map: what the section that option leads to covers.
+ */
+export const describeChoices = (question: Extract<GuideStep, { kind: 'ask' }>): string[] =>
+  question.choices.filter((c) => c !== JUST_ANSWER).map((choice) => {
+    if (question.step === 'need') return NEED_HINTS[choice as Need] ?? '';
+    const s = atStage(merge(question.state, parse(choice)));
+    const id = sectionIdFor(s);
+    const section = id ? SECTIONS.get(id) : undefined;
+    const group = question.step === 'focus' ? SKILL_GROUPS.find(([g]) => g === choice)?.[1] : undefined;
+    if (section) return sectionDescription(section, group);
+    // A level before the area is known: what it learns in Games, or its learning areas
+    const year = yearOf(s.level) ?? (s.level === 'P5/6' ? 5 : undefined);
+    if (year && year >= 5) return `Games: ${Object.values(FOCUS_NAMES).join(', ').toLowerCase()}`;
+    const games = year ? SECTIONS.get(levelId('games', year)) : undefined;
+    if (games) return sectionDescription(games, undefined, 'Games: ');
+    const stage = s.level ? stageOf(s.level) : undefined;
+    return stage ? clip(STAGE_AREAS[stage].map((a) => AREA_NAMES[a]).join(', ')) : '';
+  });
+
+/**
+ * How many questions the guide will still ask after this one, as far as is
+ * known: the focus question only counts once the area shows there is one.
+ */
+export const questionsAfter = (question: Extract<GuideStep, { kind: 'ask' }>): number => {
+  const s = atStage(question.state);
+  const order: GuideStepName[] = ['level', 'area', 'focus', 'need'];
+  const later = order.slice(order.indexOf(question.step) + 1);
+  const ta = s.level ? stageOf(s.level) === 'ta' : false;
+  const count = later.filter((step) =>
+    step === 'area' ? !s.area
+      : step === 'focus' ? !!focusQuestion(s)
+        : step === 'need' ? !s.need && !ta
+          : false).length;
+  return Math.min(count, MAX_QUESTIONS - s.asked);
 };
 
 // ── What the AI is sent ─────────────────────────────────────────────────────

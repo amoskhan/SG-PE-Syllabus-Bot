@@ -40,6 +40,7 @@ export interface Message {
   modelId?: string; // ID of the AI model that generated this message
   syllabusSectionId?: string; // Syllabus section the answer came from (shown with its text and PDF link)
   guide?: import('./data/syllabusGuide').GuideState; // Syllabus guide: what it knows after this question or answer
+  guideQuestion?: Extract<import('./data/syllabusGuide').GuideStep, { kind: 'ask' }>; // A guide question shown as the question card (#131)
   offerWebSearch?: boolean; // The syllabus doesn't cover this: offer the teacher a web search
   fromWebSearch?: boolean; // Answered from a web search the teacher asked for, not the syllabus
   hasMedia?: boolean; // Flag if the message/conversation context includes media

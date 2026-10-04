@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   allSyllabusSections,
+  describeChoices,
   type GuideState,
   type GuideStep,
   guideStep,
   JUST_ANSWER,
   recentHistory,
   sectionContextMessage,
+  questionsAfter,
   sectionPdfLink,
   syllabusMap,
   SYLLABUS_SYSTEM_INSTRUCTION,
@@ -550,5 +552,56 @@ describe('the section an answer names', () => {
   it('puts the map in the instruction, never the whole syllabus', () => {
     expect(SYLLABUS_SYSTEM_INSTRUCTION).toContain(syllabusMap());
     expect(SYLLABUS_SYSTEM_INSTRUCTION.length).toBeLessThan(PE_SYLLABUS_TEXT.length / 10);
+  });
+});
+
+describe('the question card', () => {
+  const options = (step: GuideStep) => {
+    const q = asks(step);
+    const descriptions = describeChoices(q);
+    return Object.fromEntries(q.choices.filter((c) => c !== JUST_ANSWER).map((c, i) => [c, descriptions[i]]));
+  };
+
+  it('describes every option from the syllabus map, in one short line', () => {
+    let step: GuideStep = guideStep('What should I teach?');
+    for (const tap of ['P2', 'Games and Sports']) {
+      for (const d of Object.values(options(step))) {
+        expect(d.length).toBeGreaterThan(5);
+        expect(d.length).toBeLessThanOrEqual(91);
+      }
+      step = guideStep(tap, asks(step).state);
+    }
+  });
+
+  it("says kicking is new at P2, from its Games outcomes", () => {
+    const levels = options(guideStep('What should I teach?'));
+    expect(levels.P2).toMatch(/^Games: .*Kicking/);
+    expect(levels.P1).not.toMatch(/Kicking/);
+  });
+
+  it('describes a skill group by its own outcomes', () => {
+    const skills = options(guideStep('P2 games'));
+    expect(skills['Kicking and trapping']).toMatch(/^kick /);
+    expect(skills['Throwing and catching']).toMatch(/roll underhand; throw underhand/);
+  });
+
+  it('describes each need', () => {
+    expect(options(guideStep('P4 dance'))['Teaching cues']).toBe('Short cues to say to pupils');
+  });
+
+  it('counts the questions still to come, adding the focus question once the area shows one', () => {
+    const level = asks(guideStep('What should I teach?'));
+    expect(questionsAfter(level)).toBe(2); // area, need
+    const area = asks(guideStep('P2', level.state));
+    expect(questionsAfter(area)).toBe(1); // need (focus not known yet)
+    const focus = asks(guideStep('Games and Sports', area.state));
+    expect(focus.step).toBe('focus');
+    expect(questionsAfter(focus)).toBe(1); // need
+    expect(questionsAfter(asks(guideStep('Dance', area.state)))).toBe(0);
+  });
+
+  it('never counts past the four-question limit', () => {
+    const q = asks(guideStep('P1 games', { asked: 3, step: 'level' } as GuideState));
+    expect(q.state.asked + questionsAfter(q)).toBeLessThanOrEqual(4);
   });
 });
