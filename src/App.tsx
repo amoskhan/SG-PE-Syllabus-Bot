@@ -275,7 +275,8 @@ const App: React.FC = () => {
             }));
 
             // Local sessions without a cloud counterpart (still have temp numeric IDs)
-            const unseenLocal = prev.filter(s => !cloudIds.has(s.id) && !s.id.includes('-'));
+            // and the open chat, which may have got its cloud id after this fetch began
+            const unseenLocal = prev.filter(s => !cloudIds.has(s.id) && (!s.id.includes('-') || s.id === currentSessionIdRef.current));
             return [...unseenLocal, ...hydratedCloud];
           });
         } else {
@@ -1249,12 +1250,21 @@ const App: React.FC = () => {
   }, [sessions]);
 
 
-  // The home screen's Syllabus & Analysis card always opens a fresh chat. A chat
-  // nobody has typed in yet is reused, so going in and out doesn't pile up empty chats.
+  // The home screen's Syllabus & Analysis card always opens a new chat at the top,
+  // like Claude. A chat nobody typed in is reused, started afresh, so going in and
+  // out doesn't pile up empty chats. Practice Station chats have no typed messages
+  // either, so they are never reused.
   const openFreshChat = () => {
-    const unused = sessionsRef.current.find(s => !s.messages.some(m => m.sender === Sender.USER));
-    if (unused) setCurrentSessionId(unused.id);
-    else handleNewSession();
+    const unused = sessionsRef.current.find(s =>
+      !s.id.startsWith('peer-coach-') && !s.messages.some(m => m.sender === Sender.USER));
+    if (unused) {
+      const now = new Date();
+      updateSessionAndSync(unused.id, s => ({ ...s, title: 'New Chat', messages: [getWelcomeMessage()], createdAt: now, updatedAt: now }));
+      setCurrentSessionId(unused.id);
+      if (window.innerWidth < 768) setIsSidebarOpen(false);
+    } else {
+      handleNewSession();
+    }
     setAppMode('chat');
   };
 
