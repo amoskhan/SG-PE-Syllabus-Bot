@@ -28,7 +28,8 @@ export interface LessonStep {
   instruction?: string;        // what pupils are told to do at this step
   teach?: { media: TeachMedia[]; showCues: boolean; showReferenceImage: boolean };
   practise?: { films: boolean };
-  assess?: { method: AssessmentMethod };
+  // focusCues: the item numbers of the cues pupils tick (#136); none means all of them
+  assess?: { method: AssessmentMethod; focusCues?: number[] };
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -162,6 +163,14 @@ export const progressFor = (screen: Screen, steps: LessonStep[]): PairProgress =
 export const findLessonStep = (steps: LessonStep[], kind: StepKind, method?: AssessmentMethod) =>
   steps.findIndex(s => s.kind === kind && (!method || s.assess?.method === method));
 
+/**
+ * The cues the teacher picked for pupils to tick on a skill. One pick per skill
+ * per lesson: it sits on the lesson's first assess step for that skill, so a
+ * later AI analysis step reads the same ticks.
+ */
+export const focusCuesFor = (steps: LessonStep[], skillName: string): number[] | undefined =>
+  steps.find(s => s.kind === 'assess' && s.skillName === skillName)?.assess?.focusCues;
+
 /** A short name for a step, for "Step 2 of 3 · Peer assessment". */
 export const stepLabel = (step: LessonStep): string => {
   if (step.kind === 'teach') return 'Learn';
@@ -184,7 +193,11 @@ export const newStepId = () => `step-${Date.now().toString(36)}-${Math.random().
  * keeps it, unless that skill isn't in the lesson's learning area any more.
  */
 export const followMainSkill = (steps: LessonStep[], oldMain: string, newMain: string, areaSkills: readonly string[]) =>
-  steps.map(s => (s.skillName === oldMain || !areaSkills.includes(s.skillName) ? { ...s, skillName: newMain } : s));
+  steps.map(s => {
+    if (s.skillName !== oldMain && areaSkills.includes(s.skillName)) return s;
+    // The picked cues belonged to the old skill
+    return s.assess ? { ...s, skillName: newMain, assess: { method: s.assess.method } } : { ...s, skillName: newMain };
+  });
 
 /** Whether the lesson has a Practice Station: without one it makes no AI calls at all. */
 export const hasAiAnalysis = (steps: LessonStep[]) => runsAiPeerFeedback(steps);

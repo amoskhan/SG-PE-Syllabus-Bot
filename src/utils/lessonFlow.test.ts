@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     LessonStep, canUseAiAnalysis, defaultSteps, legacySteps, nextScreen, progressFor,
-    runsAiPeerFeedback, stepsOrLegacy, validateLesson, followMainSkill,
+    runsAiPeerFeedback, stepsOrLegacy, validateLesson, followMainSkill, focusCuesFor,
 } from './lessonFlow';
 
 const step = (id: string, over: Partial<LessonStep> = {}): LessonStep =>
@@ -144,5 +144,29 @@ describe('followMainSkill', () => {
     it('moves a step whose skill is not in the new learning area', () => {
         expect(followMainSkill([peer('a', 'Kick')], 'Overhand Throw', 'Forward Roll', ['Forward Roll', 'Cartwheel'])[0].skillName)
             .toBe('Forward Roll');
+    });
+});
+
+describe('focusCuesFor', () => {
+    const assess = (id: string, skillName: string, focusCues?: number[]): LessonStep =>
+        ({ id, kind: 'assess', skillName, assess: { method: 'peer_assessment', focusCues } });
+
+    it('reads the pick from the first assess step for the skill', () => {
+        const steps = [assess('a', 'Shoulder Stand', [1, 2, 4]), assess('b', 'Shoulder Stand', [3])];
+        expect(focusCuesFor(steps, 'Shoulder Stand')).toEqual([1, 2, 4]);
+    });
+
+    it('has no pick for a skill the lesson does not assess, or one with every cue', () => {
+        const steps = [assess('a', 'Shoulder Stand')];
+        expect(focusCuesFor(steps, 'Shoulder Stand')).toBeUndefined();
+        expect(focusCuesFor(steps, 'Kick')).toBeUndefined();
+    });
+});
+
+describe('followMainSkill and picked cues', () => {
+    it('drops the picked cues when the step moves to a new skill', () => {
+        const steps: LessonStep[] = [{ id: 'a', kind: 'assess', skillName: 'Kick', assess: { method: 'ai_analysis', focusCues: [1, 2] } }];
+        expect(followMainSkill(steps, 'Kick', 'Bounce', ['Kick', 'Bounce'])[0])
+            .toEqual({ id: 'a', kind: 'assess', skillName: 'Bounce', assess: { method: 'ai_analysis' } });
     });
 });

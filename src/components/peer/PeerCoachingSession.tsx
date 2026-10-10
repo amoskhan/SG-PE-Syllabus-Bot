@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  getAllCuesForSkill,
-  getCoreCuesForSkill,
+  getFocusCues,
   PeerSyllabusCue,
 } from '../../data/peerSyllabusCues';
 import { speechService } from '../../services/speechService';
@@ -52,6 +51,8 @@ interface PeerCoachingSessionProps {
   // The skill this step assesses (#92): its cues are the checklist. The work
   // is still saved under skillName, the lesson's main skill.
   cueSkillName?: string;
+  // The cues the teacher picked for this lesson (#136), by item number; none means all
+  focusCues?: number[];
 }
 
 export interface RefilmedAttempt {
@@ -82,6 +83,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   refilmPerformer,
   onRefilmDone,
   nextIsCoachBot = true,
+  focusCues,
   cueSkillName,
 }) => {
   const cueSkill = cueSkillName || skillName;
@@ -106,7 +108,6 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isOfflineSaved, setIsOfflineSaved] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [showFullChecklist, setShowFullChecklist] = useState(false);
   // Per-video cloud save state — tracks "Save to Teacher" button independent of full peer-assessment flow
   const [bananaSaveState, setBananaSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [appleSaveState, setAppleSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -116,9 +117,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const recordedChunksRef = useRef<Blob[]>([]);
   const uploadInputBananaRef = useRef<HTMLInputElement>(null); // file upload for Banana performer
   const uploadInputAppleRef = useRef<HTMLInputElement>(null);  // file upload for Apple performer
-  const allCues: PeerSyllabusCue[] = getAllCuesForSkill(cueSkill);
-  const coreCues: PeerSyllabusCue[] = getCoreCuesForSkill(cueSkill);
-  const displayedCues = showFullChecklist ? allCues : coreCues;
+  const displayedCues: PeerSyllabusCue[] = getFocusCues(cueSkill, focusCues);
 
   // Voice Guidance on Step Changes
   useEffect(() => {
@@ -488,7 +487,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const handleSaveLocally = async () => {
     setIsSaving(true);
     const mapCues = (rated: Record<string, boolean>): PeerCueResult[] =>
-      allCues.map((c) => ({
+      displayedCues.map((c) => ({
         cueIndex: c.itemNumber,
         criterionText: c.syllabusCriterion,
         isObserved: rated[c.id] ?? false,
@@ -536,7 +535,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     setSubmitError(null);
 
     const mapCues = (rated: Record<string, boolean>): PeerCueResult[] =>
-      allCues.map((c) => ({
+      displayedCues.map((c) => ({
         cueIndex: c.itemNumber,
         criterionText: c.syllabusCriterion,
         isObserved: rated[c.id] ?? false,
@@ -814,31 +813,6 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               </div>
             )}
 
-            {/* Checklist Toggle: 3 Quick Cues vs All MOE Items */}
-            <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 mb-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowFullChecklist(false)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  !showFullChecklist
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                ⭐ 3 Quick Cues
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowFullChecklist(true)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  showFullChecklist
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                📋 All {allCues.length} MOE Rules
-              </button>
-            </div>
 
             {/* MOE Syllabus Peer Cues List */}
             <div className="space-y-2 mb-3">
@@ -854,9 +828,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                         <span className="text-base">{cue.icon}</span>
                         <p className="text-xs font-black text-white leading-tight">{cue.kidFriendlyText}</p>
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
-                        MOE Standard: {cue.syllabusCriterion}
-                      </p>
+                      {cue.detail === undefined ? (
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
+                          MOE Standard: {cue.syllabusCriterion}
+                        </p>
+                      ) : cue.detail && (
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-3">{cue.detail}</p>
+                      )}
                     </div>
 
                     <div className="flex gap-1.5 shrink-0">
@@ -1105,31 +1083,6 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               </div>
             )}
 
-            {/* Checklist Toggle: 3 Quick Cues vs All MOE Items */}
-            <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 mb-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowFullChecklist(false)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  !showFullChecklist
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                ⭐ 3 Quick Cues
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowFullChecklist(true)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  showFullChecklist
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                📋 All {allCues.length} MOE Rules
-              </button>
-            </div>
 
             {/* MOE Syllabus Peer Cues List */}
             <div className="space-y-2 mb-3">
@@ -1145,9 +1098,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                         <span className="text-base">{cue.icon}</span>
                         <p className="text-xs font-black text-white leading-tight">{cue.kidFriendlyText}</p>
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
-                        MOE Standard: {cue.syllabusCriterion}
-                      </p>
+                      {cue.detail === undefined ? (
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
+                          MOE Standard: {cue.syllabusCriterion}
+                        </p>
+                      ) : cue.detail && (
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-3">{cue.detail}</p>
+                      )}
                     </div>
 
                     <div className="flex gap-1.5 shrink-0">

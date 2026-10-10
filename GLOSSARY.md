@@ -75,6 +75,10 @@ _Avoid_: Seesaw tray
 **Practice Station**:
 The pupil-facing name for an assess step that uses AI analysis: where each pupil gets one analysis of their clip per lesson and may ask the AI up to five questions about it.
 
+**PE AI Buddy**:
+The name pupils see for the AI that analyses their clips and answers their questions.
+_Avoid_: Coach Bot, AI teacher, coach
+
 **Practice Station Conversation**:
 Everything a pupil asked the AI in the Practice Station and every answer it gave; the teacher can read all of it, the pupil is always told so, and it is filed under that student's record.
 
@@ -122,7 +126,7 @@ _Avoid_: Checklist item, teaching point
 The full set of criteria for one skill.
 
 **Cue**:
-A child-friendly wording of a criterion that pupils tick while assessing each other.
+The wording of one criterion that pupils tick while assessing each other: the criterion as written, or a shorter child-friendly version of it.
 
 **Proficiency Level**:
 How well a skill was performed: Beginning, Developing, Competent or Accomplished.

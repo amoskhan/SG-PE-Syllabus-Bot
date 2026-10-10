@@ -27,13 +27,13 @@ import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './co
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef } from './services/offline/offlineStorage';
-import { LessonStep, PairProgress, Screen, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
+import { LessonStep, PairProgress, Screen, findLessonStep, focusCuesFor, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
-import { getAllCuesForSkill } from './data/peerSyllabusCues';
+import { getAllCuesForSkill, getFocusCues } from './data/peerSyllabusCues';
 import { normaliseLevel } from './utils/gradingReview';
 import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
 import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey, performerStage, performerWork, redoChecklistText, redoFilmCount } from './utils/pairWork';
@@ -548,11 +548,14 @@ const App: React.FC = () => {
     }
   };
 
+  // The cues pupils tick for a skill in this lesson (#136). The teacher's own
+  // checklist and the AI still use the whole skill (getAllCuesForSkill).
+  const pupilCues = (skillName: string) => getFocusCues(skillName, focusCuesFor(lessonSteps, skillName));
+
   // "🤝 Peer Assessment Checklist" bot card shown just before the AI grading.
   const buildPeerChecklistMessage = (performer: 'Apple' | 'Banana', skillName: string): Message => {
-    // Same lookup the recording screen used — falls back to the default cues for skills
-    // (Bounce, Bounce pass) that aren't in OFFICIAL_FMS_PEER_CUES, so the card can't read 0/0.
-    const cues = getAllCuesForSkill(skillName);
+    // Same lookup the recording screen used: the cues the teacher picked for this lesson
+    const cues = pupilCues(skillName);
     const rated = (performer === 'Apple' ? activePeerSessionData?.appleCues : activePeerSessionData?.bananaCues) || {};
     const lines = cues.length > 0
       ? cues.map(c => `- ${rated[c.id] ? '✅' : '❌'} ${c.itemNumber}. ${c.syllabusCriterion}`).join('\n')
@@ -668,7 +671,7 @@ const App: React.FC = () => {
   };
 
   const cuesToResults = (skillName: string, rated?: Record<string, boolean>): PeerCueResult[] =>
-    getAllCuesForSkill(skillName).map(c => ({
+    pupilCues(skillName).map(c => ({
       cueIndex: c.itemNumber,
       criterionText: c.syllabusCriterion,
       isObserved: !!rated?.[c.id],
@@ -1033,7 +1036,7 @@ const App: React.FC = () => {
     || performerLock(sub.bananaSentAt, sub.redoRequestedAt) === 'redo_requested';
 
   const peerCuesToMap = (skillName: string, list?: { cueIndex: number; isObserved: boolean }[]): Record<string, boolean> => {
-    const cues = getAllCuesForSkill(skillName);
+    const cues = pupilCues(skillName);
     return Object.fromEntries(
       cues.map(c => [c.id, !!list?.find(r => r.cueIndex === c.itemNumber)?.isObserved])
     );
@@ -2565,6 +2568,9 @@ const App: React.FC = () => {
           }}
           onSendToCoachBot={handlePeerStepDone}
           cueSkillName={stepScreen.kind === 'step' && stepScreen.step.kind === 'assess' ? stepScreen.step.skillName : undefined}
+          focusCues={focusCuesFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
+            ? stepScreen.step.skillName
+            : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
           nextIsCoachBot={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
           onExit={() => {
             const wasRefilm = !!refilmPerformer;

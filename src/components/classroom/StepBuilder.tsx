@@ -1,6 +1,7 @@
 import React from 'react';
 import { AssessmentMethod, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, newStepId } from '../../utils/lessonFlow';
 import { referenceImageFor } from '../../utils/teachPages';
+import { getAllCuesForSkill } from '../../data/peerSyllabusCues';
 import { TeachMediaEditor, UploadMedia } from './TeachMediaEditor';
 
 // The teacher builds a lesson from Teach, Practise and Assess steps (#87, #88;
@@ -50,6 +51,17 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
   };
   const remove = (i: number) => onChange(steps.filter((_, j) => j !== i));
   const add = (kind: StepKind) => onChange([...steps, blankStep(kind, mainSkill)]);
+
+  // A different skill has different cues, so the picked ones no longer apply
+  const changeSkill = (step: LessonStep, skillName: string): Partial<LessonStep> =>
+    step.assess ? { skillName, assess: { method: step.assess.method } } : { skillName };
+  // Tick or untick one cue pupils will see. Every cue ticked is stored as no pick at all.
+  const toggleCue = (i: number, step: LessonStep, all: number[], itemNumber: number) => {
+    const picked = step.assess?.focusCues?.length ? step.assess.focusCues : all;
+    const next = all.filter(n => (n === itemNumber ? !picked.includes(n) : picked.includes(n)));
+    if (!step.assess || next.length === 0) return;
+    update(i, { assess: { method: step.assess.method, ...(next.length < all.length ? { focusCues: next } : {}) } });
+  };
 
   const problemsFor = (i: number) => problems.filter(p => p.stepIndex === i);
   const noSteps = problems.some(p => p.code === 'no_steps');
@@ -104,7 +116,7 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1">
                   <span className={smallLabel}>Skill</span>
-                  <select value={step.skillName} onChange={(e) => update(i, { skillName: e.target.value })} className={inputClass}>
+                  <select value={step.skillName} onChange={(e) => update(i, changeSkill(step, e.target.value))} className={inputClass}>
                     {!skills.includes(step.skillName) && <option value={step.skillName}>{step.skillName || '—'}</option>}
                     {skills.map(s => <option key={s} value={s}>{s}{s === mainSkill ? ' (main skill)' : ''}</option>)}
                   </select>
@@ -115,7 +127,7 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                     <span className={smallLabel}>How it's assessed</span>
                     <select
                       value={step.assess?.method ?? ''}
-                      onChange={(e) => update(i, { assess: { method: e.target.value as AssessmentMethod } })}
+                      onChange={(e) => update(i, { assess: { ...step.assess, method: e.target.value as AssessmentMethod } })}
                       className={inputClass}
                     >
                       {METHODS.map(m => (
@@ -169,6 +181,33 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                   onUpload={onUploadMedia}
                 />
               )}
+
+              {step.kind === 'assess' && (() => {
+                const first = steps.findIndex(s => s.kind === 'assess' && s.skillName === step.skillName);
+                if (first !== i) {
+                  return <p className="text-[11px] text-slate-500 dark:text-slate-400">Pupils tick the cues chosen in step {first + 1}.</p>;
+                }
+                const cues = getAllCuesForSkill(step.skillName);
+                const all = cues.map(c => c.itemNumber);
+                const picked = step.assess?.focusCues?.length ? step.assess.focusCues : all;
+                return (
+                  <div className="flex flex-col gap-1.5">
+                    <span className={smallLabel}>Cues pupils tick ({picked.length} of {cues.length})</span>
+                    {cues.map(c => (
+                      <label key={c.id} className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={picked.includes(c.itemNumber)}
+                          disabled={picked.length === 1 && picked.includes(c.itemNumber)}
+                          onChange={() => toggleCue(i, step, all, c.itemNumber)}
+                          className="w-4 h-4 mt-0.5 accent-indigo-600"
+                        />
+                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.icon} {c.kidFriendlyText}</span>
+                      </label>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {step.kind === 'assess' && !ai.ok && (
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">ℹ️ {ai.reason}</p>
