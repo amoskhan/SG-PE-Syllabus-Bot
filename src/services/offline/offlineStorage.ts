@@ -179,6 +179,9 @@ interface PeCoachDB extends DBSchema {
     key: string;
     value: { lessonId: string; title: string; skillName: string; teacherPin: string; updatedAt: string };
   };
+}
+
+interface PeerDraftDB extends DBSchema {
   peer_drafts: {
     key: string;
     value: PeerDraft;
@@ -186,39 +189,65 @@ interface PeCoachDB extends DBSchema {
 }
 
 const DB_NAME = 'sg_pe_partner_coach_db';
-const DB_VERSION = 3;
+const DRAFT_DB_NAME = 'sg_pe_peer_drafts_db';
 
+// This database is opened at whatever version the device already has, and its
+// version is never raised. Raising it makes the browser wait for every other
+// tab of the site to close first; a tab left open on older code never does, so
+// every read and write here would hang, silently. Anything new gets its own
+// database instead (see the drafts below).
 let dbPromise: Promise<IDBPDatabase<PeCoachDB>> | null = null;
 
 export const getDB = async (): Promise<IDBPDatabase<PeCoachDB>> => {
   if (!dbPromise) {
-    dbPromise = openDB<PeCoachDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion) {
-        if (oldVersion < 1) {
-          if (!db.objectStoreNames.contains('pair_session')) {
-            db.createObjectStore('pair_session');
-          }
-          if (!db.objectStoreNames.contains('submissions')) {
-            const subStore = db.createObjectStore('submissions', { keyPath: 'id' });
-            subStore.createIndex('by_status', 'status');
-            subStore.createIndex('by_lesson', 'lessonId');
-          }
-          if (!db.objectStoreNames.contains('lesson_cache')) {
-            db.createObjectStore('lesson_cache');
-          }
+    dbPromise = openDB<PeCoachDB>(DB_NAME, undefined, {
+      upgrade(db) {
+        // Only runs on a device that has never had the database
+        if (!db.objectStoreNames.contains('pair_session')) {
+          db.createObjectStore('pair_session');
         }
-        if (oldVersion < 2) {
-          // Added optional aiStudentFeedback and aiTeacherReport to PairSubmissionRecord.
-          // IndexedDB object store schema unchanged — no migration needed.
+        if (!db.objectStoreNames.contains('submissions')) {
+          const subStore = db.createObjectStore('submissions', { keyPath: 'id' });
+          subStore.createIndex('by_status', 'status');
+          subStore.createIndex('by_lesson', 'lessonId');
         }
-        if (oldVersion < 3 && !db.objectStoreNames.contains('peer_drafts')) {
-          // A peer assessment part-way through (peerDraft.ts)
-          db.createObjectStore('peer_drafts', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('lesson_cache')) {
+          db.createObjectStore('lesson_cache');
         }
+      },
+      // Never be the tab that holds another one up
+      blocking(_current, _blocked, event) {
+        (event.target as IDBDatabase | null)?.close();
+        dbPromise = null;
+      },
+      terminated() {
+        dbPromise = null;
       },
     });
   }
   return dbPromise;
+};
+
+let draftDbPromise: Promise<IDBPDatabase<PeerDraftDB>> | null = null;
+
+const getDraftDB = async (): Promise<IDBPDatabase<PeerDraftDB>> => {
+  if (!draftDbPromise) {
+    draftDbPromise = openDB<PeerDraftDB>(DRAFT_DB_NAME, 1, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains('peer_drafts')) {
+          db.createObjectStore('peer_drafts', { keyPath: 'id' });
+        }
+      },
+      blocking(_current, _blocked, event) {
+        (event.target as IDBDatabase | null)?.close();
+        draftDbPromise = null;
+      },
+      terminated() {
+        draftDbPromise = null;
+      },
+    });
+  }
+  return draftDbPromise;
 };
 
 // ─── Pair Session Management ──────────────────────────────────────────────────
@@ -244,7 +273,7 @@ export const clearActivePairSession = async (): Promise<void> => {
 // leaving the page or refreshing doesn't lose them (peerDraft.ts).
 
 export const getPeerDraft = async (id: string): Promise<PeerDraft | undefined> => {
-  const db = await getDB();
+  const db = await getDraftDB();
   const raw = await db.get('peer_drafts', id);
   if (!raw) return undefined;
   if (!draftIsFresh(raw)) {
@@ -256,7 +285,7 @@ export const getPeerDraft = async (id: string): Promise<PeerDraft | undefined> =
 
 /** Saves the draft; without its clips if the device won't hold them, so the ticks survive. */
 export const putPeerDraft = async (draft: PeerDraft): Promise<void> => {
-  const db = await getDB();
+  const db = await getDraftDB();
   try {
     await db.put('peer_drafts', await encodeBlobs(draft));
   } catch (e) {
@@ -266,12 +295,12 @@ export const putPeerDraft = async (draft: PeerDraft): Promise<void> => {
 };
 
 export const deletePeerDraft = async (id: string): Promise<void> => {
-  const db = await getDB();
+  const db = await getDraftDB();
   await db.delete('peer_drafts', id);
 };
 
 export const clearPeerDrafts = async (): Promise<void> => {
-  const db = await getDB();
+  const db = await getDraftDB();
   await db.clear('peer_drafts');
 };
 
