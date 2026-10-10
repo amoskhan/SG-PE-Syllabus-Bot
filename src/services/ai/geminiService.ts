@@ -147,6 +147,7 @@ export interface ChatResponse {
 export interface MediaData {
   mimeType: string;
   data: string; // base64 without data URL prefix
+  clipTime?: number; // seconds into the clip this frame was taken (#139)
 }
 
 export const sendMessageToGemini = async (

@@ -7,6 +7,7 @@ import ChatMessage from './components/chat/ChatMessage';
 import { Message, Sender, PE_TOPICS, MediaAttachment, ChatSession, Student, SkillMode } from './types';
 import { MediaData } from './services/ai/geminiService';
 import { getAIService } from './services/ai/aiServiceRegistry';
+import { frameTimesNote } from './utils/frameTimes';
 import { type GuideStep, guideStep, takeNotInSyllabus, takeSectionTag } from './data/syllabusGuide';
 import { chatTitle, questionTitle } from './utils/chatTitles';
 import { getOrCreateStudent, saveAnalysis, uploadVideoToStorage } from './services/studentService';
@@ -1515,6 +1516,7 @@ const App: React.FC = () => {
       const debugFrames: string[] = [];
       const analysisFrames: MediaData[] = [];
       let rawVideoFrames: string[] = []; // fallback if no pose detected
+      let clipFrameTimes: number[] = []; // seconds into the clip of each raw frame (#139)
       let clipMotion: ClipMotion | undefined;
 
       for (const file of files) {
@@ -1540,6 +1542,7 @@ const App: React.FC = () => {
             frameTimes
           );
           rawVideoFrames = frames;
+          clipFrameTimes = frameTimes;
           const firstOfThisVideo = processedImages.length;
           for (let i = 0; i < frames.length; i++) {
             const img = await loadImageFromUrl(frames[i]);
@@ -1597,12 +1600,16 @@ const App: React.FC = () => {
 
       // Render the skeleton overlay for every frame where a pose was found.
       const overlays: (string | null)[] = [];
+      const debugTimes: (number | undefined)[] = [];
       for (let i = 0; i < processedImages.length; i++) {
         const data = processedImages[i];
         const filteredPose = poseData[i];
         const debugFrame = await poseDetectionService.drawPoseToImage(data.img, filteredPose, filteredPose.ball);
         overlays.push(debugFrame || null);
-        if (debugFrame) debugFrames.push(debugFrame);
+        if (debugFrame) {
+          debugFrames.push(debugFrame);
+          debugTimes.push(data.fromVideo ? clipFrameTimes[data.timestamp] : undefined);
+        }
       }
 
       // Build the visual payload in chronological order, sending EVERY
@@ -1625,6 +1632,7 @@ const App: React.FC = () => {
           analysisFrames.push({
             mimeType: 'image/jpeg',
             data: overlayByFrameIndex.get(i) ?? rawVideoFrames[i],
+            clipTime: clipFrameTimes[i],
           });
         }
 
@@ -1644,7 +1652,7 @@ const App: React.FC = () => {
       updateSessionAndSync(originatingSessionId, session => ({
         ...session,
         messages: session.messages.map(m => 
-          m.id === messageId ? { ...m, poseData: poseData, analysisFrames: debugFrames } : m
+          m.id === messageId ? { ...m, poseData: poseData, analysisFrames: debugFrames, frameTimes: debugTimes.every(t => t !== undefined) ? debugTimes as number[] : undefined } : m
         )
       }));
 
@@ -1989,9 +1997,11 @@ const App: React.FC = () => {
           }
           if (!contextAnalysisFrames) {
             if (currentMessages[i].analysisFrames && currentMessages[i].analysisFrames!.length > 0) {
-              contextAnalysisFrames = currentMessages[i].analysisFrames!.map(f => ({
+              const times = currentMessages[i].frameTimes;
+              contextAnalysisFrames = currentMessages[i].analysisFrames!.map((f, j) => ({
                 mimeType: f.match(/^data:([^;]+);/)?.[1] || 'image/jpeg',
-                data: f
+                data: f,
+                clipTime: times?.[j],
               }));
             }
             else if (currentMessages[i].media && currentMessages[i].media!.length > 0) {
@@ -2035,6 +2045,9 @@ const App: React.FC = () => {
           promptText += docContext;
         }
       }
+
+      // When each frame was taken, so the AI can judge a timed hold (#139)
+      promptText += frameTimesNote(contextAnalysisFrames?.map(f => f.clipTime));
 
       // --- Student memory: inject prior progress summary into Phase 2 ---
       let studentMemory: string | undefined;
