@@ -17,6 +17,8 @@ interface StepBuilderProps {
   // A Teach step's own videos and pictures (#89), changed against the latest steps
   onStepMediaChange: (stepId: string, change: (media: TeachMedia[]) => TeachMedia[]) => void;
   onUploadMedia?: UploadMedia;
+  // The cue plan from the teacher's last lesson on a skill, to reuse (#136)
+  lastCuePlan?: (skillName: string) => CuePlan | undefined;
 }
 
 const inputClass =
@@ -41,7 +43,7 @@ export const blankStep = (kind: StepKind, skillName: string): LessonStep =>
       ? { id: newStepId(), kind, skillName, practise: { films: false } }
       : { id: newStepId(), kind, skillName, assess: { method: 'peer_assessment' } };
 
-export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSkill, problems, onChange, onStepMediaChange, onUploadMedia }) => {
+export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSkill, problems, onChange, onStepMediaChange, onUploadMedia, lastCuePlan }) => {
   const update = (i: number, patch: Partial<LessonStep>) =>
     onChange(steps.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const move = (i: number, by: -1 | 1) => {
@@ -204,9 +206,19 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                 const cues = getAllCuesForSkill(step.skillName);
                 const all = cues.map(c => c.itemNumber);
                 const picked = step.assess?.focusCues?.length ? step.assess.focusCues : all;
+                const earlier = lastCuePlan?.(step.skillName);
                 return (
                   <div className="flex flex-col gap-1.5">
                     <span className={smallLabel}>Cues pupils tick ({picked.length} of {cues.length})</span>
+                    {earlier && (
+                      <button
+                        type="button"
+                        onClick={() => setCuePlan(i, step, { focusCues: earlier.focusCues, cueText: earlier.cueText, extraCues: earlier.extraCues })}
+                        className="self-start text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                      >
+                        ↺ Use the cues from my last {step.skillName} lesson
+                      </button>
+                    )}
                     {cues.map(c => (
                       <div key={c.id} className="flex flex-col gap-1">
                         <label className="flex items-start gap-2">

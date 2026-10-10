@@ -12,7 +12,7 @@ import {
   lessonTitle,
   todayIso,
 } from '../../services/lessonService';
-import { LessonStep, TeachMedia, followMainSkill, validateLesson } from '../../utils/lessonFlow';
+import { LessonStep, TeachMedia, followMainSkill, lastCuePlan, validateLesson } from '../../utils/lessonFlow';
 import { StepBuilder } from './StepBuilder';
 import { mediaPaths, removeTeachMedia, uploadTeachMedia } from '../../services/teachMediaService';
 import type { UploadMedia } from './TeachMediaEditor';
@@ -31,12 +31,13 @@ const labelClass = 'text-xs font-bold text-slate-500 dark:text-slate-400';
 interface LessonPlanFormProps {
   lesson?: Lesson; // editing this lesson; omitted for a new one
   teacherId?: string; // needed to upload teach media
+  lessons?: Lesson[]; // the teacher's lessons, to reuse an earlier lesson's cues (#136)
   // keys: the id and pass a new lesson was given for its first upload (#89)
   onSave: (draft: LessonDraft, showNow: boolean, keys?: LessonKeys) => Promise<void>;
   onCancel: () => void;
 }
 
-export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherId, onSave, onCancel }) => {
+export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherId, lessons, onSave, onCancel }) => {
   // A new lesson starts blank: the teacher fills in every field and builds the steps
   const [lessonDate, setLessonDate] = useState(lesson?.lessonDate ?? '');
   const [className, setClassName] = useState(lesson?.className ?? '');
@@ -237,6 +238,7 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
         onChange={setSteps}
         onStepMediaChange={changeStepMedia}
         onUploadMedia={uploadMedia}
+        lastCuePlan={lessons ? (skill) => lastCuePlan(lessons, skill, lesson?.id) : undefined}
       />
 
       {error && (

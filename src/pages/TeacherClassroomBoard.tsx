@@ -882,6 +882,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             key={editingLesson?.id ?? 'new'}
             lesson={editingLesson ?? undefined}
             teacherId={teacherId}
+            lessons={lessons}
             onSave={handleSaveLesson}
             onCancel={() => { setEditingLesson(null); setViewMode('LESSONS'); }}
           />

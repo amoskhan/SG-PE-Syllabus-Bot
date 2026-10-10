@@ -172,6 +172,27 @@ export const findLessonStep = (steps: LessonStep[], kind: StepKind, method?: Ass
 export const cuePlanFor = (steps: LessonStep[], skillName: string): CuePlan | undefined =>
   steps.find(s => s.kind === 'assess' && s.skillName === skillName)?.assess;
 
+/** Whether the teacher set anything in a cue plan. */
+const hasCuePlan = (plan: CuePlan | undefined) =>
+  !!plan && (!!plan.focusCues?.length || Object.keys(plan.cueText ?? {}).length > 0 || !!plan.extraCues?.some(t => t.trim()));
+
+/**
+ * The cue plan from the teacher's most recent other lesson on a skill, so they
+ * don't retype their wording for every class (#136).
+ */
+export const lastCuePlan = (
+  lessons: { id: string; lessonDate: string; createdAt: string; steps: LessonStep[] }[],
+  skillName: string,
+  exceptLessonId?: string,
+): CuePlan | undefined => {
+  const found = lessons
+    .filter(l => l.id !== exceptLessonId && hasCuePlan(cuePlanFor(l.steps, skillName)))
+    .sort((a, b) => (b.lessonDate + b.createdAt).localeCompare(a.lessonDate + a.createdAt))[0];
+  if (!found) return undefined;
+  const { focusCues, cueText, extraCues } = cuePlanFor(found.steps, skillName)!;
+  return { focusCues, cueText, extraCues };
+};
+
 /** A short name for a step, for "Step 2 of 3 · Peer assessment". */
 export const stepLabel = (step: LessonStep): string => {
   if (step.kind === 'teach') return 'Learn';
