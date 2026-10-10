@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     LessonStep, canUseAiAnalysis, defaultSteps, legacySteps, nextScreen, progressFor,
-    runsAiPeerFeedback, stepsOrLegacy, validateLesson, followMainSkill, cuePlanFor,
+    runsAiPeerFeedback, stepsOrLegacy, validateLesson, followMainSkill, cuePlanFor, lastCuePlan,
 } from './lessonFlow';
 
 const step = (id: string, over: Partial<LessonStep> = {}): LessonStep =>
@@ -166,5 +166,32 @@ describe('followMainSkill and picked cues', () => {
         const steps: LessonStep[] = [{ id: 'a', kind: 'assess', skillName: 'Kick', assess: { method: 'ai_analysis', focusCues: [1, 2], cueText: { 1: 'Mine' }, extraCues: ['Extra'] } }];
         expect(followMainSkill(steps, 'Kick', 'Bounce', ['Kick', 'Bounce'])[0])
             .toEqual({ id: 'a', kind: 'assess', skillName: 'Bounce', assess: { method: 'ai_analysis' } });
+    });
+});
+
+describe('lastCuePlan', () => {
+    const lesson = (id: string, lessonDate: string, skillName: string, plan: object) => ({
+        id, lessonDate, createdAt: `${lessonDate}T00:00:00Z`,
+        steps: [{ id: 's', kind: 'assess', skillName, assess: { method: 'peer_assessment', ...plan } } as LessonStep],
+    });
+
+    it("gives the plan from the most recent other lesson on the skill, without the step's method", () => {
+        const lessons = [
+            lesson('a', '2026-09-01', 'Shoulder Stand', { focusCues: [1, 2] }),
+            lesson('b', '2026-10-01', 'Shoulder Stand', { focusCues: [1, 3, 4], cueText: { 4: 'Freeze' }, extraCues: ['Chin tucked'] }),
+            lesson('c', '2026-10-05', 'Kick', { focusCues: [1] }),
+        ];
+        expect(lastCuePlan(lessons, 'Shoulder Stand')).toEqual({ focusCues: [1, 3, 4], cueText: { 4: 'Freeze' }, extraCues: ['Chin tucked'] });
+    });
+
+    it('skips the lesson being edited and lessons where nothing was set', () => {
+        const lessons = [
+            lesson('a', '2026-09-01', 'Shoulder Stand', { focusCues: [1, 2] }),
+            lesson('b', '2026-10-01', 'Shoulder Stand', {}),
+            lesson('c', '2026-10-05', 'Shoulder Stand', { extraCues: ['  '] }),
+        ];
+        expect(lastCuePlan(lessons, 'Shoulder Stand')?.focusCues).toEqual([1, 2]);
+        expect(lastCuePlan(lessons, 'Shoulder Stand', 'a')).toBeUndefined();
+        expect(lastCuePlan(lessons, 'Kick')).toBeUndefined();
     });
 });
