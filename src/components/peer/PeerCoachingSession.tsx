@@ -5,11 +5,15 @@ import {
   PeerSyllabusCue,
 } from '../../data/peerSyllabusCues';
 import { speechService } from '../../services/speechService';
+import { draftHasWork, peerDraftId, resumeStep } from '../../utils/peerDraft';
 import {
   queuePairSubmission,
   PairSubmissionRecord,
   PeerCueResult,
   getSubmission,
+  getPeerDraft,
+  putPeerDraft,
+  deletePeerDraft,
   putSubmission,
   getOrCreatePairClaimToken,
 } from '../../services/offline/offlineStorage';
@@ -120,8 +124,50 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const uploadInputAppleRef = useRef<HTMLInputElement>(null);  // file upload for Apple performer
   const displayedCues: PeerSyllabusCue[] = getLessonCues(cueSkill, cuePlan);
 
-  // Voice Guidance on Step Changes
+  // ── Draft: keep the pair's place if they leave or refresh ──
+  // A re-film is one short task that starts from the pair's saved work, so it has no draft.
+  const draftId = peerDraftId(lessonId, pairNumber, cueSkill);
+  const [draftLoaded, setDraftLoaded] = useState(!!refilmPerformer);
+
   useEffect(() => {
+    if (refilmPerformer) return;
+    let cancelled = false;
+    getPeerDraft(draftId)
+      .then(draft => {
+        if (cancelled || !draft) return;
+        if (draft.bananaVideoBlob) { setBananaVideoBlob(draft.bananaVideoBlob); setBananaVideoUrl(URL.createObjectURL(draft.bananaVideoBlob)); }
+        if (draft.appleVideoBlob) { setAppleVideoBlob(draft.appleVideoBlob); setAppleVideoUrl(URL.createObjectURL(draft.appleVideoBlob)); }
+        setBananaCues(draft.bananaCues);
+        setAppleCues(draft.appleCues);
+        setBananaPoseFrames(draft.bananaPoseFrames);
+        setApplePoseFrames(draft.applePoseFrames);
+        setStep(resumeStep(draft));
+      })
+      .catch(e => console.warn('[PeerDraft] Could not read the saved draft:', e))
+      .finally(() => { if (!cancelled) setDraftLoaded(true); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId]);
+
+  useEffect(() => {
+    if (!draftLoaded || refilmPerformer) return;
+    // Saved work replaces the draft
+    if (step === 'SESSION_COMPLETED') { deletePeerDraft(draftId).catch(() => {}); return; }
+    const work = { bananaVideoBlob: bananaVideoBlob ?? undefined, appleVideoBlob: appleVideoBlob ?? undefined, bananaCues, appleCues };
+    // A short wait, so a run of ticks is one save and not one per tap
+    const timer = setTimeout(() => {
+      const save = draftHasWork(work)
+        ? putPeerDraft({ id: draftId, lessonId, pairNumber, skillName: cueSkill, step, ...work, bananaPoseFrames, applePoseFrames, savedAt: new Date().toISOString() })
+        : deletePeerDraft(draftId);
+      save.catch(e => console.warn('[PeerDraft] Could not save the draft:', e));
+    }, 400);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftLoaded, step, bananaVideoBlob, appleVideoBlob, bananaCues, appleCues, bananaPoseFrames, applePoseFrames]);
+
+  // Voice Guidance on Step Changes (once any draft is back, so a resumed pair hears the right screen)
+  useEffect(() => {
+    if (!draftLoaded) return;
     switch (step) {
       case 'APPLE_INTRO':
         speechService.speak(`Apple, hold the iPad. Banana, stand back and get ready for ${cueSkill}!`);
@@ -141,7 +187,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         speechService.speak('Awesome teamwork! Both partners are done. Your videos are saved.');
         break;
     }
-  }, [step, cueSkill]);
+  }, [step, cueSkill, draftLoaded]);
 
   const attachStreamToVideo = (videoEl: HTMLVideoElement | null, stream: MediaStream | null) => {
     if (!videoEl || !stream) return;

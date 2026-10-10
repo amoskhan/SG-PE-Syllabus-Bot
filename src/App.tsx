@@ -27,7 +27,8 @@ import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef } from './services/offline/offlineStorage';
+import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef, getPeerDraft, clearPeerDrafts } from './services/offline/offlineStorage';
+import { draftSummary, peerDraftId } from './utils/peerDraft';
 import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
@@ -358,6 +359,8 @@ const App: React.FC = () => {
   // This device's copy of the pair's work (clips, ticks, analyses), and the
   // Practice Station's "Film again" / "Our progress" screens (#94)
   const [pairRecord, setPairRecord] = useState<PairSubmissionRecord | null>(null);
+  // A peer assessment the pair left part-way through (peerDraft.ts): what the home screen says about it
+  const [peerDraftNote, setPeerDraftNote] = useState<string | null>(null);
   const [refilmPerformer, setRefilmPerformer] = useState<Performer | null>(null);
   const [isPairReviewOpen, setIsPairReviewOpen] = useState(false);
 
@@ -971,6 +974,19 @@ const App: React.FC = () => {
 
   /** The step after this pair's current one, for "Next step" buttons. */
   const hasNextStep = nextScreen(lessonSteps, pairProgress, 'next').kind === 'step';
+
+  // On the home screen, look for a peer assessment this pair left part-way through
+  const draftSkillName = stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
+    ? stepScreen.step.skillName
+    : activePairSession?.skillName || scannedLessonData.skillName || 'Overhand Throw';
+  useEffect(() => {
+    if (!activePairSession || appMode !== 'home_screen') return;
+    let cancelled = false;
+    getPeerDraft(peerDraftId(activePairSession.lessonId, activePairSession.pairNumber, draftSkillName))
+      .then(draft => { if (!cancelled) setPeerDraftNote(draft ? draftSummary(draft) : null); })
+      .catch(() => { if (!cancelled) setPeerDraftNote(null); });
+    return () => { cancelled = true; };
+  }, [activePairSession?.pairNumber, activePairSession?.lessonId, draftSkillName, appMode]);
 
   // While in a Practice Station, poll the pair's submission row for a teacher comment.
   useEffect(() => {
@@ -2374,7 +2390,7 @@ const App: React.FC = () => {
                           ? '🔄 Your teacher asked you to try again'
                           : stageFor('Apple').stage === 'submitted' && stageFor('Banana').stage === 'submitted'
                             ? 'Final recordings sent to your teacher'
-                            : pairRecord || activePairSubmission ? 'Work saved' : 'Continue where you left off'}
+                            : pairRecord || activePairSubmission ? 'Work saved' : peerDraftNote ?? 'Continue where you left off'}
                       </p>
                     </div>
                     <button
@@ -2382,6 +2398,8 @@ const App: React.FC = () => {
                       onClick={async (e) => {
                         e.stopPropagation();
                         await clearActivePairSession();
+                        await clearPeerDrafts().catch(() => {});
+                        setPeerDraftNote(null);
                         setActivePairSession(null);
                         setActivePeerSessionData(null);
                       }}
@@ -2411,7 +2429,7 @@ const App: React.FC = () => {
                           : 'flex-1 bg-white text-emerald-700 hover:bg-emerald-50'
                       }`}
                     >
-                      <span>{pairRecord || activePairSubmission ? '⭐' : '📹'}</span><span>{pairRecord || activePairSubmission ? 'Our progress' : 'Start recording'}</span>
+                      <span>{pairRecord || activePairSubmission ? '⭐' : '📹'}</span><span>{pairRecord || activePairSubmission ? 'Our progress' : peerDraftNote ? 'Continue recording' : 'Start recording'}</span>
                     </button>
                   </div>
                 </div>
