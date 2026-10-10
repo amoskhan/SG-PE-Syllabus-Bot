@@ -169,7 +169,7 @@ export default async function handler(req: any, res: any) {
         if (geminiStatus === 429) {
             const seconds = retryAfterSeconds(error);
             return res.status(429).json({
-                error: `Coach Bot is busy right now. Try again in ${seconds ? `about ${seconds} seconds` : 'a minute'}.`,
+                error: `PE AI Buddy is busy right now. Try again in ${seconds ? `about ${seconds} seconds` : 'a minute'}.`,
                 retryAfterSeconds: seconds,
             });
         }

@@ -6,7 +6,7 @@ import { PerformerLock } from './submissionLock';
 //
 //   record → peer assessment → AI analysis → re-film once (optional) → final submission
 //
-// If Coach Bot can't analyse (AI down, no internet), the performer can still
+// If PE AI Buddy can't analyse (AI down, no internet), the performer can still
 // submit, and the teacher grades it.
 //
 // After a redo request each performer first chooses (#93): Keep what was sent,
@@ -20,7 +20,7 @@ export interface PerformerWork {
   hasAnalysis: boolean; // the AI analysis has been done
   lock: PerformerLock;  // from the teacher's copy (submissionLock.ts)
   redoFilms: number;    // films made since the current redo request
-  analysisFailed?: boolean; // Coach Bot couldn't analyse: they can submit without it
+  analysisFailed?: boolean; // PE AI Buddy couldn't analyse: they can submit without it
   aiInLesson?: boolean;     // false: the lesson has no AI analysis step (#87), so none is needed
 }
 
@@ -91,7 +91,7 @@ export const performerWork = (
 
 /**
  * The checklist sent for the teacher to grade when there's no AI analysis: a
- * re-do (#93), or work Coach Bot couldn't analyse. Every criterion is marked ⚠️
+ * re-do (#93), or work PE AI Buddy couldn't analyse. Every criterion is marked ⚠️
  * for the teacher to decide, in the same table the AI uses, so the teacher's
  * review reads it the same way (gradingReview.ts). It never carries the peer
  * ticks (ADR 0001: they don't reach the AI, and the nightly summary is AI).
@@ -109,5 +109,5 @@ export const redoChecklistText = (criteria: string[]) => teacherChecklistText(
 
 export const noAnalysisChecklistText = (criteria: string[], why: 'failed' | 'no_ai_in_lesson' = 'failed') => teacherChecklistText(
   why === 'failed'
-    ? "**No AI analysis:** Coach Bot couldn't analyse this attempt, so the teacher grades it."
+    ? "**No AI analysis:** The AI couldn't analyse this attempt, so the teacher grades it."
     : '**No AI analysis:** this lesson has no AI analysis step, so the teacher grades it.', criteria);

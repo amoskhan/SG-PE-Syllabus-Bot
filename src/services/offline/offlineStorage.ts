@@ -13,7 +13,7 @@ export interface PeerCueResult {
 export interface StepRef {
   id: string;
   number: number;    // 1-based position in the lesson then
-  label: string;     // e.g. "Peer assessment + Coach Bot" (lessonFlow.stepLabel)
+  label: string;     // e.g. "Peer assessment + PE AI Buddy" (lessonFlow.stepLabel)
   skillName: string; // the skill that step assessed
 }
 
@@ -29,7 +29,7 @@ export interface AiChatAnalysisEntry {
   // Set when the performer filmed again after a redo request (#93). The
   // analysis above stays: it was about the earlier attempt.
   redo?: RedoSubmission;
-  // Sent without an AI analysis because Coach Bot couldn't analyse it:
+  // Sent without an AI analysis because PE AI Buddy couldn't analyse it:
   // analysisText is a checklist for the teacher to grade
   teacherGrades?: boolean;
   step?: StepRef; // the step this analysis was made in (#92)
@@ -135,7 +135,7 @@ export interface PairSubmissionRecord {
     apple?: StepRef;
     banana?: StepRef;
   };
-  // Coach Bot couldn't analyse this performer (AI down, no internet): they
+  // PE AI Buddy couldn't analyse this performer (AI down, no internet): they
   // can still submit, and the teacher grades it
   analysisFailed?: {
     apple?: boolean;

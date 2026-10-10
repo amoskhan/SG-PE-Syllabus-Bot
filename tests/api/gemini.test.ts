@@ -88,7 +88,7 @@ describe('/api/gemini', () => {
     const res = await ask();
     expect(res.status).toBe(429);
     expect(res.body.retryAfterSeconds).toBe(13);
-    expect(res.body.error).toBe('Coach Bot is busy right now. Try again in about 13 seconds.');
+    expect(res.body.error).toBe('PE AI Buddy is busy right now. Try again in about 13 seconds.');
   });
 
   it('asks Gemini not to think, so the whole token limit goes to the answer', async () => {

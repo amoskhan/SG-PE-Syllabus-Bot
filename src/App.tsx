@@ -436,7 +436,7 @@ const App: React.FC = () => {
       id: loadingMsgId,
       sender: Sender.BOT,
       timestamp: new Date(),
-      text: `## 🤖 Coach Bot is watching your videos...\n\n**Pair #${data.pairNumber} — ${data.skillName}**\n\n⏳ Extracting video frames...\n\n*This takes about 10–15 seconds. Hold tight!* 🎬`,
+      text: `## 🤖 PE AI Buddy is watching your videos...\n\n**Pair #${data.pairNumber} — ${data.skillName}**\n\n⏳ Extracting video frames...\n\n*This takes about 10–15 seconds. Hold tight!* 🎬`,
       hasMedia: false,
     };
 
@@ -460,7 +460,7 @@ const App: React.FC = () => {
               ...s,
               messages: s.messages.map(m =>
                 m.id === loadingMsgId
-                  ? { ...m, text: `## 🤖 Coach Bot is watching your videos...\n\n**Pair #${data.pairNumber} — ${data.skillName}**\n\n✅ ${progressText}\n\n*Almost done! 🎬*` }
+                  ? { ...m, text: `## 🤖 PE AI Buddy is watching your videos...\n\n**Pair #${data.pairNumber} — ${data.skillName}**\n\n✅ ${progressText}\n\n*Almost done! 🎬*` }
                   : m
               )
             }
@@ -701,7 +701,7 @@ const App: React.FC = () => {
     not_started: "hasn't been filmed yet. Record and save your videos first.",
     redo_choice: ': choose ✋ Keep or 📹 Film again first.',
     needs_ticks: "'s new video needs the assessor's ticks first.",
-    needs_analysis: ' needs Coach Bot to analyse the video first. Tap Analyse.',
+    needs_analysis: ' needs PE AI Buddy to analyse the video first. Tap Analyse.',
     ready: '',
     submitted: "'s final recording is already with your teacher.",
   };
@@ -732,7 +732,7 @@ const App: React.FC = () => {
     setPairRecord(record);
   };
 
-  // Coach Bot couldn't analyse this performer: they may submit without it, and
+  // PE AI Buddy couldn't analyse this performer: they may submit without it, and
   // the teacher grades it. Kept on the device so a reload doesn't undo it.
   const markAnalysisFailed = async (performer: Performer) => {
     const ctx = pairContext();
@@ -804,7 +804,7 @@ const App: React.FC = () => {
       ? { ...prev, appleVideoBlob: attempt.videoBlob ?? undefined, appleCues: attempt.cues, applePoseFrames: attempt.poseFrames }
       : { ...prev, bananaVideoBlob: attempt.videoBlob ?? undefined, bananaCues: attempt.cues, bananaPoseFrames: attempt.poseFrames }));
     addPracticeMessage(redoAt && redoFilms === 0
-      ? `📹 **New video of ${attempt.performer} saved for the re-do.** You can film again once more, or tap **📤 Submit final** when you're ready. Your teacher grades a re-do, so there's no Coach Bot analysis.`
+      ? `📹 **New video of ${attempt.performer} saved for the re-do.** You can film again once more, or tap **📤 Submit final** when you're ready. Your teacher grades a re-do, so there's no PE AI Buddy analysis.`
       : `📹 **New video of ${attempt.performer} saved.** That was your one chance to film again. When you're ready, tap **📤 Submit final**.`);
   };
 
@@ -842,7 +842,7 @@ const App: React.FC = () => {
         // A fresh time on every final submission is what the database counts as "sent"
         record.aiChatAnalysis = { ...record.aiChatAnalysis, [k]: { ...analysis, submittedAt: now } };
       } else {
-        // No analysis (Coach Bot couldn't, or the lesson has no AI step): the teacher grades it from a checklist
+        // No analysis (PE AI Buddy couldn't, or the lesson has no AI step): the teacher grades it from a checklist
         const criteria = getAllCuesForSkill(assessSkillName).map(c => c.syllabusCriterion);
         record.aiChatAnalysis = {
           ...record.aiChatAnalysis,
@@ -2186,11 +2186,11 @@ const App: React.FC = () => {
       // The server's own words to pupils (Practice Station limits, lesson pass) read best as they are
       if (/^You've |ask your teacher/i.test(rawError)) {
         errorText = `⚠️ ${rawError}`;
-      } else if (/Coach Bot is busy/.test(rawError)) {
+      } else if (/PE AI Buddy is busy/.test(rawError)) {
         // Every Gemini model's free quota is used up: the server says when to try again
         errorText = `⚠️ ${rawError.replace(/^\d+:\s*/, '')}`;
       } else if (failedPerformer) {
-        errorText = `⚠️ Coach Bot can't analyse ${failedPerformer} right now. You can still tap 📤 Submit final, and your teacher will grade it.`;
+        errorText = `⚠️ PE AI Buddy can't analyse ${failedPerformer} right now. You can still tap 📤 Submit final, and your teacher will grade it.`;
       } else if (lower.includes('429') || lower.includes('rate') && lower.includes('limit')) {
         errorText = "⚠️ You're sending messages too fast. Please wait a moment and try again.";
       } else if (lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('402')) {
@@ -2571,12 +2571,12 @@ const App: React.FC = () => {
             // The pair stays active for the lesson day, so a redo request shows on Home
             setAppMode('home_screen');
           }}
-          onSendToCoachBot={handlePeerStepDone}
+          onSendToAiBuddy={handlePeerStepDone}
           cueSkillName={stepScreen.kind === 'step' && stepScreen.step.kind === 'assess' ? stepScreen.step.skillName : undefined}
           cuePlan={cuePlanFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
             ? stepScreen.step.skillName
             : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
-          nextIsCoachBot={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
+          nextIsAiBuddy={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
           onExit={() => {
             const wasRefilm = !!refilmPerformer;
             setRefilmPerformer(null);
@@ -2893,7 +2893,7 @@ const App: React.FC = () => {
                         <button
                           type="button"
                           disabled={isLoading || isProcessing || st.stage === 'submitted' || st.redo || analysisUsed(p)}
-                          title={st.redo ? 'Your teacher grades a re-do, so there is no Coach Bot analysis' : analysisUsed(p) ? `${p} has had their one Coach Bot analysis` : undefined}
+                          title={st.redo ? 'Your teacher grades a re-do, so there is no PE AI Buddy analysis' : analysisUsed(p) ? `${p} has had their one PE AI Buddy analysis` : undefined}
                           onClick={() => handleAnalyzePeerPerformer(p)}
                           className={`h-12 px-3 active:scale-[0.98] rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
                             banana ? 'bg-amber-400 hover:bg-amber-300 text-amber-950' : 'bg-rose-500 hover:bg-rose-400 text-white'}`}
