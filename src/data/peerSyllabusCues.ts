@@ -13,7 +13,6 @@ export interface PeerSyllabusCue {
   syllabusCriterion: string; // Exact MOE Syllabus criteria line
   kidFriendlyText: string;   // Clear actionable cue for primary students
   keyPhase: 'setup' | 'execution' | 'followThrough';
-  isCoreCue: boolean;        // Whether included in the quick 3-cue peer focus
   // Shown under the cue in place of the "MOE Standard" line. Set for gymnastics,
   // whose criteria are the app's own and not yet checked against the syllabus.
   detail?: string;
@@ -28,7 +27,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Face Target',
       kidFriendlyText: 'Did partner start facing the target?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ot-2',
@@ -37,7 +35,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Place feet shoulder width apart',
       kidFriendlyText: 'Were feet shoulder-width apart?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ot-3',
@@ -46,7 +43,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep knees slightly bent',
       kidFriendlyText: 'Were knees slightly bent for balance?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ot-4',
@@ -55,7 +51,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Hold ball with dominant hand in front of body',
       kidFriendlyText: 'Was the ball held ready in front of the body?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ot-5',
@@ -64,7 +59,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Turn body as the feet pivots in place until non-dominant side faces the target',
       kidFriendlyText: 'Did partner turn sideways with side to target?',
       keyPhase: 'setup',
-      isCoreCue: true, // Core anchor 1
     },
     {
       id: 'ot-6',
@@ -73,7 +67,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Move dominant arm in downward circular motion until elbow is at shoulder height or higher',
       kidFriendlyText: 'Did throwing elbow come up to shoulder height or higher?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ot-7',
@@ -82,7 +75,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Raise non-dominant arm and points toward target',
       kidFriendlyText: 'Did the non-throwing arm point toward the target?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ot-8',
@@ -91,7 +83,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Step with non-dominant foot toward target',
       kidFriendlyText: 'Did partner step forward with the opposite foot?',
       keyPhase: 'execution',
-      isCoreCue: true, // Core anchor 2
     },
     {
       id: 'ot-9',
@@ -100,7 +91,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Rotate hips and shoulders until front of body faces target',
       kidFriendlyText: 'Did hips and chest turn to face the target on throw?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'ot-10',
@@ -109,7 +99,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Move dominant arm forward and past the head',
       kidFriendlyText: 'Did throwing arm come forward past the head?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'ot-11',
@@ -118,7 +107,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'After release, throwing arm continues down diagonally across body',
       kidFriendlyText: 'Did throwing arm follow through down across the body?',
       keyPhase: 'followThrough',
-      isCoreCue: true, // Core anchor 3
     },
   ],
 
@@ -130,7 +118,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Stand behind the ball',
       kidFriendlyText: 'Did partner start directly behind the ball?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'k-2',
@@ -139,7 +126,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep eyes on the ball',
       kidFriendlyText: 'Did partner keep their eyes locked on the ball?',
       keyPhase: 'setup',
-      isCoreCue: true, // Core anchor 1
     },
     {
       id: 'k-3',
@@ -148,7 +134,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Step and leap with dominant foot toward the ball',
       kidFriendlyText: 'Did partner take an energetic step/approach toward the ball?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'k-4',
@@ -157,7 +142,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Place non-dominant foot beside the ball',
       kidFriendlyText: 'Did planting foot land right beside the ball?',
       keyPhase: 'execution',
-      isCoreCue: true, // Core anchor 2
     },
     {
       id: 'k-5',
@@ -166,7 +150,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Swing dominant leg and non-dominant arm forward',
       kidFriendlyText: 'Did kicking leg and opposite arm swing smoothly?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'k-6',
@@ -175,7 +158,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Contact ball with instep (shoelaces)',
       kidFriendlyText: 'Did partner kick with the shoelaces (instep)?',
       keyPhase: 'execution',
-      isCoreCue: true, // Core anchor 3
     },
     {
       id: 'k-7',
@@ -184,7 +166,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'After contact, dominant leg continues in the direction of the kick',
       kidFriendlyText: 'Did the kicking leg follow through forward?',
       keyPhase: 'followThrough',
-      isCoreCue: false,
     },
   ],
 
@@ -196,7 +177,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Face Target',
       kidFriendlyText: 'Did partner start facing the target?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ut-2',
@@ -205,7 +185,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Place feet shoulder width apart',
       kidFriendlyText: 'Were feet shoulder-width apart?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ut-3',
@@ -214,7 +193,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep knees slightly bent',
       kidFriendlyText: 'Were knees slightly bent for balance?',
       keyPhase: 'setup',
-      isCoreCue: true, // Core anchor 1
     },
     {
       id: 'ut-4',
@@ -223,7 +201,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Hold ball with dominant hand in front of body',
       kidFriendlyText: 'Was ball held in dominant hand in front of body?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ut-5',
@@ -232,7 +209,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Swing dominant hand back at least to waist level',
       kidFriendlyText: 'Did throwing hand swing back to waist level?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ut-6',
@@ -241,7 +217,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Step with non-dominant foot toward target',
       kidFriendlyText: 'Did partner step with the opposite foot toward target?',
       keyPhase: 'execution',
-      isCoreCue: true, // Core anchor 2
     },
     {
       id: 'ut-7',
@@ -250,7 +225,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Swing dominant hand forward and release ball between the knee and waist level',
       kidFriendlyText: 'Did partner release ball between knee and waist height?',
       keyPhase: 'execution',
-      isCoreCue: true, // Core anchor 3
     },
     {
       id: 'ut-8',
@@ -259,7 +233,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'After release, dominant hand continues toward target and above the waist',
       kidFriendlyText: 'Did hand follow through toward target above the waist?',
       keyPhase: 'followThrough',
-      isCoreCue: false,
     },
   ],
 
@@ -271,7 +244,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Face Target',
       kidFriendlyText: 'Did partner face the target?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ur-2',
@@ -280,7 +252,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Place feet shoulder width apart',
       kidFriendlyText: 'Were feet shoulder-width apart?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ur-3',
@@ -289,7 +260,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep knees slightly bent',
       kidFriendlyText: 'Were knees slightly bent?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ur-4',
@@ -298,7 +268,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Hold ball with dominant hand in front of body',
       kidFriendlyText: 'Was ball held in dominant hand in front of body?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ur-5',
@@ -307,7 +276,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Swing dominant hand back at least to waist level',
       kidFriendlyText: 'Did hand swing back to waist level?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'ur-6',
@@ -316,7 +284,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Step with non-dominant foot toward target',
       kidFriendlyText: 'Did partner step with the opposite foot?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'ur-7',
@@ -325,7 +292,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Lower body by bending at knees and waist',
       kidFriendlyText: 'Did partner lower body smoothly by bending knees?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'ur-8',
@@ -334,7 +300,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Swing dominant hand forward and release ball on the ground',
       kidFriendlyText: 'Did ball release smoothly along the ground?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'ur-9',
@@ -343,7 +308,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'After release, dominant hand continues toward target and above the waist',
       kidFriendlyText: 'Did hand follow through smoothly toward target?',
       keyPhase: 'followThrough',
-      isCoreCue: false,
     },
   ],
 
@@ -355,7 +319,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Face Target',
       kidFriendlyText: 'Did partner face the target?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'cp-2',
@@ -364,7 +327,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Place feet shoulder width apart',
       kidFriendlyText: 'Were feet shoulder-width apart?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'cp-3',
@@ -373,7 +335,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep knees slightly bent',
       kidFriendlyText: 'Were knees slightly bent for balance?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'cp-4',
@@ -382,7 +343,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep hands in front of body',
       kidFriendlyText: 'Were hands held ready in front of chest?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'cp-5',
@@ -391,7 +351,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Ball held with thumbs together on back of ball and fingers on sides',
       kidFriendlyText: 'Were thumbs pointing together behind the ball?',
       keyPhase: 'setup',
-      isCoreCue: true,
     },
     {
       id: 'cp-6',
@@ -400,7 +359,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Step forward with one foot',
       kidFriendlyText: 'Did partner step forward with one foot on pass?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'cp-7',
@@ -409,7 +367,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Extend arms and release ball toward target',
       kidFriendlyText: 'Did arms extend cleanly toward target?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'cp-8',
@@ -418,7 +375,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'After release, hands are turned, palms face away from each other and thumbs point downwards',
       kidFriendlyText: 'Did palms finish facing out with thumbs pointing down?',
       keyPhase: 'followThrough',
-      isCoreCue: true,
     },
     {
       id: 'cp-9',
@@ -427,7 +383,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Extend arms for follow through',
       kidFriendlyText: 'Were arms fully extended on follow-through?',
       keyPhase: 'followThrough',
-      isCoreCue: false,
     },
   ],
 
@@ -439,7 +394,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Face Target',
       kidFriendlyText: 'Did partner face the incoming ball?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'caw-2',
@@ -448,7 +402,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Place feet shoulder width apart',
       kidFriendlyText: 'Were feet shoulder-width apart in ready stance?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'caw-3',
@@ -457,7 +410,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep knees slightly bent',
       kidFriendlyText: 'Were knees slightly bent for balance?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'caw-4',
@@ -466,7 +418,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep hands in front of the body',
       kidFriendlyText: 'Were hands held ready in front of chest?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'caw-5',
@@ -475,7 +426,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep eyes on object',
       kidFriendlyText: 'Did partner track the ball with their eyes all the way in?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'caw-6',
@@ -484,7 +434,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Step towards the object',
       kidFriendlyText: 'Did partner step toward the flight of the ball?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'caw-7',
@@ -493,7 +442,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Thumbs pointing together (butterfly window)',
       kidFriendlyText: 'Were thumbs pointing together to form a butterfly window?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'caw-8',
@@ -502,7 +450,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Catch with hands only, pull object towards body to absorb force',
       kidFriendlyText: 'Did hands catch softly and pull in to absorb the force?',
       keyPhase: 'followThrough',
-      isCoreCue: true,
     },
   ],
 
@@ -514,7 +461,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep knees slightly bent',
       kidFriendlyText: 'Were knees kept slightly bent in a balanced stance?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'dh-2',
@@ -523,7 +469,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'The foot opposite the dribbling hand is forward',
       kidFriendlyText: 'Was the foot opposite the dribbling hand placed forward?',
       keyPhase: 'setup',
-      isCoreCue: true,
     },
     {
       id: 'dh-3',
@@ -532,7 +477,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Hold ball with both hands in front of body',
       kidFriendlyText: 'Did partner start with two hands holding the ball?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'dh-4',
@@ -541,7 +485,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'One hand contacts the ball at waist level or below and pushes downward on top of the ball',
       kidFriendlyText: 'Did hand push downward from waist level or below?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'dh-5',
@@ -550,7 +493,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'The wrist flexes and elbow extends in direction of travel as ball is pushed',
       kidFriendlyText: 'Did wrist flex and elbow extend smoothly?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'dh-6',
@@ -559,7 +501,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Use the pads of all four fingers and the thumb for contact',
       kidFriendlyText: 'Did partner use finger pads instead of slapping the ball?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'dh-7',
@@ -568,7 +509,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'As ball is contacted, eyes are focused looking over, not down at the ball',
       kidFriendlyText: 'Were eyes looking up and forward rather than down at feet?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'dh-8',
@@ -577,7 +517,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'When moving, contact is slightly behind the ball and to side/away from feet',
       kidFriendlyText: 'Did the ball stay safely to the side and ahead when moving?',
       keyPhase: 'followThrough',
-      isCoreCue: false,
     },
   ],
 
@@ -589,7 +528,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Ball is on the ground directly below the head',
       kidFriendlyText: 'Was the ball kept close under the body/head?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'df-2',
@@ -598,7 +536,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Feet are shoulder-width apart',
       kidFriendlyText: 'Were feet shoulder-width apart?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'df-3',
@@ -607,7 +544,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep knees slightly bent',
       kidFriendlyText: 'Were knees slightly bent for balance?',
       keyPhase: 'setup',
-      isCoreCue: false,
     },
     {
       id: 'df-4',
@@ -616,7 +552,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Perform a short series of taps with the inside of the foot',
       kidFriendlyText: 'Did partner use gentle taps with the inside of the foot?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'df-5',
@@ -625,7 +560,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'The ball should be on the ground directly below the head as it is contacted',
       kidFriendlyText: 'Was ball contacted directly under personal space?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'df-6',
@@ -634,7 +568,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Eyes looking forward',
       kidFriendlyText: 'Were eyes looking up while dribbling?',
       keyPhase: 'execution',
-      isCoreCue: true,
     },
     {
       id: 'df-7',
@@ -643,7 +576,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'Keep the ball within personal space while dribbling',
       kidFriendlyText: 'Did the ball stay within personal control?',
       keyPhase: 'execution',
-      isCoreCue: false,
     },
     {
       id: 'df-8',
@@ -652,7 +584,6 @@ export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
       syllabusCriterion: 'This movement should be performed at a speed faster than a walk',
       kidFriendlyText: 'Was movement performed smoothly faster than a walk?',
       keyPhase: 'followThrough',
-      isCoreCue: true,
     },
   ],
 };
@@ -665,7 +596,6 @@ export const DEFAULT_PEER_CUES: PeerSyllabusCue[] = [
     syllabusCriterion: 'Maintain balanced ready position with knees slightly bent',
     kidFriendlyText: 'Did partner start in a balanced ready position?',
     keyPhase: 'setup',
-    isCoreCue: true,
   },
   {
     id: 'gen-2',
@@ -674,7 +604,6 @@ export const DEFAULT_PEER_CUES: PeerSyllabusCue[] = [
     syllabusCriterion: 'Step toward target with proper footwork and body coordination',
     kidFriendlyText: 'Did partner step toward the target with good balance?',
     keyPhase: 'execution',
-    isCoreCue: true,
   },
   {
     id: 'gen-3',
@@ -683,7 +612,6 @@ export const DEFAULT_PEER_CUES: PeerSyllabusCue[] = [
     syllabusCriterion: 'Follow through smoothly in direction of movement',
     kidFriendlyText: 'Did partner complete a smooth follow-through?',
     keyPhase: 'followThrough',
-    isCoreCue: true,
   },
 ];
 
@@ -709,7 +637,7 @@ const phaseOf = (i: number, count: number): PeerSyllabusCue['keyPhase'] =>
 const cuesFromChecklist = (skillName: string): PeerSyllabusCue[] => {
   const fms = getSkillChecklist(skillName).map(stripNumber);
   if (fms.length) {
-    // MOE's own wording: the first three are the quick view, as for other FMS skills
+    // MOE's own wording, so the cue is the criterion itself
     return fms.map((criterion, i) => ({
       id: `${slug(skillName)}-${i + 1}`,
       itemNumber: i + 1,
@@ -717,7 +645,6 @@ const cuesFromChecklist = (skillName: string): PeerSyllabusCue[] => {
       syllabusCriterion: criterion,
       kidFriendlyText: criterion,
       keyPhase: phaseOf(i, fms.length),
-      isCoreCue: i < 3,
       detail: '',
     }));
   }
@@ -735,7 +662,6 @@ const cuesFromChecklist = (skillName: string): PeerSyllabusCue[] => {
       syllabusCriterion: criterion,
       kidFriendlyText: short?.[i]?.text ?? (named ? criterion.slice(0, at).trim() : criterion),
       keyPhase: phaseOf(i, gym.length),
-      isCoreCue: true,
       detail: short?.[i] || !named ? criterion : criterion.slice(at + 1).trim(),
     };
   });
@@ -762,8 +688,12 @@ export const getAllCuesForSkill = (skillName: string): PeerSyllabusCue[] => {
   return cues.length ? cues : DEFAULT_PEER_CUES;
 };
 
-export const getCoreCuesForSkill = (skillName: string): PeerSyllabusCue[] => {
+/**
+ * The cues pupils tick in a lesson: the ones the teacher picked for the assess
+ * step (by item number), or all of them when none are picked.
+ */
+export const getFocusCues = (skillName: string, picked?: number[]): PeerSyllabusCue[] => {
   const all = getAllCuesForSkill(skillName);
-  const core = all.filter(c => c.isCoreCue);
-  return core.length > 0 ? core : all.slice(0, 3);
+  const focus = picked?.length ? all.filter(c => picked.includes(c.itemNumber)) : [];
+  return focus.length ? focus : all;
 };

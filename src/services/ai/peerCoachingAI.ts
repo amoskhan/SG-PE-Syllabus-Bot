@@ -212,14 +212,15 @@ Proficiency: Beginning(0-30%), Developing(31-60%), Competent(61-85%), Accomplish
   const discrepancies: PeerCoachingAIResult["teacherReport"]["discrepancies"] = [];
   cues.forEach(cue => {
     const keyword = cue.syllabusCriterion.toLowerCase().split(" ")[0];
-    const peerB = bananaCues[cue.id] ?? false;
+    // A cue the lesson didn't ask pupils to tick has no answer to compare
+    const peerB = bananaCues[cue.id];
     const aiB = bananaReport.criteriaScores.find((s: any) => s.criterion?.toLowerCase().includes(keyword));
-    if (aiB !== undefined && aiB.met !== peerB)
+    if (peerB !== undefined && aiB !== undefined && aiB.met !== peerB)
       discrepancies.push({ criterion: cue.syllabusCriterion, performer: "Banana", peerSaid: peerB, aiSaid: aiB.met });
 
-    const peerA = appleCues[cue.id] ?? false;
+    const peerA = appleCues[cue.id];
     const aiA = appleReport.criteriaScores.find((s: any) => s.criterion?.toLowerCase().includes(keyword));
-    if (aiA !== undefined && aiA.met !== peerA)
+    if (peerA !== undefined && aiA !== undefined && aiA.met !== peerA)
       discrepancies.push({ criterion: cue.syllabusCriterion, performer: "Apple", peerSaid: peerA, aiSaid: aiA.met });
   });
 

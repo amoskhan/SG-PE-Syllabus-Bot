@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_PEER_CUES, OFFICIAL_FMS_PEER_CUES, getAllCuesForSkill, getCoreCuesForSkill, getSkillCues } from './peerSyllabusCues';
+import { DEFAULT_PEER_CUES, OFFICIAL_FMS_PEER_CUES, getAllCuesForSkill, getFocusCues, getSkillCues } from './peerSyllabusCues';
 import { ALL_FMS_SKILLS, getSkillChecklist } from './fundamentalMovementSkillsData';
 import { ALL_GYMNASTICS_SKILLS, getGymnasticsChecklist } from './gymnasticsSkillsData';
 
@@ -60,13 +60,17 @@ describe('getSkillCues', () => {
     });
 });
 
-describe('getCoreCuesForSkill', () => {
-    it('shows every cue of a gymnastics skill', () => {
-        expect(getCoreCuesForSkill('Shoulder Stand')).toHaveLength(4);
-        expect(getCoreCuesForSkill('Forward Roll')).toEqual(getAllCuesForSkill('Forward Roll'));
+describe('getFocusCues', () => {
+    it('gives only the cues the teacher picked, in checklist order', () => {
+        expect(getFocusCues('Shoulder Stand', [4, 1, 2]).map(c => c.itemNumber)).toEqual([1, 2, 4]);
     });
 
-    it('shows the first three cues of an FMS skill taken from its checklist', () => {
-        expect(getCoreCuesForSkill('Bounce pass').map(c => c.itemNumber)).toEqual([1, 2, 3]);
+    it('gives every cue when the teacher picked none', () => {
+        expect(getFocusCues('Underhand Roll')).toBe(getAllCuesForSkill('Underhand Roll'));
+        expect(getFocusCues('Shoulder Stand', [])).toHaveLength(4);
+    });
+
+    it('gives every cue when the pick matches nothing, such as one left from another skill', () => {
+        expect(getFocusCues('Shoulder Stand', [9])).toHaveLength(4);
     });
 });
