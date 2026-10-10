@@ -697,6 +697,14 @@ const App: React.FC = () => {
     return { ...performerStage(work), redo: lock === 'redo_requested' };
   };
 
+  // A peer assessment that isn't finished: whoever still has to be filmed, or
+  // ticks left in a draft. Null when there's nothing to record.
+  const notFilmed = (['Banana', 'Apple'] as const).filter(p => stageFor(p).stage === 'not_started');
+  const recordLabel = !(pairRecord || activePairSubmission) ? null
+    : notFilmed.length === 1 ? `📹 Record ${notFilmed[0]}`
+    : notFilmed.length === 2 || peerDraftNote ? '📹 Continue recording'
+    : null;
+
   /** This pupil has had their one Practice Station analysis (#95). */
   const analysisUsed = (p: Performer) =>
     !!pupilUsage[performerKey(p)].analysisUsed || stageFor(p).stage === 'submitted' || performerWork(pairRecord, p, 'open').hasAnalysis;
@@ -917,7 +925,7 @@ const App: React.FC = () => {
     } else if (step.kind === 'assess' && step.assess?.method === 'ai_analysis') {
       // AI analysis includes the peer assessment: film and tick first, unless
       // the pair already did in an earlier step, then the Practice Station
-      if (pairRecord || activePairSubmission) handleResumePracticeChat();
+      if ((pairRecord || activePairSubmission) && notFilmed.length === 0) handleResumePracticeChat();
       else setAppMode('peer_coaching');
     } else {
       setAppMode('pupil_step');
@@ -2335,6 +2343,7 @@ const App: React.FC = () => {
         continueLabel={lessonUsesAi ? '💬 Go to the Practice Station' : hasNextStep ? 'Next step ➔' : null}
         onOpenPracticeStation={() => { setIsPairReviewOpen(false); if (lessonUsesAi) handleResumePracticeChat(); else goToStep('next'); }}
         onStartRecording={() => { setIsPairReviewOpen(false); markStep('assess', 'peer_assessment'); setAppMode('peer_coaching'); }}
+        recordLabel={recordLabel}
         onClose={() => setIsPairReviewOpen(false)}
       />
     );
@@ -2390,7 +2399,9 @@ const App: React.FC = () => {
                           ? '🔄 Your teacher asked you to try again'
                           : stageFor('Apple').stage === 'submitted' && stageFor('Banana').stage === 'submitted'
                             ? 'Final recordings sent to your teacher'
-                            : pairRecord || activePairSubmission ? 'Work saved' : peerDraftNote ?? 'Continue where you left off'}
+                            : peerDraftNote ?? (pairRecord || activePairSubmission
+                              ? (notFilmed.length === 1 ? `${notFilmed[0] === 'Apple' ? 'Banana' : 'Apple'}'s video is saved · ${notFilmed[0]} is next` : 'Work saved')
+                              : 'Continue where you left off')}
                       </p>
                     </div>
                     <button
@@ -2410,7 +2421,7 @@ const App: React.FC = () => {
                   </div>
                   <div className="flex gap-2">
                     {/* No Practice Station in a lesson without an AI analysis step (#87) */}
-                    {(pairRecord || activePairSubmission) && lessonUsesAi && (
+                    {(pairRecord || activePairSubmission) && lessonUsesAi && notFilmed.length === 0 && (
                       <button
                         type="button"
                         onClick={handleResumePracticeChat}
@@ -2431,6 +2442,16 @@ const App: React.FC = () => {
                     >
                       <span>{pairRecord || activePairSubmission ? '⭐' : '📹'}</span><span>{pairRecord || activePairSubmission ? 'Our progress' : peerDraftNote ? 'Continue recording' : 'Start recording'}</span>
                     </button>
+                    {/* Saved work, but someone still to film: straight back into the recorder */}
+                    {recordLabel && (
+                      <button
+                        type="button"
+                        onClick={() => { markStep('assess', 'peer_assessment'); setAppMode('peer_coaching'); }}
+                        className="flex-[1.3] px-3 py-2.5 bg-white text-emerald-700 hover:bg-emerald-50 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        {recordLabel}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -2608,6 +2629,7 @@ const App: React.FC = () => {
             ? stepScreen.step.skillName
             : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
           nextIsAiBuddy={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
+          cloudClips={{ banana: activePairSubmission?.appleRole?.videoUrl, apple: activePairSubmission?.bananaRole?.videoUrl }}
           onExit={() => {
             const wasRefilm = !!refilmPerformer;
             setRefilmPerformer(null);

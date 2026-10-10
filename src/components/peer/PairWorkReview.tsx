@@ -33,6 +33,8 @@ interface PairWorkReviewProps {
   // lesson without one, or null when there's nowhere to go but Home
   continueLabel?: string | null;
   onStartRecording: () => void;
+  // Someone still has to be filmed, or the ticks finished: back into the recorder
+  recordLabel?: string | null;
   onClose: () => void;
 }
 
@@ -234,6 +236,7 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
   onOpenPracticeStation,
   continueLabel = '💬 Go to the Practice Station',
   onStartRecording,
+  recordLabel,
   onClose,
 }) => {
   const [tab, setTab] = useState<Performer>('Banana');
@@ -309,7 +312,15 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
       {/* Bottom action, clear of the phone's home bar */}
       <div className="shrink-0 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] bg-slate-950/95 border-t border-slate-800">
         <div className="w-full max-w-xl mx-auto">
-          {record && onDevice && continueLabel ? (
+          {recordLabel ? (
+            <button
+              type="button"
+              onClick={onStartRecording}
+              className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] rounded-2xl text-base font-black"
+            >
+              {recordLabel}
+            </button>
+          ) : record && onDevice && continueLabel ? (
             <button
               type="button"
               onClick={onOpenPracticeStation}
