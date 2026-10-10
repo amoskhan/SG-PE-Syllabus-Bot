@@ -814,7 +814,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               </div>
             )}
 
-            {/* Checklist Toggle: 3 Quick Cues vs All MOE Items */}
+            {/* Checklist Toggle: 3 Quick Cues vs All MOE Items (gymnastics shows every cue, so no toggle) */}
+            {coreCues.length < allCues.length && (
             <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 mb-2.5 shrink-0">
               <button
                 type="button"
@@ -839,6 +840,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 📋 All {allCues.length} MOE Rules
               </button>
             </div>
+            )}
 
             {/* MOE Syllabus Peer Cues List */}
             <div className="space-y-2 mb-3">
@@ -854,9 +856,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                         <span className="text-base">{cue.icon}</span>
                         <p className="text-xs font-black text-white leading-tight">{cue.kidFriendlyText}</p>
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
-                        MOE Standard: {cue.syllabusCriterion}
-                      </p>
+                      {cue.detail === undefined ? (
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
+                          MOE Standard: {cue.syllabusCriterion}
+                        </p>
+                      ) : cue.detail && (
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-3">{cue.detail}</p>
+                      )}
                     </div>
 
                     <div className="flex gap-1.5 shrink-0">
@@ -1105,7 +1111,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               </div>
             )}
 
-            {/* Checklist Toggle: 3 Quick Cues vs All MOE Items */}
+            {/* Checklist Toggle: 3 Quick Cues vs All MOE Items (gymnastics shows every cue, so no toggle) */}
+            {coreCues.length < allCues.length && (
             <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 mb-2.5 shrink-0">
               <button
                 type="button"
@@ -1130,6 +1137,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 📋 All {allCues.length} MOE Rules
               </button>
             </div>
+            )}
 
             {/* MOE Syllabus Peer Cues List */}
             <div className="space-y-2 mb-3">
@@ -1145,9 +1153,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                         <span className="text-base">{cue.icon}</span>
                         <p className="text-xs font-black text-white leading-tight">{cue.kidFriendlyText}</p>
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
-                        MOE Standard: {cue.syllabusCriterion}
-                      </p>
+                      {cue.detail === undefined ? (
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
+                          MOE Standard: {cue.syllabusCriterion}
+                        </p>
+                      ) : cue.detail && (
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-3">{cue.detail}</p>
+                      )}
                     </div>
 
                     <div className="flex gap-1.5 shrink-0">

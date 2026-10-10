@@ -3,6 +3,9 @@
  * Directly grounded in the 2024 MOE PE Fundamental Movement Skills checklist.
  */
 
+import { getSkillChecklist } from './fundamentalMovementSkillsData';
+import { getGymnasticsChecklist } from './gymnasticsSkillsData';
+
 export interface PeerSyllabusCue {
   id: string;
   itemNumber: number;
@@ -11,6 +14,9 @@ export interface PeerSyllabusCue {
   kidFriendlyText: string;   // Clear actionable cue for primary students
   keyPhase: 'setup' | 'execution' | 'followThrough';
   isCoreCue: boolean;        // Whether included in the quick 3-cue peer focus
+  // Shown under the cue in place of the "MOE Standard" line. Set for gymnastics,
+  // whose criteria are the app's own and not yet checked against the syllabus.
+  detail?: string;
 }
 
 export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
@@ -681,11 +687,79 @@ export const DEFAULT_PEER_CUES: PeerSyllabusCue[] = [
   },
 ];
 
-export const getAllCuesForSkill = (skillName: string): PeerSyllabusCue[] => {
+/**
+ * Hand-written cues for gymnastics skills, short enough for a young assessor.
+ * Kept apart from the FMS cues so the Learn page still shows the full criteria.
+ */
+const GYMNASTICS_PEER_CUE_TEXT: Record<string, { icon: string; text: string }[]> = {
+  'Shoulder Stand': [
+    { icon: '🤲', text: 'Hands hold the lower back, elbows on the mat' },
+    { icon: '⬆️', text: 'Hips and legs up above the head' },
+    { icon: '📏', text: 'Legs together and pointing straight up' },
+    { icon: '⏱️', text: 'Hold still for 3 seconds' },
+  ],
+};
+
+const stripNumber = (line: string) => line.replace(/^\d+\.\s*/, '').trim();
+const slug = (skillName: string) => skillName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const phaseOf = (i: number, count: number): PeerSyllabusCue['keyPhase'] =>
+  i === 0 ? 'setup' : i === count - 1 ? 'followThrough' : 'execution';
+
+/** A skill's own checklist as cues, for a skill with no hand-written FMS cues. */
+const cuesFromChecklist = (skillName: string): PeerSyllabusCue[] => {
+  const fms = getSkillChecklist(skillName).map(stripNumber);
+  if (fms.length) {
+    // MOE's own wording: the first three are the quick view, as for other FMS skills
+    return fms.map((criterion, i) => ({
+      id: `${slug(skillName)}-${i + 1}`,
+      itemNumber: i + 1,
+      icon: '✅',
+      syllabusCriterion: criterion,
+      kidFriendlyText: criterion,
+      keyPhase: phaseOf(i, fms.length),
+      isCoreCue: i < 3,
+      detail: '',
+    }));
+  }
+
+  // Gymnastics criteria are "Name: description". Pupils tick every one.
+  const gym = getGymnasticsChecklist(skillName).map(stripNumber);
+  const short = GYMNASTICS_PEER_CUE_TEXT[skillName];
+  return gym.map((criterion, i) => {
+    const at = criterion.indexOf(':');
+    const named = at > 0 && at < 40;
+    return {
+      id: `${slug(skillName)}-${i + 1}`,
+      itemNumber: i + 1,
+      icon: short?.[i]?.icon ?? '✅',
+      syllabusCriterion: criterion,
+      kidFriendlyText: short?.[i]?.text ?? (named ? criterion.slice(0, at).trim() : criterion),
+      keyPhase: phaseOf(i, gym.length),
+      isCoreCue: true,
+      detail: short?.[i] || !named ? criterion : criterion.slice(at + 1).trim(),
+    };
+  });
+};
+
+const checklistCueCache = new Map<string, PeerSyllabusCue[]>();
+
+/**
+ * The cues for a skill the app knows: its hand-written FMS cues, else its own
+ * checklist. Empty for a skill with no checklist.
+ */
+export const getSkillCues = (skillName: string): PeerSyllabusCue[] => {
   const match = Object.keys(OFFICIAL_FMS_PEER_CUES).find(
     k => k.toLowerCase() === skillName.toLowerCase() || skillName.toLowerCase().includes(k.toLowerCase())
   );
-  return match ? OFFICIAL_FMS_PEER_CUES[match] : DEFAULT_PEER_CUES;
+  if (match) return OFFICIAL_FMS_PEER_CUES[match];
+  if (!checklistCueCache.has(skillName)) checklistCueCache.set(skillName, cuesFromChecklist(skillName));
+  return checklistCueCache.get(skillName)!;
+};
+
+/** What an assessor ticks. The generic cues are only for a skill with no checklist. */
+export const getAllCuesForSkill = (skillName: string): PeerSyllabusCue[] => {
+  const cues = getSkillCues(skillName);
+  return cues.length ? cues : DEFAULT_PEER_CUES;
 };
 
 export const getCoreCuesForSkill = (skillName: string): PeerSyllabusCue[] => {

@@ -1,4 +1,4 @@
-import { OFFICIAL_FMS_PEER_CUES } from "../../data/peerSyllabusCues";
+import { getSkillCues } from "../../data/peerSyllabusCues";
 import { claudeAccessHeaders, PupilAiRequest } from "./aiAccess";
 import { Level, normaliseLevel } from "../../utils/gradingReview";
 
@@ -145,7 +145,7 @@ export async function runPeerCoachingAnalysis(
   pair?: { lessonId: string; pairNumber: number }
 ): Promise<PeerCoachingAIResult> {
   const access: PupilAiRequest | undefined = pair && { ...pair, performer: "pair", purpose: "peer_feedback" };
-  const cues = OFFICIAL_FMS_PEER_CUES[skillName] || [];
+  const cues = getSkillCues(skillName);
   const criteriaList = cues.map(c => `${c.itemNumber}. ${c.syllabusCriterion}`).join("\n");
 
   onProgress?.("Extracting video frames...");
