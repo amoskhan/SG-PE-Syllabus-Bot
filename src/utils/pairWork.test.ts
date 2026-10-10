@@ -31,7 +31,7 @@ describe('performerStage', () => {
             .toEqual({ canKeep: false, stage: 'ready', canFilmAgain: true, canSubmitFinal: true });
     });
 
-    it("lets them submit without an analysis when Coach Bot couldn't do one", () => {
+    it("lets them submit without an analysis when PE AI Buddy couldn't do one", () => {
         expect(performerStage(work({ hasClip: true, ticked: true, analysisFailed: true })))
             .toEqual({ stage: 'ready', canKeep: false, canFilmAgain: true, canSubmitFinal: true });
     });
@@ -131,7 +131,7 @@ describe('redoChecklistText', () => {
         expect(noAnalysisChecklistText(['Face the target'])).not.toMatch(/beginning|developing|competent|accomplished/i);
     });
 
-    it('reads the same way when Coach Bot could not analyse', () => {
+    it('reads the same way when PE AI Buddy could not analyse', () => {
         expect(parseAiCriteria(noAnalysisChecklistText(['Face the target']))).toEqual([{ name: 'Face the target', result: 'unsure' }]);
     });
 });

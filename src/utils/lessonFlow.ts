@@ -177,7 +177,7 @@ export const stepLabel = (step: LessonStep): string => {
   if (step.kind === 'teach') return 'Learn';
   if (step.kind === 'practise') return 'Practise';
   switch (step.assess?.method) {
-    case 'ai_analysis': return 'Peer assessment + Coach Bot';
+    case 'ai_analysis': return 'Peer assessment + PE AI Buddy';
     case 'peer_assessment': return 'Peer assessment';
     default: return 'Assess';
   }

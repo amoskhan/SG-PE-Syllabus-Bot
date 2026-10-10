@@ -38,7 +38,7 @@ type Caller =
 
 // Each pupil gets 1 analysis and 5 questions per lesson (supabase_ai_usage.sql)
 const LIMIT_MESSAGES: Record<string, string> = {
-    analysis_used: "You've already had your Coach Bot analysis for this lesson. You can still ask Coach Bot questions.",
+    analysis_used: "You've already had your PE AI Buddy analysis for this lesson. You can still ask PE AI Buddy questions.",
     questions_used: "You've asked all 5 of your questions for this lesson. Ask your teacher if you need more help.",
     budget: "You've used all your AI feedback for this lesson. Ask your teacher for help.",
 };

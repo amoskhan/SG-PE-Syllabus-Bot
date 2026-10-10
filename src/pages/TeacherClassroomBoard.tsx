@@ -146,7 +146,7 @@ const AttemptStatus: React.FC<{ sentAt?: string; redoRequestedAt?: string; hasVi
   return <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${tone}`}>{text}</span>;
 };
 
-/** "Step 2 · Peer assessment + Coach Bot", plus the step's skill when it isn't the main skill (#92). */
+/** "Step 2 · Peer assessment + PE AI Buddy", plus the step's skill when it isn't the main skill (#92). */
 const StepTag: React.FC<{ step?: StepRef; mainSkill: string }> = ({ step, mainSkill }) =>
   step ? (
     <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300">
@@ -1329,7 +1329,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                         )}
                         {entry.teacherGrades && (
                           <p className="mb-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900 text-[11px] font-bold text-amber-800 dark:text-amber-300">
-                            No AI analysis for this attempt ({/no ai analysis step/i.test(entry.analysisText) ? 'this lesson has no AI step' : "Coach Bot couldn't analyse it"}). Grade it below.
+                            No AI analysis for this attempt ({/no ai analysis step/i.test(entry.analysisText) ? 'this lesson has no AI step' : "the AI couldn't analyse it"}). Grade it below.
                           </p>
                         )}
                         {/* Re-filmed after a redo request (#93): the AI analysis below is of the earlier attempt */}

@@ -12,7 +12,7 @@ import MarkdownRenderer from '../chat/MarkdownRenderer';
 //
 // The page body doesn't scroll (index.html), so this screen is a fixed-height
 // column whose middle part scrolls. It's always dark: the "dark" class makes
-// the Coach Bot analysis (MarkdownRenderer) use its light text here even when
+// the PE AI Buddy analysis (MarkdownRenderer) use its light text here even when
 // the phone is in light mode.
 
 interface PairWorkReviewProps {
@@ -40,7 +40,7 @@ const STAGE_TEXT: Record<Stage, string> = {
   not_started: 'Not filmed yet',
   redo_choice: 'Your teacher asked you to try again',
   needs_ticks: 'Assessor: tick the cues for this video',
-  needs_analysis: 'Next: ask Coach Bot to analyse this video',
+  needs_analysis: 'Next: ask PE AI Buddy to analyse this video',
   ready: 'Ready to submit your final recording',
   submitted: 'Final recording submitted',
 };
@@ -144,7 +144,7 @@ const PerformerPanel: React.FC<{
         <div className="rounded-3xl bg-slate-800/70 border border-amber-400/40 p-4 space-y-3">
           <p className="text-sm text-slate-200 leading-snug">
             Watch your video below, then choose. <b>Keep</b> sends nothing new. <b>Film again</b> records a new video for the
-            assessor to tick. You can film once more after that. Your teacher grades it, so there's no Coach Bot.
+            assessor to tick. You can film once more after that. Your teacher grades it, so there's no PE AI Buddy.
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -200,7 +200,7 @@ const PerformerPanel: React.FC<{
       </div>
 
       {analysis && (
-        <Folder title={`🤖 Coach Bot's analysis${first && analysis.analysedClip ? ' (first attempt)' : ''}`}>
+        <Folder title={`🤖 PE AI Buddy's analysis${first && analysis.analysedClip ? ' (first attempt)' : ''}`}>
           <div className="text-sm text-slate-200 prose prose-invert prose-sm max-w-none">
             <MarkdownRenderer content={analysis.analysisText} />
           </div>
