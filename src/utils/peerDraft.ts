@@ -14,6 +14,8 @@ export interface PeerDraft {
   appleVideoBlob?: Blob;     // Apple performing (filmed in Banana's turn)
   appleCues: Record<string, boolean>;
   applePoseFrames: string[];
+  // Where each clip already is in the teacher's storage, so it isn't sent twice
+  savedUrls?: { banana?: string; apple?: string };
   savedAt: string;
 }
 

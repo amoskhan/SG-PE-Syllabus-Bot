@@ -58,6 +58,9 @@ interface PeerCoachingSessionProps {
   cueSkillName?: string;
   // The teacher's cue plan for this lesson (#136); none means every cue as the app words it
   cuePlan?: CuePlan;
+  // Clips of this pair the teacher already has (from an earlier visit to this
+  // screen): the pair carries on from whoever hasn't been filmed
+  cloudClips?: { banana?: string; apple?: string };
 }
 
 export interface RefilmedAttempt {
@@ -89,6 +92,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   onRefilmDone,
   nextIsAiBuddy = true,
   cuePlan,
+  cloudClips,
   cueSkillName,
 }) => {
   const cueSkill = cueSkillName || skillName;
@@ -116,6 +120,10 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   // Per-video cloud save state — tracks "Save to Teacher" button independent of full peer-assessment flow
   const [bananaSaveState, setBananaSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [appleSaveState, setAppleSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  // Where each clip went when it was saved, so the final submit doesn't send it again
+  const [bananaSavedUrl, setBananaSavedUrl] = useState<string | undefined>();
+  const [appleSavedUrl, setAppleSavedUrl] = useState<string | undefined>();
+  const saveTriesRef = useRef({ banana: 0, apple: 0 });
 
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -134,7 +142,14 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     let cancelled = false;
     getPeerDraft(draftId)
       .then(draft => {
-        if (cancelled || !draft) return;
+        if (cancelled) return;
+        if (!draft) {
+          // No draft on this device, but the teacher has Banana's clip: on to Apple's turn
+          if (cloudClips?.banana && !cloudClips.apple) setStep('SWAP_PROMPT');
+          return;
+        }
+        if (draft.savedUrls?.banana) { setBananaSavedUrl(draft.savedUrls.banana); setBananaSaveState('saved'); }
+        if (draft.savedUrls?.apple) { setAppleSavedUrl(draft.savedUrls.apple); setAppleSaveState('saved'); }
         if (draft.bananaVideoBlob) { setBananaVideoBlob(draft.bananaVideoBlob); setBananaVideoUrl(URL.createObjectURL(draft.bananaVideoBlob)); }
         if (draft.appleVideoBlob) { setAppleVideoBlob(draft.appleVideoBlob); setAppleVideoUrl(URL.createObjectURL(draft.appleVideoBlob)); }
         setBananaCues(draft.bananaCues);
@@ -157,13 +172,36 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     // A short wait, so a run of ticks is one save and not one per tap
     const timer = setTimeout(() => {
       const save = draftHasWork(work)
-        ? putPeerDraft({ id: draftId, lessonId, pairNumber, skillName: cueSkill, step, ...work, bananaPoseFrames, applePoseFrames, savedAt: new Date().toISOString() })
+        ? putPeerDraft({ id: draftId, lessonId, pairNumber, skillName: cueSkill, step, ...work, bananaPoseFrames, applePoseFrames, savedUrls: { banana: bananaSavedUrl, apple: appleSavedUrl }, savedAt: new Date().toISOString() })
         : deletePeerDraft(draftId);
       save.catch(e => console.warn('[PeerDraft] Could not save the draft:', e));
     }, 400);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftLoaded, step, bananaVideoBlob, appleVideoBlob, bananaCues, appleCues, bananaPoseFrames, applePoseFrames]);
+  }, [draftLoaded, step, bananaVideoBlob, appleVideoBlob, bananaCues, appleCues, bananaPoseFrames, applePoseFrames, bananaSavedUrl, appleSavedUrl]);
+
+  // ── Auto-save: each clip goes to the teacher the moment it exists ──
+  // The "Save Video" button stays as a backup. A failed save is retried a few
+  // times; the pair is never held up, and the final submit sends anything left.
+  // Not during a re-film: that clip is only sent once the pupil chooses it.
+  useEffect(() => {
+    if (draftLoaded && !refilmPerformer && bananaVideoBlob && bananaSaveState === 'idle') handleSaveToTeacher('banana');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftLoaded, bananaVideoBlob, bananaSaveState]);
+  useEffect(() => {
+    if (draftLoaded && !refilmPerformer && appleVideoBlob && appleSaveState === 'idle') handleSaveToTeacher('apple');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftLoaded, appleVideoBlob, appleSaveState]);
+  useEffect(() => {
+    if (refilmPerformer) return;
+    const retry = (performer: 'banana' | 'apple') => {
+      if (saveTriesRef.current[performer] >= 3) return undefined;
+      return setTimeout(() => { saveTriesRef.current[performer] += 1; handleSaveToTeacher(performer); }, 8000);
+    };
+    const timers = [bananaSaveState === 'error' ? retry('banana') : undefined, appleSaveState === 'error' ? retry('apple') : undefined];
+    return () => timers.forEach(t => t && clearTimeout(t));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bananaSaveState, appleSaveState]);
 
   // Voice Guidance on Step Changes (once any draft is back, so a resumed pair hears the right screen)
   useEffect(() => {
@@ -404,6 +442,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       : null;
     const videoUrl = fullBlob ? URL.createObjectURL(fullBlob) : null;
 
+    newClip(performer);
     if (performer === 'Banana') {
       if (fullBlob) setBananaVideoBlob(fullBlob);
       if (videoUrl) setBananaVideoUrl(videoUrl);
@@ -415,11 +454,18 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     }
   };
 
+  /** A new clip for this performer hasn't been saved yet, whatever the last one was. */
+  const newClip = (performer: 'Banana' | 'Apple') => {
+    if (performer === 'Banana') { setBananaSaveState('idle'); setBananaSavedUrl(undefined); saveTriesRef.current.banana = 0; }
+    else { setAppleSaveState('idle'); setAppleSavedUrl(undefined); saveTriesRef.current.apple = 0; }
+  };
+
   const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>, performer: 'Banana' | 'Apple') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const videoUrl = URL.createObjectURL(file);
+    newClip(performer);
     if (performer === 'Banana') {
       setBananaVideoBlob(file);
       setBananaVideoUrl(videoUrl);
@@ -509,6 +555,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       if (teacherId) {
         // Cloud upload path
         const url = await uploadGuestVideo(blob, teacherId, lessonId, pairNumber, performer, skillName, pairPhoto, getOrCreatePairClaimToken(lessonId));
+        if (url) (performer === 'banana' ? setBananaSavedUrl : setAppleSavedUrl)(url);
         setState(url ? 'saved' : 'error');
       } else {
         // No QR / no teacherId — save video blob to local submission in IndexedDB as backup
@@ -590,7 +637,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         isObserved: rated[c.id] ?? false,
       }));
 
-    const cloudUrls: { apple?: string; banana?: string } = {};
+    // A clip already with the teacher isn't sent again
+    const bananaAlready = bananaSavedUrl ?? (bananaVideoBlob ? undefined : cloudClips?.banana);
+    const appleAlready = appleSavedUrl ?? (appleVideoBlob ? undefined : cloudClips?.apple);
+    // Ticks made on an earlier visit and lost with it are left as the teacher has them
+    const ticksToSend = (rated: Record<string, boolean>, hasClip: boolean) =>
+      hasClip || Object.keys(rated).length > 0 ? mapCues(rated) : undefined;
+    const cloudUrls: { apple?: string; banana?: string } = { banana: bananaAlready, apple: appleAlready };
     try {
       // ── Cloud upload (teacher always provides teacherId via QR scan) ────────
       if (teacherId) {
@@ -601,10 +654,10 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           pairNumber,
           skillName,
           pairPhoto,
-          bananaBlob: bananaVideoBlob || undefined,
-          appleBlob: appleVideoBlob || undefined,
-          bananaCues: mapCues(bananaCues),
-          appleCues: mapCues(appleCues),
+          bananaBlob: bananaAlready ? undefined : bananaVideoBlob || undefined,
+          appleBlob: appleAlready ? undefined : appleVideoBlob || undefined,
+          bananaCues: ticksToSend(bananaCues, !!bananaVideoBlob),
+          appleCues: ticksToSend(appleCues, !!appleVideoBlob),
           claimToken: getOrCreatePairClaimToken(lessonId),
         });
 
@@ -622,8 +675,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           console.warn('[Submit] uploadPeerSessionToTeacher returned success=false');
         } else {
           console.log('[Submit] Cloud upload complete ✓ banana:', result.bananaVideoUrl, 'apple:', result.appleVideoUrl);
-          cloudUrls.banana = result.bananaVideoUrl;
-          cloudUrls.apple = result.appleVideoUrl;
+          cloudUrls.banana = result.bananaVideoUrl ?? bananaAlready;
+          cloudUrls.apple = result.appleVideoUrl ?? appleAlready;
         }
       } else {
         console.warn('[Submit] No teacherId — QR was not scanned. Saving locally only.');
@@ -944,7 +997,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     setBananaVideoUrl(null);
                     setBananaVideoBlob(null);
                     setBananaPoseFrames([]);
-                    setBananaSaveState('idle');
+                    newClip('Banana');
                     setStep('APPLE_INTRO');
                   }}
                   className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border border-slate-700 transition-all cursor-pointer text-center"
@@ -1224,7 +1277,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     setAppleVideoUrl(null);
                     setAppleVideoBlob(null);
                     setApplePoseFrames([]);
-                    setAppleSaveState('idle');
+                    newClip('Apple');
                     setStep('SWAP_PROMPT');
                   }}
                   className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border border-slate-700 transition-all cursor-pointer text-center"
