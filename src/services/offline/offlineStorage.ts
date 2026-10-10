@@ -5,6 +5,7 @@ import { decodeBlobs, encodeBlobs, stripBlobs } from './storedBlobs';
 export interface PeerCueResult {
   cueIndex: number;
   criterionText: string;
+  cueText?: string; // the wording the pupil saw, when the lesson gave one (#136)
   isObserved: boolean;
 }
 

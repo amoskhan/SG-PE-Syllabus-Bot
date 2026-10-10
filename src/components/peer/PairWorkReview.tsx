@@ -87,7 +87,7 @@ const Checklist: React.FC<{ cues: PeerCueResult[] }> = ({ cues }) => {
               c.isObserved ? 'bg-emerald-500/10 text-emerald-50' : 'bg-slate-800/80 text-slate-300'}`}
           >
             <span className="shrink-0">{c.isObserved ? '✅' : '⬜'}</span>
-            <span>{c.criterionText}</span>
+            <span>{c.cueText ?? c.criterionText}</span>
           </li>
         ))}
       </ul>

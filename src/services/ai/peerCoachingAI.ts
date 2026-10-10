@@ -142,7 +142,9 @@ export async function runPeerCoachingAnalysis(
   onProgress?: (msg: string) => void,
   // Which lesson and pair is asking — pupils aren't signed in, so /api/claude
   // needs the lesson pass (see aiAccess.ts)
-  pair?: { lessonId: string; pairNumber: number }
+  pair?: { lessonId: string; pairNumber: number },
+  // The criteria this lesson focuses on (#136); the feedback leads with them
+  focus: string[] = []
 ): Promise<PeerCoachingAIResult> {
   const access: PupilAiRequest | undefined = pair && { ...pair, performer: "pair", purpose: "peer_feedback" };
   const cues = getSkillCues(skillName);
@@ -163,7 +165,7 @@ export async function runPeerCoachingAnalysis(
       type: "text",
       text: `You are a super encouraging PE coach for Singapore primary school students (age 8-12).
 Skill: ${skillName}. You can see ${performer}'s movement frames above.
-
+${focus.length ? `This lesson's focus: ${focus.join("; ")}. Make the praise or the tip about one of these if you can.\n` : ""}
 Give ${performer} exactly 1 PRAISE and 1 TIP. Max 2 sentences. Simple words. End with 1 emoji. No rubrics or jargon.
 Format: [praise]. [tip] [emoji]`
     }

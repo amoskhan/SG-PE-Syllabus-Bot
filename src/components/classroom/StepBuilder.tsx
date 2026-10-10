@@ -1,7 +1,7 @@
 import React from 'react';
 import { AssessmentMethod, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, newStepId } from '../../utils/lessonFlow';
 import { referenceImageFor } from '../../utils/teachPages';
-import { getAllCuesForSkill } from '../../data/peerSyllabusCues';
+import { CuePlan, getAllCuesForSkill } from '../../data/peerSyllabusCues';
 import { TeachMediaEditor, UploadMedia } from './TeachMediaEditor';
 
 // The teacher builds a lesson from Teach, Practise and Assess steps (#87, #88;
@@ -55,12 +55,26 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
   // A different skill has different cues, so the picked ones no longer apply
   const changeSkill = (step: LessonStep, skillName: string): Partial<LessonStep> =>
     step.assess ? { skillName, assess: { method: step.assess.method } } : { skillName };
+  // Change part of an assess step's cue plan, storing only what the teacher set
+  const setCuePlan = (i: number, step: LessonStep, patch: CuePlan) => {
+    if (!step.assess) return;
+    const plan = { ...step.assess, ...patch };
+    const cueText = Object.fromEntries(Object.entries(plan.cueText ?? {}).filter(([, text]) => text.trim()));
+    update(i, {
+      assess: {
+        method: plan.method,
+        ...(plan.focusCues?.length ? { focusCues: plan.focusCues } : {}),
+        ...(Object.keys(cueText).length ? { cueText } : {}),
+        ...(plan.extraCues?.length ? { extraCues: plan.extraCues } : {}),
+      },
+    });
+  };
   // Tick or untick one cue pupils will see. Every cue ticked is stored as no pick at all.
   const toggleCue = (i: number, step: LessonStep, all: number[], itemNumber: number) => {
     const picked = step.assess?.focusCues?.length ? step.assess.focusCues : all;
     const next = all.filter(n => (n === itemNumber ? !picked.includes(n) : picked.includes(n)));
-    if (!step.assess || next.length === 0) return;
-    update(i, { assess: { method: step.assess.method, ...(next.length < all.length ? { focusCues: next } : {}) } });
+    if (next.length === 0) return;
+    setCuePlan(i, step, { focusCues: next.length < all.length ? next : undefined });
   };
 
   const problemsFor = (i: number) => problems.filter(p => p.stepIndex === i);
@@ -194,17 +208,62 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                   <div className="flex flex-col gap-1.5">
                     <span className={smallLabel}>Cues pupils tick ({picked.length} of {cues.length})</span>
                     {cues.map(c => (
-                      <label key={c.id} className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={picked.includes(c.itemNumber)}
-                          disabled={picked.length === 1 && picked.includes(c.itemNumber)}
-                          onChange={() => toggleCue(i, step, all, c.itemNumber)}
-                          className="w-4 h-4 mt-0.5 accent-indigo-600"
-                        />
-                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.icon} {c.kidFriendlyText}</span>
-                      </label>
+                      <div key={c.id} className="flex flex-col gap-1">
+                        <label className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={picked.includes(c.itemNumber)}
+                            disabled={picked.length === 1 && picked.includes(c.itemNumber)}
+                            onChange={() => toggleCue(i, step, all, c.itemNumber)}
+                            className="w-4 h-4 mt-0.5 accent-indigo-600"
+                          />
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.icon} {c.kidFriendlyText}</span>
+                        </label>
+                        {picked.includes(c.itemNumber) && (
+                          <input
+                            type="text"
+                            maxLength={80}
+                            value={step.assess?.cueText?.[c.itemNumber] ?? ''}
+                            onChange={(e) => setCuePlan(i, step, { cueText: { ...step.assess?.cueText, [c.itemNumber]: e.target.value } })}
+                            placeholder="Your own wording for pupils (optional)"
+                            aria-label={`Your own wording for cue ${c.itemNumber}`}
+                            className={`${inputClass} ml-6 w-auto py-1.5 text-xs font-medium`}
+                          />
+                        )}
+                      </div>
                     ))}
+
+                    <span className={`${smallLabel} mt-1`}>Anything else to look out for (pupils tick these too; the AI and the level ignore them)</span>
+                    {(step.assess?.extraCues ?? []).map((text, n) => (
+                      <div key={n} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          maxLength={80}
+                          value={text}
+                          onChange={(e) => setCuePlan(i, step, { extraCues: (step.assess?.extraCues ?? []).map((t, m) => (m === n ? e.target.value : t)) })}
+                          placeholder="e.g. Chin tucked to the chest"
+                          aria-label={`Extra cue ${n + 1}`}
+                          className={`${inputClass} py-1.5 text-xs font-medium`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCuePlan(i, step, { extraCues: (step.assess?.extraCues ?? []).filter((_, m) => m !== n) })}
+                          aria-label={`Remove extra cue ${n + 1}`}
+                          className="shrink-0 w-8 h-8 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-zinc-800 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    {(step.assess?.extraCues?.length ?? 0) < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => setCuePlan(i, step, { extraCues: [...(step.assess?.extraCues ?? []), ''] })}
+                        className="self-start text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                      >
+                        ＋ Add a cue
+                      </button>
+                    )}
                   </div>
                 );
               })()}

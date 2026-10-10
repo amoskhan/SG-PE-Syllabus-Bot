@@ -16,6 +16,7 @@ export interface PeerSyllabusCue {
   // Shown under the cue in place of the "MOE Standard" line. Set for gymnastics,
   // whose criteria are the app's own and not yet checked against the syllabus.
   detail?: string;
+  extra?: boolean;           // The teacher's own addition: tied to no criterion (#136)
 }
 
 export const OFFICIAL_FMS_PEER_CUES: Record<string, PeerSyllabusCue[]> = {
@@ -689,11 +690,59 @@ export const getAllCuesForSkill = (skillName: string): PeerSyllabusCue[] => {
 };
 
 /**
- * The cues pupils tick in a lesson: the ones the teacher picked for the assess
- * step (by item number), or all of them when none are picked.
+ * What the teacher chose, at the planning stage, for the cues of one skill in
+ * one lesson (#136). Kept on the lesson's assess step.
  */
-export const getFocusCues = (skillName: string, picked?: number[]): PeerSyllabusCue[] => {
+export interface CuePlan {
+  focusCues?: number[];              // item numbers pupils tick; none means all
+  cueText?: Record<number, string>;  // the teacher's own wording, by item number
+  extraCues?: string[];              // things to look out for that are in no criterion
+}
+
+/** Extra cues are numbered from here up, clear of any checklist's item numbers. */
+export const EXTRA_CUE_BASE = 100;
+
+/**
+ * The cues pupils tick in a lesson: the picked ones (all, when none are
+ * picked) in the teacher's wording where they gave one, then their extra cues.
+ */
+export const getLessonCues = (skillName: string, plan?: CuePlan): PeerSyllabusCue[] => {
   const all = getAllCuesForSkill(skillName);
+  const picked = plan?.focusCues;
   const focus = picked?.length ? all.filter(c => picked.includes(c.itemNumber)) : [];
-  return focus.length ? focus : all;
+  const chosen = focus.length ? focus : all;
+
+  const ownText = (c: PeerSyllabusCue) => plan?.cueText?.[c.itemNumber]?.trim();
+  const worded = chosen.some(ownText)
+    ? chosen.map(c => (ownText(c) ? { ...c, kidFriendlyText: ownText(c)! } : c))
+    : chosen;
+
+  const extras: PeerSyllabusCue[] = (plan?.extraCues ?? [])
+    .map((text, i) => ({ text: text.trim(), n: i + 1 }))
+    .filter(e => e.text)
+    .map(e => ({
+      id: `extra-${e.n}`,
+      itemNumber: EXTRA_CUE_BASE + e.n,
+      icon: '👀',
+      syllabusCriterion: e.text,
+      kidFriendlyText: e.text,
+      keyPhase: 'execution',
+      detail: '',
+      extra: true,
+    }));
+  return extras.length ? [...worded, ...extras] : worded;
+};
+
+/**
+ * The criteria a lesson focuses on, by name, when the teacher picked only some
+ * of them. Empty when pupils tick every cue. For the AI: it still grades the
+ * whole skill, and leads its feedback with these.
+ */
+export const focusCriteria = (skillName: string, plan?: CuePlan): string[] => {
+  const all = getSkillCues(skillName);
+  const picked = plan?.focusCues;
+  const focus = picked?.length ? all.filter(c => picked.includes(c.itemNumber)) : [];
+  if (!focus.length || focus.length === all.length) return [];
+  // A gymnastics criterion is "Name: description", and its name is enough
+  return focus.map(c => (c.detail ? c.syllabusCriterion.split(':')[0].trim() : c.syllabusCriterion));
 };
