@@ -1,6 +1,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import type { PairProgress } from '../../utils/lessonFlow';
 import { decodeBlobs, encodeBlobs, stripBlobs } from './storedBlobs';
+import { PeerDraft, draftIsFresh } from '../../utils/peerDraft';
 
 export interface PeerCueResult {
   cueIndex: number;
@@ -178,10 +179,14 @@ interface PeCoachDB extends DBSchema {
     key: string;
     value: { lessonId: string; title: string; skillName: string; teacherPin: string; updatedAt: string };
   };
+  peer_drafts: {
+    key: string;
+    value: PeerDraft;
+  };
 }
 
 const DB_NAME = 'sg_pe_partner_coach_db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<PeCoachDB>> | null = null;
 
@@ -206,6 +211,10 @@ export const getDB = async (): Promise<IDBPDatabase<PeCoachDB>> => {
           // Added optional aiStudentFeedback and aiTeacherReport to PairSubmissionRecord.
           // IndexedDB object store schema unchanged — no migration needed.
         }
+        if (oldVersion < 3 && !db.objectStoreNames.contains('peer_drafts')) {
+          // A peer assessment part-way through (peerDraft.ts)
+          db.createObjectStore('peer_drafts', { keyPath: 'id' });
+        }
       },
     });
   }
@@ -228,6 +237,42 @@ export const getActivePairSession = async (): Promise<PairSessionData | null> =>
 export const clearActivePairSession = async (): Promise<void> => {
   const db = await getDB();
   await db.delete('pair_session', 'current_session');
+};
+
+// ─── Peer assessment drafts ──────────────────────────────────────────────────
+// The recordings and ticks of a peer assessment the pair hasn't finished, so
+// leaving the page or refreshing doesn't lose them (peerDraft.ts).
+
+export const getPeerDraft = async (id: string): Promise<PeerDraft | undefined> => {
+  const db = await getDB();
+  const raw = await db.get('peer_drafts', id);
+  if (!raw) return undefined;
+  if (!draftIsFresh(raw)) {
+    await db.delete('peer_drafts', id);
+    return undefined;
+  }
+  return decodeBlobs(raw);
+};
+
+/** Saves the draft; without its clips if the device won't hold them, so the ticks survive. */
+export const putPeerDraft = async (draft: PeerDraft): Promise<void> => {
+  const db = await getDB();
+  try {
+    await db.put('peer_drafts', await encodeBlobs(draft));
+  } catch (e) {
+    console.warn('[Offline] Could not store the draft clips on this device; saving the ticks:', e);
+    await db.put('peer_drafts', stripBlobs(draft));
+  }
+};
+
+export const deletePeerDraft = async (id: string): Promise<void> => {
+  const db = await getDB();
+  await db.delete('peer_drafts', id);
+};
+
+export const clearPeerDrafts = async (): Promise<void> => {
+  const db = await getDB();
+  await db.clear('peer_drafts');
 };
 
 // ─── Pair Claim Token ────────────────────────────────────────────────────────
