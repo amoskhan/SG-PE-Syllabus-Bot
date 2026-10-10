@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  getFocusCues,
+  getLessonCues,
+  CuePlan,
   PeerSyllabusCue,
 } from '../../data/peerSyllabusCues';
 import { speechService } from '../../services/speechService';
@@ -51,8 +52,8 @@ interface PeerCoachingSessionProps {
   // The skill this step assesses (#92): its cues are the checklist. The work
   // is still saved under skillName, the lesson's main skill.
   cueSkillName?: string;
-  // The cues the teacher picked for this lesson (#136), by item number; none means all
-  focusCues?: number[];
+  // The teacher's cue plan for this lesson (#136); none means every cue as the app words it
+  cuePlan?: CuePlan;
 }
 
 export interface RefilmedAttempt {
@@ -83,7 +84,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   refilmPerformer,
   onRefilmDone,
   nextIsCoachBot = true,
-  focusCues,
+  cuePlan,
   cueSkillName,
 }) => {
   const cueSkill = cueSkillName || skillName;
@@ -117,7 +118,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const recordedChunksRef = useRef<Blob[]>([]);
   const uploadInputBananaRef = useRef<HTMLInputElement>(null); // file upload for Banana performer
   const uploadInputAppleRef = useRef<HTMLInputElement>(null);  // file upload for Apple performer
-  const displayedCues: PeerSyllabusCue[] = getFocusCues(cueSkill, focusCues);
+  const displayedCues: PeerSyllabusCue[] = getLessonCues(cueSkill, cuePlan);
 
   // Voice Guidance on Step Changes
   useEffect(() => {
@@ -490,6 +491,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       displayedCues.map((c) => ({
         cueIndex: c.itemNumber,
         criterionText: c.syllabusCriterion,
+        cueText: c.kidFriendlyText,
         isObserved: rated[c.id] ?? false,
       }));
 
@@ -538,6 +540,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       displayedCues.map((c) => ({
         cueIndex: c.itemNumber,
         criterionText: c.syllabusCriterion,
+        cueText: c.kidFriendlyText,
         isObserved: rated[c.id] ?? false,
       }));
 
@@ -823,7 +826,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-mono font-black px-1.5 py-0.5 bg-slate-700 text-indigo-300 rounded">
-                          #{cue.itemNumber}
+                          {cue.extra ? '+' : `#${cue.itemNumber}`}
                         </span>
                         <span className="text-base">{cue.icon}</span>
                         <p className="text-xs font-black text-white leading-tight">{cue.kidFriendlyText}</p>
@@ -1093,7 +1096,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-mono font-black px-1.5 py-0.5 bg-slate-700 text-amber-300 rounded">
-                          #{cue.itemNumber}
+                          {cue.extra ? '+' : `#${cue.itemNumber}`}
                         </span>
                         <span className="text-base">{cue.icon}</span>
                         <p className="text-xs font-black text-white leading-tight">{cue.kidFriendlyText}</p>

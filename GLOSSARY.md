@@ -126,7 +126,14 @@ _Avoid_: Checklist item, teaching point
 The full set of criteria for one skill.
 
 **Cue**:
-The wording of one criterion that pupils tick while assessing each other: the criterion as written, or a shorter child-friendly version of it.
+The wording of one criterion that pupils tick while assessing each other: the criterion as written, a shorter child-friendly version of it, or the teacher's own wording for a lesson.
+
+**Focus Cues**:
+The cues a teacher picks, when planning a lesson, for pupils to tick in that lesson. The AI analysis and the teacher assessment still cover the whole checklist.
+_Avoid_: Quick cues, core cues
+
+**Extra Cue**:
+Something a teacher adds for pupils to look out for and tick in a lesson that belongs to no criterion, such as a safety point. It never counts towards a proficiency level and the AI does not judge it.
 
 **Proficiency Level**:
 How well a skill was performed: Beginning, Developing, Competent or Accomplished.

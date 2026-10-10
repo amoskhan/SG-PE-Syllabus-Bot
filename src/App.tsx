@@ -27,13 +27,13 @@ import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './co
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef } from './services/offline/offlineStorage';
-import { LessonStep, PairProgress, Screen, findLessonStep, focusCuesFor, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
+import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
-import { getAllCuesForSkill, getFocusCues } from './data/peerSyllabusCues';
+import { focusCriteria, getAllCuesForSkill, getLessonCues } from './data/peerSyllabusCues';
 import { normaliseLevel } from './utils/gradingReview';
 import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
 import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey, performerStage, performerWork, redoChecklistText, redoFilmCount } from './utils/pairWork';
@@ -476,7 +476,8 @@ const App: React.FC = () => {
         data.bananaCues,
         data.appleCues,
         updateLoadingMsg,
-        { lessonId: data.lessonId, pairNumber: data.pairNumber }
+        { lessonId: data.lessonId, pairNumber: data.pairNumber },
+        focusCriteria(data.assessSkillName || data.skillName, cuePlanFor(lessonSteps, data.assessSkillName || data.skillName))
       );
 
       const discrepancyNote = result.teacherReport.discrepancies.length > 0
@@ -550,7 +551,7 @@ const App: React.FC = () => {
 
   // The cues pupils tick for a skill in this lesson (#136). The teacher's own
   // checklist and the AI still use the whole skill (getAllCuesForSkill).
-  const pupilCues = (skillName: string) => getFocusCues(skillName, focusCuesFor(lessonSteps, skillName));
+  const pupilCues = (skillName: string) => getLessonCues(skillName, cuePlanFor(lessonSteps, skillName));
 
   // "🤝 Peer Assessment Checklist" bot card shown just before the AI grading.
   const buildPeerChecklistMessage = (performer: 'Apple' | 'Banana', skillName: string): Message => {
@@ -558,7 +559,7 @@ const App: React.FC = () => {
     const cues = pupilCues(skillName);
     const rated = (performer === 'Apple' ? activePeerSessionData?.appleCues : activePeerSessionData?.bananaCues) || {};
     const lines = cues.length > 0
-      ? cues.map(c => `- ${rated[c.id] ? '✅' : '❌'} ${c.itemNumber}. ${c.syllabusCriterion}`).join('\n')
+      ? cues.map(c => `- ${rated[c.id] ? '✅' : '❌'} ${c.extra ? '➕' : `${c.itemNumber}.`} ${c.syllabusCriterion}`).join('\n')
       : '_No peer cues were recorded for this skill._';
     const met = cues.filter(c => rated[c.id]).length;
     return {
@@ -635,7 +636,10 @@ const App: React.FC = () => {
     // Peer flow has no individual student context — don't let a stale ref mis-save the analysis
     activeStudentContextRef.current = null;
 
-    const text = `Coach, grade ${performer}'s ${skillName} against the full 2024 MOE PE Syllabus checklist. Assess every performance criterion with frame evidence, then state the proficiency level.`;
+    // The AI grades the whole skill; its feedback starts with what this lesson was about (#136)
+    const focus = focusCriteria(skillName, cuePlanFor(lessonSteps, skillName));
+    const focusNote = focus.length ? ` This lesson's focus was: ${focus.join('; ')}. Begin your feedback to the pupil with these.` : '';
+    const text = `Coach, grade ${performer}'s ${skillName} against the full 2024 MOE PE Syllabus checklist. Assess every performance criterion with frame evidence, then state the proficiency level.${focusNote}`;
     await handleSendMessage(text, files, { skillName, isVerified: true, performer });
   };
 
@@ -674,6 +678,7 @@ const App: React.FC = () => {
     pupilCues(skillName).map(c => ({
       cueIndex: c.itemNumber,
       criterionText: c.syllabusCriterion,
+      cueText: c.kidFriendlyText,
       isObserved: !!rated?.[c.id],
     }));
 
@@ -2568,7 +2573,7 @@ const App: React.FC = () => {
           }}
           onSendToCoachBot={handlePeerStepDone}
           cueSkillName={stepScreen.kind === 'step' && stepScreen.step.kind === 'assess' ? stepScreen.step.skillName : undefined}
-          focusCues={focusCuesFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
+          cuePlan={cuePlanFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
             ? stepScreen.step.skillName
             : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
           nextIsCoachBot={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}

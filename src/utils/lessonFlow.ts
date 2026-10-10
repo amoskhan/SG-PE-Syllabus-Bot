@@ -1,6 +1,7 @@
 import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
 import { ALL_GYMNASTICS_SKILLS, isPartnerSkill } from '../data/gymnasticsSkillsData';
 import { teachPages } from './teachPages';
+import type { CuePlan } from '../data/peerSyllabusCues';
 
 // The rules of a lesson's steps (GLOSSARY.md: Lesson, Lesson Step; ADR 0002).
 // A teacher builds each lesson as an ordered list of Teach, Practise and Assess
@@ -28,8 +29,8 @@ export interface LessonStep {
   instruction?: string;        // what pupils are told to do at this step
   teach?: { media: TeachMedia[]; showCues: boolean; showReferenceImage: boolean };
   practise?: { films: boolean };
-  // focusCues: the item numbers of the cues pupils tick (#136); none means all of them
-  assess?: { method: AssessmentMethod; focusCues?: number[] };
+  // With the teacher's cue plan (#136): which cues pupils tick, in whose wording, plus extras
+  assess?: { method: AssessmentMethod } & CuePlan;
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -164,12 +165,12 @@ export const findLessonStep = (steps: LessonStep[], kind: StepKind, method?: Ass
   steps.findIndex(s => s.kind === kind && (!method || s.assess?.method === method));
 
 /**
- * The cues the teacher picked for pupils to tick on a skill. One pick per skill
- * per lesson: it sits on the lesson's first assess step for that skill, so a
- * later AI analysis step reads the same ticks.
+ * The teacher's cue plan for a skill. One plan per skill per lesson: it sits on
+ * the lesson's first assess step for that skill, so a later AI analysis step
+ * reads the same ticks.
  */
-export const focusCuesFor = (steps: LessonStep[], skillName: string): number[] | undefined =>
-  steps.find(s => s.kind === 'assess' && s.skillName === skillName)?.assess?.focusCues;
+export const cuePlanFor = (steps: LessonStep[], skillName: string): CuePlan | undefined =>
+  steps.find(s => s.kind === 'assess' && s.skillName === skillName)?.assess;
 
 /** A short name for a step, for "Step 2 of 3 · Peer assessment". */
 export const stepLabel = (step: LessonStep): string => {
@@ -195,7 +196,7 @@ export const newStepId = () => `step-${Date.now().toString(36)}-${Math.random().
 export const followMainSkill = (steps: LessonStep[], oldMain: string, newMain: string, areaSkills: readonly string[]) =>
   steps.map(s => {
     if (s.skillName !== oldMain && areaSkills.includes(s.skillName)) return s;
-    // The picked cues belonged to the old skill
+    // The cue plan belonged to the old skill
     return s.assess ? { ...s, skillName: newMain, assess: { method: s.assess.method } } : { ...s, skillName: newMain };
   });
 
