@@ -1,7 +1,8 @@
 import React from 'react';
-import { AssessmentMethod, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, newStepId } from '../../utils/lessonFlow';
+import { AssessmentMethod, CopiedCuePlan, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, changeStepSkill, copyLastCuePlan, followedAssessStep, newStepId } from '../../utils/lessonFlow';
 import { referenceImageFor } from '../../utils/teachPages';
-import { CuePlan, getAllCuesForSkill } from '../../data/peerSyllabusCues';
+import { getAllCuesForSkill } from '../../data/peerSyllabusCues';
+import { DEFAULT_GLOW_STARTER, DEFAULT_GROW_STARTER, GLOW_GROW_MAX_LENGTH, GlowGrowSetting } from '../../utils/glowGrow';
 import { TeachMediaEditor, UploadMedia } from './TeachMediaEditor';
 
 // The teacher builds a lesson from Teach, Practise and Assess steps (#87, #88;
@@ -17,8 +18,8 @@ interface StepBuilderProps {
   // A Teach step's own videos and pictures (#89), changed against the latest steps
   onStepMediaChange: (stepId: string, change: (media: TeachMedia[]) => TeachMedia[]) => void;
   onUploadMedia?: UploadMedia;
-  // The cue plan from the teacher's last lesson on a skill, to reuse (#136)
-  lastCuePlan?: (skillName: string) => CuePlan | undefined;
+  // The cue plan from the teacher's last lesson on a skill, to reuse (#136), with its Glow and Grow setting
+  lastCuePlan?: (skillName: string) => CopiedCuePlan | undefined;
 }
 
 const inputClass =
@@ -54,11 +55,8 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
   const remove = (i: number) => onChange(steps.filter((_, j) => j !== i));
   const add = (kind: StepKind) => onChange([...steps, blankStep(kind, mainSkill)]);
 
-  // A different skill has different cues, so the picked ones no longer apply
-  const changeSkill = (step: LessonStep, skillName: string): Partial<LessonStep> =>
-    step.assess ? { skillName, assess: { method: step.assess.method } } : { skillName };
   // Change part of an assess step's cue plan, storing only what the teacher set
-  const setCuePlan = (i: number, step: LessonStep, patch: CuePlan) => {
+  const setCuePlan = (i: number, step: LessonStep, patch: CopiedCuePlan) => {
     if (!step.assess) return;
     const plan = { ...step.assess, ...patch };
     const cueText = Object.fromEntries(Object.entries(plan.cueText ?? {}).filter(([, text]) => text.trim()));
@@ -68,8 +66,15 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
         ...(plan.focusCues?.length ? { focusCues: plan.focusCues } : {}),
         ...(Object.keys(cueText).length ? { cueText } : {}),
         ...(plan.extraCues?.length ? { extraCues: plan.extraCues } : {}),
+        ...(plan.glowGrow ? { glowGrow: plan.glowGrow } : {}),
       },
     });
+  };
+  // Switch Glow and Grow on, off, or reword a starter. Off is stored as no setting at all.
+  const setGlowGrow = (i: number, step: LessonStep, glowGrow: GlowGrowSetting | undefined) => {
+    if (!step.assess) return;
+    const { glowGrow: _old, ...rest } = step.assess;
+    update(i, { assess: glowGrow ? { ...rest, glowGrow } : rest });
   };
   // Tick or untick one cue pupils will see. Every cue ticked is stored as no pick at all.
   const toggleCue = (i: number, step: LessonStep, all: number[], itemNumber: number) => {
@@ -132,7 +137,7 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1">
                   <span className={smallLabel}>Skill</span>
-                  <select value={step.skillName} onChange={(e) => update(i, changeSkill(step, e.target.value))} className={inputClass}>
+                  <select value={step.skillName} onChange={(e) => onChange(changeStepSkill(steps, i, e.target.value))} className={inputClass}>
                     {!skills.includes(step.skillName) && <option value={step.skillName}>{step.skillName || '—'}</option>}
                     {skills.map(s => <option key={s} value={s}>{s}{s === mainSkill ? ' (main skill)' : ''}</option>)}
                   </select>
@@ -199,10 +204,15 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
               )}
 
               {step.kind === 'assess' && (() => {
-                const first = steps.findIndex(s => s.kind === 'assess' && s.skillName === step.skillName);
-                if (first !== i) {
-                  return <p className="text-[11px] text-slate-500 dark:text-slate-400">Pupils tick the cues chosen in step {first + 1}.</p>;
+                const first = followedAssessStep(steps, i);
+                if (first !== undefined) {
+                  return (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Pupils tick the cues chosen in step {first + 1}. Glow and Grow is {steps[first].assess?.glowGrow ? 'on' : 'off'}, as set in that step.
+                    </p>
+                  );
                 }
+                const glowGrow = step.assess?.glowGrow;
                 const cues = getAllCuesForSkill(step.skillName);
                 const all = cues.map(c => c.itemNumber);
                 const picked = step.assess?.focusCues?.length ? step.assess.focusCues : all;
@@ -213,7 +223,7 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                     {earlier && (
                       <button
                         type="button"
-                        onClick={() => setCuePlan(i, step, { focusCues: earlier.focusCues, cueText: earlier.cueText, extraCues: earlier.extraCues })}
+                        onClick={() => update(i, copyLastCuePlan(step, earlier))}
                         className="self-start text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                       >
                         ↺ Use the cues from my last {step.skillName} lesson
@@ -275,6 +285,44 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                       >
                         ＋ Add a cue
                       </button>
+                    )}
+
+                    <label className="flex items-start gap-2 mt-1">
+                      <input
+                        type="checkbox"
+                        checked={!!glowGrow}
+                        onChange={(e) => setGlowGrow(i, step, e.target.checked ? { glowStarter: DEFAULT_GLOW_STARTER, growStarter: DEFAULT_GROW_STARTER } : undefined)}
+                        className="w-4 h-4 mt-0.5 accent-indigo-600"
+                      />
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Glow and Grow: after ticking every cue, the assessor tells the performer one thing done well and one thing to try
+                      </span>
+                    </label>
+                    {glowGrow && (
+                      <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label className="flex flex-col gap-1">
+                          <span className={smallLabel}>Glow starter</span>
+                          <input
+                            type="text"
+                            maxLength={GLOW_GROW_MAX_LENGTH}
+                            value={glowGrow.glowStarter}
+                            onChange={(e) => setGlowGrow(i, step, { ...glowGrow, glowStarter: e.target.value })}
+                            placeholder={DEFAULT_GLOW_STARTER}
+                            className={`${inputClass} py-1.5 text-xs font-medium`}
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className={smallLabel}>Grow starter</span>
+                          <input
+                            type="text"
+                            maxLength={GLOW_GROW_MAX_LENGTH}
+                            value={glowGrow.growStarter}
+                            onChange={(e) => setGlowGrow(i, step, { ...glowGrow, growStarter: e.target.value })}
+                            placeholder={DEFAULT_GROW_STARTER}
+                            className={`${inputClass} py-1.5 text-xs font-medium`}
+                          />
+                        </label>
+                      </div>
                     )}
                   </div>
                 );

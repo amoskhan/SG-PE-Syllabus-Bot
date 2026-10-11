@@ -75,6 +75,7 @@ $$;
 -- ── 3. Pupil save: refuse changes to locked work ────────────────────────────
 -- Same as supabase_lesson_pass.sql, plus the lock. Returns
 -- 'ok' | 'claimed' | 'invalid_lesson' | 'locked'.
+-- Replaced by supabase_glow_grow.sql (also keeps each performer's glow and grow); re-run that after this file.
 create or replace function public.pupil_save_submission(p jsonb)
 returns text
 language plpgsql
@@ -221,6 +222,7 @@ revoke all on function public.pupil_save_submission(jsonb) from public;
 grant execute on function public.pupil_save_submission(jsonb) to anon, authenticated;
 
 -- ── 4. Pupil read: also return when each performer sent, and any redo ──────
+-- Replaced by supabase_glow_grow.sql (also returns the pair's glow and grow); re-run that after this file.
 create or replace function public.pupil_get_submission(p_id text, p_claim_token text)
 returns jsonb
 language sql

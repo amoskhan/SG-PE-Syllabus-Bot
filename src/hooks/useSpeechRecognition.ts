@@ -9,7 +9,9 @@ interface SpeechRecognitionHook {
     hasRecognitionSupport: boolean;
 }
 
-export const useSpeechRecognition = (): SpeechRecognitionHook => {
+// `continuous: false` listens for one phrase and then stops by itself; the
+// transcript is then everything heard since listening began.
+export const useSpeechRecognition = ({ continuous = true }: { continuous?: boolean } = {}): SpeechRecognitionHook => {
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
     const recognitionRef = useRef<any>(null);
@@ -18,7 +20,7 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
-            recognition.continuous = true;
+            recognition.continuous = continuous;
             recognition.interimResults = true;
             recognition.lang = 'en-SG'; // Singapore English
 
@@ -46,6 +48,8 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
             };
 
             recognitionRef.current = recognition;
+            // Leaving the screen switches the microphone off
+            return () => recognition.abort();
         }
     }, []);
 

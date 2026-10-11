@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import type { AttemptSnapshot, PairSubmissionRecord, PeerCueResult } from '../../services/offline/offlineStorage';
 import { currentAttempt, Performer, performerKey, PerformerStage, Stage } from '../../utils/pairWork';
 import MarkdownRenderer from '../chat/MarkdownRenderer';
+import { GlowGrowSaid } from './GlowGrowSaid';
 
 // "Our progress": what a pair has done so far (#94). Shows each performer's
-// video(s), the peer checklist, the AI analysis and the teacher's feedback.
+// video(s), the peer checklist with their glow and grow (#156), the AI
+// analysis and the teacher's feedback.
 // Filming again and the final submission happen in the Practice Station, or
 // here in a lesson without one (#87).
 // After a redo request each performer chooses here first (#93): Keep what was
@@ -199,6 +201,8 @@ const PerformerPanel: React.FC<{
       <div className="rounded-3xl bg-slate-800/50 border border-slate-700 p-4">
         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Peer checklist</p>
         <Checklist cues={attempt.cues ?? []} />
+        {/* What the assessor told them (#156); nothing in a lesson without Glow and Grow */}
+        <GlowGrowSaid said={record.glowGrow?.[k]} className="mt-3" />
       </div>
 
       {analysis && (
@@ -214,6 +218,7 @@ const PerformerPanel: React.FC<{
           <div className="space-y-3">
             <ClipPlayer blob={first.videoBlob} label={`${performer}'s first attempt`} sent={!!first.videoUrl} />
             <Checklist cues={first.cues} />
+            <GlowGrowSaid said={first.glowGrow} />
           </div>
         </Folder>
       )}

@@ -1,6 +1,7 @@
 import { supabase } from './db/supabaseClient';
 import { Student, SkillAnalysis } from '../types';
 import { savePupilSubmission } from './cloudSyncService';
+import type { PairGlowGrowToSend } from '../utils/glowGrow';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -170,6 +171,7 @@ export const uploadGuestVideo = async (
     if (publicUrl) {
       // Sync to pair_submissions so the teacher Review Tray shows the clip live.
       // Only this performer's video column is sent; everything else is kept.
+      // No ticks yet, so no glow and grow either: those go at "Save our videos".
       const safeSkill = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const result = await savePupilSubmission({
         id: `sub-${lessonId}-p${pairNumber}-${safeSkill}`,
@@ -208,9 +210,10 @@ export const uploadPeerSessionToTeacher = async (params: {
   appleBlob?: Blob;    // Video of Apple PERFORMING (recorded by Banana)
   bananaCues?: any[];
   appleCues?: any[];
+  glowGrow?: PairGlowGrowToSend; // with each performer's ticks (#156): their glow and grow, or null to clear it (glowGrowToSend)
   claimToken?: string; // identifies the group that owns this pair
 }): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean; blocked?: boolean; invalidLesson?: boolean; locked?: boolean }> => {
-  const { teacherId, lessonId, pairNumber, skillName, pairPhoto, bananaBlob, appleBlob, bananaCues, appleCues, claimToken } = params;
+  const { teacherId, lessonId, pairNumber, skillName, pairPhoto, bananaBlob, appleBlob, bananaCues, appleCues, glowGrow, claimToken } = params;
   const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   const subId = `sub-${lessonId}-p${pairNumber}-${safeName}`;
   const ts = Date.now();
@@ -266,6 +269,7 @@ export const uploadPeerSessionToTeacher = async (params: {
     apple_video_url: appleVideoUrl,
     banana_cues: bananaCues,
     apple_cues: appleCues,
+    glow_grow: glowGrow,
   });
   if (result === 'claimed') {
     console.warn('[Upload] pair_submissions row owned by another group — blocked');

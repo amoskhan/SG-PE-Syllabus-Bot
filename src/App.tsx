@@ -29,7 +29,7 @@ import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef, getPeerDraft, clearPeerDrafts } from './services/offline/offlineStorage';
 import { draftSummary, peerDraftId } from './utils/peerDraft';
-import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
+import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, glowGrowFor, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep } from './services/cloudSyncService';
@@ -38,7 +38,7 @@ import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/a
 import { focusCriteria, getAllCuesForSkill, getLessonCues, lessonGradingCues } from './data/peerSyllabusCues';
 import { lessonCuesLine, normaliseLevel } from './utils/gradingReview';
 import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
-import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey, performerStage, performerWork, redoChecklistText, redoFilmCount } from './utils/pairWork';
+import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey, performerStage, performerWork, practiceSessionFrom, redoChecklistText, redoFilmCount, withRefilm } from './utils/pairWork';
 
 type ModelId = 'gemini' | 'claude';
 
@@ -780,37 +780,20 @@ const App: React.FC = () => {
     const k = performerKey(attempt.performer);
     const old = currentAttempt(record, attempt.performer);
     const redoFilms = redoAt ? redoFilmCount(record, attempt.performer, redoAt) : 0;
-    if (redoAt) {
-      // Re-do (#93): the first film replaces the attempt that was sent (the
-      // teacher already has it). The second is the one re-film: the try before
-      // it is uploaded so the teacher sees both.
-      let firstClip = redoFilms > 0 ? record.redoFilms?.[k]?.firstClip : undefined;
-      if (redoFilms === 1) {
-        let url = old.videoUrl;
-        if (!url && old.videoBlob && ctx.teacherId) {
-          url = await uploadPupilClip(old.videoBlob, ctx.teacherId, ctx.lessonId, ctx.pairNumber, `${k}_redo_first_attempt`);
-        }
-        firstClip = { videoUrl: url, cues: old.cues };
-      }
-      record.redoFilms = { ...record.redoFilms, [k]: { requestedAt: redoAt, count: redoFilms + 1, firstClip } };
-    } else {
-      let firstUrl = old.videoUrl;
-      if (!firstUrl && old.videoBlob && ctx.teacherId) {
-        firstUrl = await uploadPupilClip(old.videoBlob, ctx.teacherId, ctx.lessonId, ctx.pairNumber, `${k}_first_attempt`);
-      }
-      record.firstAttempt = { ...record.firstAttempt, [k]: { videoBlob: old.videoBlob, videoUrl: firstUrl, cues: old.cues } };
-      const pending = record.pendingAnalysis?.[k];
-      if (pending) {
-        record.pendingAnalysis = { ...record.pendingAnalysis, [k]: { ...pending, analysedClip: { videoUrl: firstUrl, cues: old.cues } } };
-      }
+    // The attempt before this one is uploaded when the teacher is to see both:
+    // the one re-film (#94), or the re-do's one re-film (#93: its first film
+    // replaces the attempt that was sent, which the teacher already has)
+    let earlierUrl = old.videoUrl;
+    if ((!redoAt || redoFilms === 1) && !earlierUrl && old.videoBlob && ctx.teacherId) {
+      earlierUrl = await uploadPupilClip(old.videoBlob, ctx.teacherId, ctx.lessonId, ctx.pairNumber, redoAt ? `${k}_redo_first_attempt` : `${k}_first_attempt`);
     }
-
-    // No videoUrl yet: the upload below adds it
-    const next = { videoBlob: attempt.videoBlob, videoUrl: undefined, cues: cuesToResults(assessSkillName, attempt.cues) };
-    if (attempt.performer === 'Apple') record.bananaRole = { ...record.bananaRole, ...next };
-    else record.appleRole = { ...record.appleRole, ...next };
-    const stepRef = currentStepRef();
-    if (stepRef) record.peerSteps = { ...record.peerSteps, [k]: stepRef };
+    // The rule for what moves where, glow and grow included, is withRefilm (pairWork.ts)
+    record = withRefilm(
+      record,
+      attempt.performer,
+      { videoBlob: attempt.videoBlob, cues: cuesToResults(assessSkillName, attempt.cues), glowGrow: attempt.glowGrow },
+      { earlierUrl, redoAt, stepRef: currentStepRef() ?? undefined },
+    );
     await putSubmission(record);
     setPairRecord(record);
 
@@ -1073,13 +1056,6 @@ const App: React.FC = () => {
     performerLock(sub.appleSentAt, sub.redoRequestedAt) === 'redo_requested'
     || performerLock(sub.bananaSentAt, sub.redoRequestedAt) === 'redo_requested';
 
-  const peerCuesToMap = (skillName: string, list?: { cueIndex: number; isObserved: boolean }[]): Record<string, boolean> => {
-    const cues = pupilCues(skillName);
-    return Object.fromEntries(
-      cues.map(c => [c.id, !!list?.find(r => r.cueIndex === c.itemNumber)?.isObserved])
-    );
-  };
-
   // Restore the Practice Station chat (AI coach + teacher feedback) for a pair that has
   // already recorded. Video clips are re-fetched from Supabase on demand.
   const handleResumePracticeChat = async () => {
@@ -1092,17 +1068,8 @@ const App: React.FC = () => {
     const cueSkill = aiStep?.skillName || skillName;
 
     if (activePeerSessionData?.pairNumber !== pair.pairNumber) setPupilUsage({ apple: {}, banana: {} });
-    setActivePeerSessionData({
-      pairNumber: pair.pairNumber,
-      lessonId: pair.lessonId,
-      skillName,
-      assessSkillName: cueSkill,
-      pairPhoto: pair.pairPhoto || sub?.pairPhoto || '',
-      applePoseFrames: [],
-      bananaPoseFrames: [],
-      appleCues: peerCuesToMap(cueSkill, sub?.bananaRole?.cues),
-      bananaCues: peerCuesToMap(cueSkill, sub?.appleRole?.cues),
-    });
+    // Only the pair and their ticks: no glow or grow goes toward the AI (pairWork.ts)
+    setActivePeerSessionData(practiceSessionFrom(pair, sub, skillName, cueSkill, pupilCues(cueSkill)));
 
     // Reuse the pair's existing chat if it's still in the list, else start a fresh one
     const existing = sessions.find(
@@ -2608,6 +2575,10 @@ const App: React.FC = () => {
   }
 
   if (appMode === 'peer_coaching' && activePairSession) {
+    // The skill whose cues the pair ticks: the assess step's, else the lesson's
+    const peerCueSkill = stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
+      ? stepScreen.step.skillName
+      : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw';
     return (
       <div className="relative h-[100dvh] w-full overflow-hidden bg-slate-900 flex flex-col">
         {/* The step bar, except when filming one performer again (#94) */}
@@ -2635,9 +2606,8 @@ const App: React.FC = () => {
           }}
           onSendToAiBuddy={handlePeerStepDone}
           cueSkillName={stepScreen.kind === 'step' && stepScreen.step.kind === 'assess' ? stepScreen.step.skillName : undefined}
-          cuePlan={cuePlanFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
-            ? stepScreen.step.skillName
-            : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
+          cuePlan={cuePlanFor(lessonSteps, peerCueSkill)}
+          glowGrow={glowGrowFor(lessonSteps, peerCueSkill)}
           nextIsAiBuddy={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
           cloudClips={{ banana: activePairSubmission?.appleRole?.videoUrl, apple: activePairSubmission?.bananaRole?.videoUrl }}
           onExit={() => {
