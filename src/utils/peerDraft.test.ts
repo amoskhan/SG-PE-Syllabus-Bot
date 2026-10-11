@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { draftHasWork, draftIsFresh, draftSummary, peerDraftId, resumeStep } from './peerDraft';
+import { draftHasWork, draftIsFresh, draftPicks, draftSummary, peerDraftId, resumeStep } from './peerDraft';
+import { getLessonCues } from '../data/peerSyllabusCues';
 
 const clip = new Blob(['clip'], { type: 'video/mp4' });
 
@@ -46,5 +47,42 @@ describe('draft helpers', () => {
     it('says who has been filmed', () => {
         expect(draftSummary({ bananaVideoBlob: clip })).toBe("Banana's video is recorded · Apple is next");
         expect(draftSummary({ bananaVideoBlob: clip, appleVideoBlob: clip })).toBe('Both videos recorded · finish your ticks');
+    });
+});
+
+// Shoulder Stand: four short cues, ids shoulder-stand-1..4
+describe('draftPicks', () => {
+    const cues = getLessonCues('Shoulder Stand');
+    const [hands, hips, legs, hold] = cues.map(c => c.id);
+    const allUp = { [hands]: true, [hips]: true, [legs]: true, [hold]: true };
+    const handsGlow = { source: { kind: 'cue' as const, itemNumber: 1 }, text: 'Hands hold the lower back, elbows on the mat' };
+    const hipsGrow = { source: { kind: 'cue' as const, itemNumber: 2 }, text: 'Hips and legs up above the head' };
+    const ownGrow = { source: { kind: 'own' as const }, text: 'Point your toes' };
+
+    it("gives back each performer's glow and grow, with the wording and own idea as chosen", () => {
+        const picks = draftPicks({
+            bananaCues: { ...allUp, [hips]: false }, bananaPicks: { glow: handsGlow, grow: hipsGrow },
+            appleCues: allUp, applePicks: { glow: handsGlow, grow: ownGrow },
+        }, cues);
+        expect(picks).toEqual({
+            Banana: { glow: handsGlow, grow: hipsGrow },
+            Apple: { glow: handsGlow, grow: ownGrow },
+        });
+    });
+
+    it('drops a pick that no longer fits the ticks, and keeps the one that does', () => {
+        // The grow came from a cue that is ticked 👍 in the draft
+        const picks = draftPicks({ bananaCues: allUp, bananaPicks: { glow: handsGlow, grow: hipsGrow }, appleCues: {} }, cues);
+        expect(picks.Banana).toEqual({ glow: handsGlow });
+    });
+
+    it('drops a pick whose cue the lesson no longer shows', () => {
+        const focus = cues.filter(c => c.id !== hands);
+        const picks = draftPicks({ bananaCues: { ...allUp, [hips]: false }, bananaPicks: { glow: handsGlow, grow: hipsGrow }, appleCues: {} }, focus);
+        expect(picks.Banana).toEqual({ grow: hipsGrow });
+    });
+
+    it('has no picks for a draft saved before Glow and Grow', () => {
+        expect(draftPicks({ bananaCues: { [hands]: true }, appleCues: {} }, cues)).toEqual({ Apple: {}, Banana: {} });
     });
 });
