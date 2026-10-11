@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAiCriteria, normaliseLevel, levelFromCriteria } from './gradingReview';
+import { parseAiCriteria, normaliseLevel, levelFromCriteria, analysesSentKey } from './gradingReview';
 
 describe('parseAiCriteria', () => {
     it('reads a table checklist', () => {
@@ -48,5 +48,23 @@ describe('levelFromCriteria', () => {
         expect(levelFromCriteria(['met', 'met'], 'Excellent')).toBe('Accomplished');
         expect(levelFromCriteria(['met', 'met'], 'Accomplished')).toBe('Accomplished');
         expect(levelFromCriteria(['met', 'met'], 'Developing')).toBe('Competent');
+    });
+});
+
+describe('analysesSentKey', () => {
+    const apple = { submittedAt: '2026-10-11T01:00:00Z' };
+    it("changes when the second performer's analysis arrives (#147)", () => {
+        expect(analysesSentKey({ aiChatAnalysis: { apple } }))
+            .not.toBe(analysesSentKey({ aiChatAnalysis: { apple, banana: { submittedAt: '2026-10-11T01:05:00Z' } } }));
+    });
+
+    it('changes when a re-do is sent', () => {
+        expect(analysesSentKey({ aiChatAnalysis: { apple } }))
+            .not.toBe(analysesSentKey({ aiChatAnalysis: { apple: { ...apple, redo: { submittedAt: '2026-10-11T02:00:00Z' } } } }));
+    });
+
+    it('stays the same when nothing new was sent', () => {
+        expect(analysesSentKey({ aiChatAnalysis: { apple } })).toBe(analysesSentKey({ aiChatAnalysis: { apple: { ...apple } } }));
+        expect(analysesSentKey(null)).toBe(analysesSentKey({}));
     });
 });
