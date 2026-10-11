@@ -558,12 +558,14 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     } else {
       setBananaCues((prev) => ({ ...prev, [cueId]: value }));
     }
-    // A changed tick clears a pick that no longer fits, and the last tick folds the list again
+    // A changed tick clears a pick that no longer fits. The list folds by itself when the
+    // last cue is ticked; reopened with "change", it stays open until "Done ticking".
     const performer = isBananaReview ? 'Apple' : 'Banana';
+    const before = isBananaReview ? appleTell : bananaTell;
     const card = tellCard(performer, { ...(isBananaReview ? appleCues : bananaCues), [cueId]: value });
     if (card) {
       setGlowGrowPicks((prev) => ({ ...prev, [performer]: card.picks }));
-      if (card.allTicked) setCuesOpen(false);
+      if (card.allTicked && !before?.allTicked) setCuesOpen(false);
     }
   };
 

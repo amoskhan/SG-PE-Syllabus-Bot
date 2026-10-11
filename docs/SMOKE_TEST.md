@@ -104,13 +104,17 @@ Needs a lesson dated today and a second device (or window) joined as a pair.
 - [ ] Glow buttons are the 👍 cues, grow buttons the 👎 cues then "My own
       idea", in the wording you ticked (focus cues only, your own wording,
       extra cues)
-- [ ] The starters read as typed; the cleared one shows its default
+- [ ] The starters read as typed; the cleared one shows its default. A
+      starter typed with a colon at the end ("You did well at:") shows
+      one colon in the sentence, not two
 - [ ] Tap "My own idea": a text box opens (80 characters). The next
       button stays disabled until something is typed
 - [ ] On an iPad (Safari) and in Chrome, a microphone button sits beside
       the box. Tap it and allow the microphone: it turns red while it
       listens. Say a short idea: the words appear in the box and the
-      button goes back to grey when you stop talking
+      button goes back to grey when you stop talking. (The app stores no
+      audio, but the browser's speech-to-text service may send the audio
+      to the browser vendor to transcribe it.)
 - [ ] Correct the heard words by typing. Type something first, then use
       the microphone: the heard words are added after it. A long idea
       stops at 80 characters

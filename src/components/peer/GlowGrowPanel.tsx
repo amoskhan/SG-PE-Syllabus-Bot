@@ -25,8 +25,10 @@ const choiceClass = (picked: boolean, tone: string) =>
 // The "My own idea" box, with a microphone beside it (#153). The microphone
 // is the browser's own speech-to-text, the one the chat composer uses: it
 // only gives back words, which land in the box for the assessor to correct.
-// No audio is recorded or kept. Where the browser has no speech-to-text the
-// button is not shown and the box is typed in as before.
+// The app records and stores no audio, but the browser's speech-to-text
+// service may send the audio to the browser vendor to transcribe it. Where
+// the browser has no speech-to-text the button is not shown and the box is
+// typed in as before.
 const OwnIdeaBox: React.FC<{ text: string; onText: (text: string) => void }> = ({ text, onText }) => {
   const { isListening, transcript, startListening, stopListening, resetTranscript, hasRecognitionSupport } =
     useSpeechRecognition({ continuous: false });
@@ -36,6 +38,7 @@ const OwnIdeaBox: React.FC<{ text: string; onText: (text: string) => void }> = (
 
   useEffect(() => {
     if (transcript && beforeRef.current !== null) onText(addHeard(beforeRef.current, transcript));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcript]);
 
   const toggleMic = () => {

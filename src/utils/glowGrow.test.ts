@@ -56,7 +56,7 @@ describe('glowGrowCard', () => {
     });
 
     it("shows the teacher's starters exactly as typed, and the default for a blank one", () => {
-        const base = { cues, ticks: {}, performer: 'Apple' };
+        const base = { cues, ticks: {}, performer: 'Apple' as const };
         expect(glowGrowCard({ ...base, setting: { glowStarter: 'I liked how you', growStarter: 'Even better if you' } }))
             .toMatchObject({ glowStarter: 'I liked how you', growStarter: 'Even better if you' });
         expect(glowGrowCard({ ...base, setting: { glowStarter: '   ', growStarter: '' } }))
@@ -140,6 +140,28 @@ describe('the sentence', () => {
             picks: { glow: { source: cue(1), text: kick[0].kidFriendlyText }, grow: { source: cue(2), text: kick[1].kidFriendlyText } },
         });
         expect(card.sentence).toBe('Banana, You did well at: Did partner start directly behind the ball? Next, try: Did partner keep their eyes locked on the ball?');
+    });
+});
+
+describe('a starter the teacher ended with punctuation', () => {
+    const input = {
+        cues, ticks: { [hands]: true, [hips]: false, [legs]: true, [hold]: false }, performer: 'Apple' as const,
+        picks: { glow: { source: cue(3), text: 'Legs together and pointing straight up' }, grow: { source: cue(4), text: 'Hold still for 3 seconds' } },
+    };
+
+    it('gets one colon in the sentence, not two', () => {
+        const card = glowGrowCard({ ...input, setting: { glowStarter: 'You did well at:', growStarter: 'Next, try... ' } });
+        expect(card.sentence).toBe('Apple, You did well at: Legs together and pointing straight up. Next, try: Hold still for 3 seconds.');
+    });
+
+    it('is shown in the headings without it, as the heading adds its own', () => {
+        expect(glowGrowCard({ ...input, setting: { glowStarter: 'You did well at:', growStarter: 'Well done! Now try -' } }))
+            .toMatchObject({ glowStarter: 'You did well at', growStarter: 'Well done! Now try' });
+    });
+
+    it('falls back to the default when it is punctuation only', () => {
+        expect(glowGrowCard({ ...input, setting: { glowStarter: ':', growStarter: '...' } }))
+            .toMatchObject({ glowStarter: 'You did well at', growStarter: 'Next, try' });
     });
 });
 

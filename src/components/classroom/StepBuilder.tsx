@@ -1,5 +1,5 @@
 import React from 'react';
-import { AssessmentMethod, CopiedCuePlan, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, followedAssessStep, newStepId, withSkill } from '../../utils/lessonFlow';
+import { AssessmentMethod, CopiedCuePlan, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, changeStepSkill, copyLastCuePlan, followedAssessStep, newStepId } from '../../utils/lessonFlow';
 import { referenceImageFor } from '../../utils/teachPages';
 import { getAllCuesForSkill } from '../../data/peerSyllabusCues';
 import { DEFAULT_GLOW_STARTER, DEFAULT_GROW_STARTER, GLOW_GROW_MAX_LENGTH, GlowGrowSetting } from '../../utils/glowGrow';
@@ -137,7 +137,7 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1">
                   <span className={smallLabel}>Skill</span>
-                  <select value={step.skillName} onChange={(e) => update(i, withSkill(step, e.target.value))} className={inputClass}>
+                  <select value={step.skillName} onChange={(e) => onChange(changeStepSkill(steps, i, e.target.value))} className={inputClass}>
                     {!skills.includes(step.skillName) && <option value={step.skillName}>{step.skillName || '—'}</option>}
                     {skills.map(s => <option key={s} value={s}>{s}{s === mainSkill ? ' (main skill)' : ''}</option>)}
                   </select>
@@ -223,7 +223,7 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                     {earlier && (
                       <button
                         type="button"
-                        onClick={() => setCuePlan(i, step, earlier)}
+                        onClick={() => update(i, copyLastCuePlan(step, earlier))}
                         className="self-start text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                       >
                         ↺ Use the cues from my last {step.skillName} lesson

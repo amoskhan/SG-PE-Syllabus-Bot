@@ -2608,6 +2608,10 @@ const App: React.FC = () => {
   }
 
   if (appMode === 'peer_coaching' && activePairSession) {
+    // The skill whose cues the pair ticks: the assess step's, else the lesson's
+    const peerCueSkill = stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
+      ? stepScreen.step.skillName
+      : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw';
     return (
       <div className="relative h-[100dvh] w-full overflow-hidden bg-slate-900 flex flex-col">
         {/* The step bar, except when filming one performer again (#94) */}
@@ -2635,12 +2639,8 @@ const App: React.FC = () => {
           }}
           onSendToAiBuddy={handlePeerStepDone}
           cueSkillName={stepScreen.kind === 'step' && stepScreen.step.kind === 'assess' ? stepScreen.step.skillName : undefined}
-          cuePlan={cuePlanFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
-            ? stepScreen.step.skillName
-            : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
-          glowGrow={glowGrowFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
-            ? stepScreen.step.skillName
-            : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
+          cuePlan={cuePlanFor(lessonSteps, peerCueSkill)}
+          glowGrow={glowGrowFor(lessonSteps, peerCueSkill)}
           nextIsAiBuddy={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
           cloudClips={{ banana: activePairSubmission?.appleRole?.videoUrl, apple: activePairSubmission?.bananaRole?.videoUrl }}
           onExit={() => {

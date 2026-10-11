@@ -1,4 +1,5 @@
 import type { PeerSyllabusCue } from '../data/peerSyllabusCues';
+import type { Performer } from './pairWork';
 
 // The rules of Glow and Grow (GLOSSARY.md; #151): after ticking every cue, the
 // assessor tells the performer one thing done well (a glow) and one thing to
@@ -58,14 +59,18 @@ export interface GlowGrowCard {
   sentence?: string;         // once complete
 }
 
+// The card puts its own "…" after a starter and the sentence its own ":", so
+// punctuation the teacher typed at the end ("You did well at:") is left off
+const shown = (starter: string | undefined) => starter?.replace(/[\s:;,.!?…–—-]+$/, '').trim();
+
 /** The starters pupils see: the teacher's, or the default for one left blank. */
 export const glowGrowStarters = (setting?: Partial<GlowGrowSetting>): GlowGrowSetting => ({
-  glowStarter: setting?.glowStarter?.trim() || DEFAULT_GLOW_STARTER,
-  growStarter: setting?.growStarter?.trim() || DEFAULT_GROW_STARTER,
+  glowStarter: shown(setting?.glowStarter) || DEFAULT_GLOW_STARTER,
+  growStarter: shown(setting?.growStarter) || DEFAULT_GROW_STARTER,
 });
 
 const sameSource = (a: GlowGrowSource, b: GlowGrowSource) =>
-  a.kind === b.kind && (a.kind !== 'cue' || a.itemNumber === (b as { itemNumber: number }).itemNumber);
+  a.kind === 'cue' ? b.kind === 'cue' && a.itemNumber === b.itemNumber : a.kind === b.kind;
 
 /** The pick a tapped choice makes. An own idea starts empty, for the assessor to type. */
 export const pickChoice = (choice: GlowGrowChoice): GlowGrowPick =>
@@ -81,7 +86,7 @@ export const addHeard = (before: string, heard: string): string => {
   return [before.trim(), said].filter(Boolean).join(' ').slice(0, GLOW_GROW_MAX_LENGTH);
 };
 
-export const isPicked =(choice: GlowGrowChoice, pick?: GlowGrowPick) => !!pick && sameSource(choice.source, pick.source);
+export const isPicked = (choice: GlowGrowChoice, pick?: GlowGrowPick) => !!pick && sameSource(choice.source, pick.source);
 
 // A cue written as a question already ends its part of the sentence
 const part = (starter: string, text: string) => `${starter}: ${text}${/[.!?]$/.test(text) ? '' : '.'}`;
@@ -94,7 +99,7 @@ const part = (starter: string, text: string) => `${starter}: ${text}${/[.!?]$/.t
 export const glowGrowCard = (input: {
   cues: PeerSyllabusCue[];
   ticks: Record<string, boolean>;
-  performer: string;
+  performer: Performer;
   setting?: Partial<GlowGrowSetting>;
   picks?: GlowGrowPicks;
 }): GlowGrowCard => {
