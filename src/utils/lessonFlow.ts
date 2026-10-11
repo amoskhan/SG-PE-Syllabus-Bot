@@ -181,25 +181,44 @@ export const cuePlanFor = (steps: LessonStep[], skillName: string): CuePlan | un
 export const glowGrowFor = (steps: LessonStep[], skillName: string): GlowGrowSetting | undefined =>
   steps.find(s => s.kind === 'assess' && s.skillName === skillName)?.assess?.glowGrow;
 
-/** Whether the teacher set anything in a cue plan. */
-const hasCuePlan = (plan: CuePlan | undefined) =>
-  !!plan && (!!plan.focusCues?.length || Object.keys(plan.cueText ?? {}).length > 0 || !!plan.extraCues?.some(t => t.trim()));
+/**
+ * The earlier assess step this one follows (its position in the lesson), or
+ * undefined when this is the first assess step for its skill and so sets the
+ * cues and Glow and Grow itself.
+ */
+export const followedAssessStep = (steps: LessonStep[], index: number): number | undefined => {
+  const step = steps[index];
+  if (step?.kind !== 'assess') return undefined;
+  const first = steps.findIndex(s => s.kind === 'assess' && s.skillName === step.skillName);
+  return first >= 0 && first < index ? first : undefined;
+};
+
+/** What "Use the cues from my last lesson" copies: the cue plan, and the Glow and Grow setting with it. */
+export type CopiedCuePlan = CuePlan & { glowGrow?: GlowGrowSetting };
+
+/** Whether the teacher set anything in a cue plan. A Glow and Grow setting counts. */
+const hasCuePlan = (plan: CopiedCuePlan | undefined) =>
+  !!plan && (!!plan.focusCues?.length || Object.keys(plan.cueText ?? {}).length > 0 || !!plan.extraCues?.some(t => t.trim()) || !!plan.glowGrow);
 
 /**
  * The cue plan from the teacher's most recent other lesson on a skill, so they
- * don't retype their wording for every class (#136).
+ * don't retype their wording for every class (#136). It brings that lesson's
+ * Glow and Grow setting; when that lesson had none, it has no `glowGrow` at
+ * all, so the step being edited keeps its own.
  */
 export const lastCuePlan = (
   lessons: { id: string; lessonDate: string; createdAt: string; steps: LessonStep[] }[],
   skillName: string,
   exceptLessonId?: string,
-): CuePlan | undefined => {
+): CopiedCuePlan | undefined => {
+  const planOf = (steps: LessonStep[]): CopiedCuePlan | undefined =>
+    steps.find(s => s.kind === 'assess' && s.skillName === skillName)?.assess;
   const found = lessons
-    .filter(l => l.id !== exceptLessonId && hasCuePlan(cuePlanFor(l.steps, skillName)))
+    .filter(l => l.id !== exceptLessonId && hasCuePlan(planOf(l.steps)))
     .sort((a, b) => (b.lessonDate + b.createdAt).localeCompare(a.lessonDate + a.createdAt))[0];
   if (!found) return undefined;
-  const { focusCues, cueText, extraCues } = cuePlanFor(found.steps, skillName)!;
-  return { focusCues, cueText, extraCues };
+  const { focusCues, cueText, extraCues, glowGrow } = planOf(found.steps)!;
+  return { focusCues, cueText, extraCues, ...(glowGrow ? { glowGrow } : {}) };
 };
 
 /** A short name for a step, for "Step 2 of 3 · Peer assessment". */
@@ -219,16 +238,23 @@ export const stepLabel = (step: LessonStep): string => {
 export const newStepId = () => `step-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 /**
+ * A step moved to another skill. The cue plan belonged to the old skill, so it
+ * is cleared; the Glow and Grow setting is about the lesson, not the skill, so
+ * it stays.
+ */
+export const withSkill = (step: LessonStep, skillName: string): LessonStep => {
+  if (!step.assess) return { ...step, skillName };
+  const { method, glowGrow } = step.assess;
+  return { ...step, skillName, assess: { method, ...(glowGrow ? { glowGrow } : {}) } };
+};
+
+/**
  * The teacher changed the lesson's main skill: steps that were on the old
  * main skill move with it; a step deliberately on another skill (a warm-up)
  * keeps it, unless that skill isn't in the lesson's learning area any more.
  */
 export const followMainSkill = (steps: LessonStep[], oldMain: string, newMain: string, areaSkills: readonly string[]) =>
-  steps.map(s => {
-    if (s.skillName !== oldMain && areaSkills.includes(s.skillName)) return s;
-    // The cue plan belonged to the old skill
-    return s.assess ? { ...s, skillName: newMain, assess: { method: s.assess.method } } : { ...s, skillName: newMain };
-  });
+  steps.map(s => (s.skillName !== oldMain && areaSkills.includes(s.skillName) ? s : withSkill(s, newMain)));
 
 /** Whether the lesson has a Practice Station: without one it makes no AI calls at all. */
 export const hasAiAnalysis = (steps: LessonStep[]) => runsAiPeerFeedback(steps);

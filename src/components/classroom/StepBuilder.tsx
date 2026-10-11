@@ -1,7 +1,7 @@
 import React from 'react';
-import { AssessmentMethod, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, newStepId } from '../../utils/lessonFlow';
+import { AssessmentMethod, CopiedCuePlan, LessonProblem, LessonStep, StepKind, TeachMedia, canUseAiAnalysis, followedAssessStep, newStepId, withSkill } from '../../utils/lessonFlow';
 import { referenceImageFor } from '../../utils/teachPages';
-import { CuePlan, getAllCuesForSkill } from '../../data/peerSyllabusCues';
+import { getAllCuesForSkill } from '../../data/peerSyllabusCues';
 import { DEFAULT_GLOW_STARTER, DEFAULT_GROW_STARTER, GLOW_GROW_MAX_LENGTH, GlowGrowSetting } from '../../utils/glowGrow';
 import { TeachMediaEditor, UploadMedia } from './TeachMediaEditor';
 
@@ -18,8 +18,8 @@ interface StepBuilderProps {
   // A Teach step's own videos and pictures (#89), changed against the latest steps
   onStepMediaChange: (stepId: string, change: (media: TeachMedia[]) => TeachMedia[]) => void;
   onUploadMedia?: UploadMedia;
-  // The cue plan from the teacher's last lesson on a skill, to reuse (#136)
-  lastCuePlan?: (skillName: string) => CuePlan | undefined;
+  // The cue plan from the teacher's last lesson on a skill, to reuse (#136), with its Glow and Grow setting
+  lastCuePlan?: (skillName: string) => CopiedCuePlan | undefined;
 }
 
 const inputClass =
@@ -55,11 +55,8 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
   const remove = (i: number) => onChange(steps.filter((_, j) => j !== i));
   const add = (kind: StepKind) => onChange([...steps, blankStep(kind, mainSkill)]);
 
-  // A different skill has different cues, so the picked ones no longer apply
-  const changeSkill = (step: LessonStep, skillName: string): Partial<LessonStep> =>
-    step.assess ? { skillName, assess: { method: step.assess.method } } : { skillName };
   // Change part of an assess step's cue plan, storing only what the teacher set
-  const setCuePlan = (i: number, step: LessonStep, patch: CuePlan) => {
+  const setCuePlan = (i: number, step: LessonStep, patch: CopiedCuePlan) => {
     if (!step.assess) return;
     const plan = { ...step.assess, ...patch };
     const cueText = Object.fromEntries(Object.entries(plan.cueText ?? {}).filter(([, text]) => text.trim()));
@@ -140,7 +137,7 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1">
                   <span className={smallLabel}>Skill</span>
-                  <select value={step.skillName} onChange={(e) => update(i, changeSkill(step, e.target.value))} className={inputClass}>
+                  <select value={step.skillName} onChange={(e) => update(i, withSkill(step, e.target.value))} className={inputClass}>
                     {!skills.includes(step.skillName) && <option value={step.skillName}>{step.skillName || '—'}</option>}
                     {skills.map(s => <option key={s} value={s}>{s}{s === mainSkill ? ' (main skill)' : ''}</option>)}
                   </select>
@@ -207,8 +204,8 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
               )}
 
               {step.kind === 'assess' && (() => {
-                const first = steps.findIndex(s => s.kind === 'assess' && s.skillName === step.skillName);
-                if (first !== i) {
+                const first = followedAssessStep(steps, i);
+                if (first !== undefined) {
                   return (
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       Pupils tick the cues chosen in step {first + 1}. Glow and Grow is {steps[first].assess?.glowGrow ? 'on' : 'off'}, as set in that step.
@@ -226,7 +223,7 @@ export const StepBuilder: React.FC<StepBuilderProps> = ({ steps, skills, mainSki
                     {earlier && (
                       <button
                         type="button"
-                        onClick={() => setCuePlan(i, step, { focusCues: earlier.focusCues, cueText: earlier.cueText, extraCues: earlier.extraCues })}
+                        onClick={() => setCuePlan(i, step, earlier)}
                         className="self-start text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                       >
                         ↺ Use the cues from my last {step.skillName} lesson

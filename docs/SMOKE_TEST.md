@@ -87,6 +87,13 @@ Needs a lesson dated today and a second device (or window) joined as a pair.
       reopen the lesson. The checkbox and both starters are as you left them
 - [ ] A second assess step on the same skill says Glow and Grow is on, as
       set in the first step, and has no checkbox of its own
+- [ ] Change that first step's skill, then the lesson's main skill. Each
+      time the cue picks and wording clear, and the checkbox and both
+      starters stay
+- [ ] In a new lesson on a skill you last planned with Glow and Grow on,
+      tap "Use the cues from my last … lesson". The cues, the checkbox and
+      both starters come across. The button also shows when that last
+      lesson set only Glow and Grow
 
 **Tick screen, Glow and Grow on**
 
@@ -132,7 +139,8 @@ Needs a lesson dated today and a second device (or window) joined as a pair.
       without ticking every cue
 
 Covers: `glowGrow.ts` (rules), `GlowGrowPanel.tsx`, `StepBuilder.tsx`,
-`glowGrowFor()` in `lessonFlow.ts`, `draftPicks()` in `peerDraft.ts`.
+`glowGrowFor()`, `withSkill()`, `lastCuePlan()` in `lessonFlow.ts`,
+`draftPicks()` in `peerDraft.ts`.
 
 > Known limitation, not a bug: the glow and grow are kept on the pupil's
 > device only (in the draft, until the pair's work is saved). They are not

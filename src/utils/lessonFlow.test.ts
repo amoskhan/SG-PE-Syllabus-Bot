@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     LessonStep, canUseAiAnalysis, defaultSteps, legacySteps, nextScreen, progressFor,
     runsAiPeerFeedback, stepsOrLegacy, validateLesson, followMainSkill, cuePlanFor, lastCuePlan, glowGrowFor,
+    withSkill, followedAssessStep,
 } from './lessonFlow';
 
 const step = (id: string, over: Partial<LessonStep> = {}): LessonStep =>
@@ -212,5 +213,57 @@ describe('glowGrowFor', () => {
         expect(glowGrowFor(defaultSteps('Kick'), 'Kick')).toBeUndefined();
         expect(glowGrowFor(legacySteps('Kick'), 'Kick')).toBeUndefined();
         expect(glowGrowFor([assess('a', 'Shoulder Stand', mine)], 'Kick')).toBeUndefined();
+    });
+});
+
+describe('Glow and Grow carries between steps and lessons', () => {
+    const mine = { glowStarter: 'I liked how you', growStarter: 'Even better if you' };
+    const planned: LessonStep = {
+        id: 'a', kind: 'assess', skillName: 'Kick',
+        assess: { method: 'ai_analysis', focusCues: [1, 2], cueText: { 1: 'Mine' }, extraCues: ['Extra'], glowGrow: mine },
+    };
+
+    it("keeps the setting and clears the cue plan when a step's skill changes", () => {
+        expect(withSkill(planned, 'Bounce'))
+            .toEqual({ id: 'a', kind: 'assess', skillName: 'Bounce', assess: { method: 'ai_analysis', glowGrow: mine } });
+        // Off stays off, and a step that is not an assess step only changes skill
+        expect(withSkill(peer('b', 'Kick'), 'Bounce').assess).toEqual({ method: 'peer_assessment' });
+        expect(withSkill(step('c'), 'Bounce')).toEqual(step('c', { skillName: 'Bounce' }));
+    });
+
+    it('keeps the setting on the steps that follow a new main skill', () => {
+        const steps = [step('p', { skillName: 'Chest Pass' }), planned, ai('c', 'Kick')];
+        const moved = followMainSkill(steps, 'Kick', 'Bounce', ['Kick', 'Bounce', 'Chest Pass']);
+        expect(moved[1].assess).toEqual({ method: 'ai_analysis', glowGrow: mine });
+        expect(glowGrowFor(moved, 'Bounce')).toEqual(mine);
+        expect(cuePlanFor(moved, 'Bounce')?.focusCues).toBeUndefined();
+    });
+
+    const lesson = (id: string, lessonDate: string, plan: object) => ({
+        id, lessonDate, createdAt: `${lessonDate}T00:00:00Z`,
+        steps: [{ id: 's', kind: 'assess', skillName: 'Kick', assess: { method: 'peer_assessment', ...plan } } as LessonStep],
+    });
+
+    it("copies the setting with the last lesson's cue plan", () => {
+        const lessons = [lesson('a', '2026-09-01', { focusCues: [1] }), lesson('b', '2026-10-01', { focusCues: [1, 3], glowGrow: mine })];
+        expect(lastCuePlan(lessons, 'Kick')).toEqual({ focusCues: [1, 3], glowGrow: mine });
+    });
+
+    it('counts a last lesson that set only Glow and Grow as something to copy', () => {
+        const lessons = [lesson('a', '2026-09-01', { focusCues: [1] }), lesson('b', '2026-10-01', { glowGrow: mine })];
+        expect(lastCuePlan(lessons, 'Kick')).toEqual({ glowGrow: mine });
+    });
+
+    it('brings no setting from a last lesson without one, so the step keeps its own', () => {
+        expect(lastCuePlan([lesson('a', '2026-09-01', { focusCues: [1] })], 'Kick')).not.toHaveProperty('glowGrow');
+    });
+
+    it('tells a later assess step on the same skill which step it follows', () => {
+        const steps = [step('p'), peer('a', 'Kick'), peer('b', 'Chest Pass'), ai('c', 'Kick')];
+        expect(followedAssessStep(steps, 3)).toBe(1);
+        // The first assess step for a skill sets its own cues and Glow and Grow
+        expect(followedAssessStep(steps, 1)).toBeUndefined();
+        expect(followedAssessStep(steps, 2)).toBeUndefined();
+        expect(followedAssessStep(steps, 0)).toBeUndefined();
     });
 });
