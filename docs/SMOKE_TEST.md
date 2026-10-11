@@ -100,6 +100,15 @@ Needs a lesson dated today and a second device (or window) joined as a pair.
 - [ ] The starters read as typed; the cleared one shows its default
 - [ ] Tap "My own idea": a text box opens (80 characters). The next
       button stays disabled until something is typed
+- [ ] On an iPad (Safari) and in Chrome, a microphone button sits beside
+      the box. Tap it and allow the microphone: it turns red while it
+      listens. Say a short idea: the words appear in the box and the
+      button goes back to grey when you stop talking
+- [ ] Correct the heard words by typing. Type something first, then use
+      the microphone: the heard words are added after it. A long idea
+      stops at 80 characters
+- [ ] In a browser with no speech-to-text (e.g. Firefox) there is no
+      microphone button and typing still works
 - [ ] With a glow and a grow chosen, the sentence shows, starting with
       "Banana,", and the next button unlocks
 - [ ] Nothing is spoken until "Hear it" is tapped; then the sentence is

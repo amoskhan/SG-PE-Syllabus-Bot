@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { speechService } from '../../services/speechService';
-import { GLOW_GROW_MAX_LENGTH, GlowGrowCard, GlowGrowChoice, GlowGrowPicks, isPicked, pickChoice } from '../../utils/glowGrow';
+import { GLOW_GROW_MAX_LENGTH, GlowGrowCard, GlowGrowChoice, GlowGrowPicks, addHeard, isPicked, pickChoice } from '../../utils/glowGrow';
 
 // Glow and Grow on the tick screen (#151, GLOSSARY.md): once every cue is
 // ticked the cue list folds to one line and the "Tell <performer>" card asks
@@ -20,6 +21,62 @@ const choiceClass = (picked: boolean, tone: string) =>
   `w-full min-h-14 px-3 py-3 rounded-2xl text-left text-sm font-black flex items-center gap-2.5 transition-all cursor-pointer ${
     picked ? `${tone} text-white ring-2 ring-white` : 'bg-slate-700 text-slate-100 hover:bg-slate-600'
   }`;
+
+// The "My own idea" box, with a microphone beside it (#153). The microphone
+// is the browser's own speech-to-text, the one the chat composer uses: it
+// only gives back words, which land in the box for the assessor to correct.
+// No audio is recorded or kept. Where the browser has no speech-to-text the
+// button is not shown and the box is typed in as before.
+const OwnIdeaBox: React.FC<{ text: string; onText: (text: string) => void }> = ({ text, onText }) => {
+  const { isListening, transcript, startListening, stopListening, resetTranscript, hasRecognitionSupport } =
+    useSpeechRecognition({ continuous: false });
+  // What the box held when listening began; null once the assessor types,
+  // so a late result never overwrites their correction
+  const beforeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (transcript && beforeRef.current !== null) onText(addHeard(beforeRef.current, transcript));
+  }, [transcript]);
+
+  const toggleMic = () => {
+    if (isListening) { stopListening(); return; }
+    beforeRef.current = text;
+    resetTranscript();
+    startListening();
+  };
+
+  return (
+    <div className="flex items-stretch gap-2">
+      <input
+        type="text"
+        autoFocus
+        maxLength={GLOW_GROW_MAX_LENGTH}
+        value={text}
+        onChange={(e) => {
+          beforeRef.current = null;
+          if (isListening) stopListening();
+          onText(e.target.value);
+        }}
+        placeholder={isListening ? 'Listening…' : hasRecognitionSupport ? 'Type or say your idea' : 'Type your idea'}
+        aria-label="My own idea"
+        className="flex-1 min-w-0 px-3 py-3 rounded-2xl bg-white text-slate-900 text-base font-bold border-2 border-sky-400 focus:outline-hidden focus:ring-2 focus:ring-sky-300"
+      />
+      {hasRecognitionSupport && (
+        <button
+          type="button"
+          onClick={toggleMic}
+          aria-pressed={isListening}
+          aria-label={isListening ? 'Stop listening' : 'Say your idea'}
+          className={`shrink-0 min-w-14 px-3 rounded-2xl text-xl font-black cursor-pointer transition-all ${
+            isListening ? 'bg-red-500 text-white ring-2 ring-white animate-pulse' : 'bg-slate-700 text-slate-100 hover:bg-slate-600'
+          }`}
+        >
+          {isListening ? '⏹️' : '🎤'}
+        </button>
+      )}
+    </div>
+  );
+};
 
 export const GlowGrowPanel: React.FC<GlowGrowPanelProps> = ({ card, performer, cueCount, cuesOpen, onCuesOpen, onPicks }) => {
   if (!card.allTicked) {
@@ -84,15 +141,9 @@ export const GlowGrowPanel: React.FC<GlowGrowPanelProps> = ({ card, performer, c
           <p className="text-xs font-black text-sky-300">🌱 Grow · {card.growStarter}…</p>
           {row(card.growChoices, 'grow', 'bg-sky-600')}
           {picks.grow?.source.kind === 'own' && (
-            <input
-              type="text"
-              autoFocus
-              maxLength={GLOW_GROW_MAX_LENGTH}
-              value={picks.grow.text}
-              onChange={(e) => onPicks({ ...picks, grow: { source: { kind: 'own' }, text: e.target.value } })}
-              placeholder="Type your idea"
-              aria-label="My own idea"
-              className="w-full px-3 py-3 rounded-2xl bg-white text-slate-900 text-base font-bold border-2 border-sky-400 focus:outline-hidden focus:ring-2 focus:ring-sky-300"
+            <OwnIdeaBox
+              text={picks.grow.text}
+              onText={(text) => onPicks({ ...picks, grow: { source: { kind: 'own' }, text } })}
             />
           )}
         </div>

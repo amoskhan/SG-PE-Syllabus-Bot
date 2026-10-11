@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GlowGrowSource, glowGrowCard, isPicked, pickChoice } from './glowGrow';
+import { GlowGrowSource, addHeard, glowGrowCard, isPicked, pickChoice } from './glowGrow';
 import { getLessonCues } from '../data/peerSyllabusCues';
 
 // Shoulder Stand: four short cues, ids shoulder-stand-1..4
@@ -141,4 +141,26 @@ describe('the sentence', () => {
         });
         expect(card.sentence).toBe('Banana, You did well at: Did partner start directly behind the ball? Next, try: Did partner keep their eyes locked on the ball?');
     });
+});
+
+describe('an own idea said into the microphone', () => {
+  it('goes into an empty box as heard', () => {
+    expect(addHeard('', 'bend your knees')).toBe('bend your knees');
+  });
+
+  it('is added after what the assessor already typed', () => {
+    expect(addHeard('Step forward', 'and bend your knees')).toBe('Step forward and bend your knees');
+    expect(addHeard('Step forward ', ' and bend your knees ')).toBe('Step forward and bend your knees');
+  });
+
+  it('leaves the box as it is when nothing was heard', () => {
+    expect(addHeard('Step forward', '  ')).toBe('Step forward');
+  });
+
+  it('is cut at the 80-character limit', () => {
+    const heard = 'keep your eyes on the ball and step forward with the other foot when you release it now';
+    expect(addHeard('', heard)).toBe('keep your eyes on the ball and step forward with the other foot when you release');
+    expect(addHeard('', heard)).toHaveLength(80);
+    expect(addHeard('x'.repeat(80), 'more')).toBe('x'.repeat(80));
+  });
 });

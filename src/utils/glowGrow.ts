@@ -71,7 +71,17 @@ const sameSource = (a: GlowGrowSource, b: GlowGrowSource) =>
 export const pickChoice = (choice: GlowGrowChoice): GlowGrowPick =>
   ({ source: choice.source, text: choice.source.kind === 'own' ? '' : choice.text });
 
-export const isPicked = (choice: GlowGrowChoice, pick?: GlowGrowPick) => !!pick && sameSource(choice.source, pick.source);
+/**
+ * The own-idea box after the microphone hears something: what was in the box
+ * when listening began, then the words heard, cut to the box's limit.
+ */
+export const addHeard = (before: string, heard: string): string => {
+  const said = heard.trim();
+  if (!said) return before;
+  return [before.trim(), said].filter(Boolean).join(' ').slice(0, GLOW_GROW_MAX_LENGTH);
+};
+
+export const isPicked =(choice: GlowGrowChoice, pick?: GlowGrowPick) => !!pick && sameSource(choice.source, pick.source);
 
 // A cue written as a question already ends its part of the sentence
 const part = (starter: string, text: string) => `${starter}: ${text}${/[.!?]$/.test(text) ? '' : '.'}`;
