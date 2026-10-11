@@ -2,6 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import type { PairProgress } from '../../utils/lessonFlow';
 import { decodeBlobs, encodeBlobs, stripBlobs } from './storedBlobs';
 import { PeerDraft, draftIsFresh } from '../../utils/peerDraft';
+import type { PairGlowGrow, SavedGlowGrow } from '../../utils/glowGrow';
 
 export interface PeerCueResult {
   cueIndex: number;
@@ -55,6 +56,7 @@ export interface AttemptSnapshot {
   videoBlob?: Blob;
   videoUrl?: string;
   cues: PeerCueResult[];
+  glowGrow?: SavedGlowGrow; // what the assessor told the performer about this attempt (#156)
 }
 
 export interface PairSubmissionRecord {
@@ -131,6 +133,10 @@ export interface PairSubmissionRecord {
     apple?: RedoFilms;
     banana?: RedoFilms;
   };
+  // Each performer's glow and grow for their current attempt (#156), keyed by
+  // the performer it was said TO. Kept with their ticks for the teacher; the
+  // AI is never sent it (ADR 0001). Absent when the lesson has none.
+  glowGrow?: PairGlowGrow;
   // The step each performer's current peer ticks came from (#92)
   peerSteps?: {
     apple?: StepRef;

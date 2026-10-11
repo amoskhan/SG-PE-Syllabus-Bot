@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GlowGrowSource, addHeard, glowGrowCard, isPicked, pickChoice } from './glowGrow';
+import { GlowGrowSource, addHeard, glowGrowCard, glowGrowLines, isPicked, pairGlowGrow, pickChoice, readGlowGrow, readPairGlowGrow, savedGlowGrow } from './glowGrow';
 import { getLessonCues } from '../data/peerSyllabusCues';
 
 // Shoulder Stand: four short cues, ids shoulder-stand-1..4
@@ -184,5 +184,79 @@ describe('an own idea said into the microphone', () => {
     expect(addHeard('', heard)).toBe('keep your eyes on the ball and step forward with the other foot when you release');
     expect(addHeard('', heard)).toHaveLength(80);
     expect(addHeard('x'.repeat(80), 'more')).toBe('x'.repeat(80));
+  });
+});
+
+describe('saving a glow and grow for the teacher', () => {
+  // What the device sends and the teacher's copy gives back: plain JSON
+  const back = (saved: unknown) => readGlowGrow(JSON.parse(JSON.stringify(saved ?? null)));
+
+  it('keeps a cue pick with the wording the assessor saw', () => {
+    const picks = {
+      glow: { source: cue(1), text: 'Hands under your hips' },
+      grow: { source: cue(4), text: 'Freeze like a statue' },
+    };
+    expect(back(savedGlowGrow(picks))).toEqual(picks);
+  });
+
+  it("keeps the fixed glow, and an own idea in the assessor's own words", () => {
+    const saved = savedGlowGrow({
+      glow: { source: { kind: 'fixed' }, text: 'You gave it a go' },
+      grow: { source: own, text: '  Point your toes  ' },
+    });
+    expect(back(saved)).toEqual({
+      glow: { source: { kind: 'fixed' }, text: 'You gave it a go' },
+      grow: { source: { kind: 'own' }, text: 'Point your toes' },
+    });
+  });
+
+  it('saves nothing until both are chosen', () => {
+    const glow = { source: cue(1), text: 'Hands hold the lower back, elbows on the mat' };
+    expect(savedGlowGrow(undefined)).toBeUndefined();
+    expect(savedGlowGrow({})).toBeUndefined();
+    expect(savedGlowGrow({ glow })).toBeUndefined();
+    expect(savedGlowGrow({ glow, grow: { source: own, text: '   ' } })).toBeUndefined();
+  });
+
+  it('reads anything that is not a whole glow and grow as none', () => {
+    const glow = { source: cue(1), text: 'Hands under your hips' };
+    const bad = [
+      undefined, null, 'glow', [], {}, { glow },
+      { glow, grow: { source: own } },
+      { glow, grow: { source: own, text: ' ' } },
+      { glow, grow: { source: { kind: 'ai' }, text: 'x' } },
+      { glow, grow: { source: { kind: 'cue' }, text: 'x' } },
+    ];
+    for (const value of bad) expect(readGlowGrow(value)).toBeUndefined();
+  });
+
+  it("saves each performer's finished card, and nothing for one still being filled in", () => {
+    const ticks = { [hands]: true, [hips]: false, [legs]: true, [hold]: true };
+    const done = glowGrowCard({
+      cues, ticks, performer: 'Banana',
+      picks: { glow: { source: cue(1), text: cues[0].kidFriendlyText }, grow: { source: own, text: 'Point your toes' } },
+    });
+    const half = glowGrowCard({ cues, ticks, performer: 'Apple', picks: { glow: { source: cue(1), text: cues[0].kidFriendlyText } } });
+    expect(pairGlowGrow({ Apple: half, Banana: done })).toEqual({
+      banana: { glow: { source: cue(1), text: 'Hands hold the lower back, elbows on the mat' }, grow: { source: own, text: 'Point your toes' } },
+    });
+    // Glow and Grow is off: there are no cards
+    expect(pairGlowGrow({ Apple: null, Banana: null })).toBeUndefined();
+  });
+
+  it('is shown as a Glow line and a Grow line, with an own idea marked as the pupil\'s own', () => {
+    expect(glowGrowLines({ glow: { source: cue(1), text: 'Hands under your hips' }, grow: { source: own, text: '<b>Point</b> your toes' } })).toEqual([
+      { label: 'Glow', text: 'Hands under your hips', own: false },
+      { label: 'Grow', text: '<b>Point</b> your toes', own: true },
+    ]);
+    expect(glowGrowLines(undefined)).toEqual([]);
+    expect(glowGrowLines({ glow: { source: cue(1), text: 'Hands under your hips' } })).toEqual([]);
+  });
+
+  it("reads a pair's saved glow and grow performer by performer", () => {
+    const said = { glow: { source: cue(1), text: 'Hands under your hips' }, grow: { source: own, text: 'Point your toes' } };
+    expect(readPairGlowGrow({ apple: said, banana: said })).toEqual({ apple: said, banana: said });
+    expect(readPairGlowGrow({ banana: said, apple: { glow: 'nice' }, carrot: said })).toEqual({ banana: said });
+    for (const none of [undefined, null, 'x', [], {}, { apple: 3 }]) expect(readPairGlowGrow(none)).toBeUndefined();
   });
 });

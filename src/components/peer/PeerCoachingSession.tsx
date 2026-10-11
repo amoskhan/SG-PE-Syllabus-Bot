@@ -22,7 +22,7 @@ import { uploadGuestVideo, uploadPeerSessionToTeacher } from '../../services/stu
 import { LOCKED_MESSAGE } from '../../utils/submissionLock';
 import { poseDetectionService } from '../../services/vision/poseDetectionService';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
-import { GlowGrowPicks, GlowGrowSetting, glowGrowCard } from '../../utils/glowGrow';
+import { GlowGrowPicks, GlowGrowSetting, SavedGlowGrow, glowGrowCard, pairGlowGrow } from '../../utils/glowGrow';
 import { GlowGrowPanel } from './GlowGrowPanel';
 
 export interface CompletedPeerSession {
@@ -37,6 +37,8 @@ export interface CompletedPeerSession {
   bananaVideoBlob?: Blob;
   bananaPoseFrames: string[];
   bananaCues: Record<string, boolean>;
+  // No glow or grow here: this is what the Practice Station works from, and
+  // the AI is never sent them (ADR 0001). They are saved on the pair's record.
 }
 
 interface PeerCoachingSessionProps {
@@ -71,6 +73,7 @@ export interface RefilmedAttempt {
   performer: 'Apple' | 'Banana';
   videoBlob: Blob | null;
   cues: Record<string, boolean>;
+  glowGrow?: SavedGlowGrow; // what the assessor told them about this attempt (#156); never passed on to the AI
   poseFrames: string[];
 }
 
@@ -138,13 +141,16 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const displayedCues: PeerSyllabusCue[] = getLessonCues(cueSkill, cuePlan);
 
   // ── Glow and Grow: what each assessor chose to tell the performer ──
-  // Kept on this device only (in the draft below): never saved for the teacher, never sent to the AI (ADR 0001).
+  // Kept in the draft below while the pair works, then saved with each performer's ticks for
+  // the teacher (#156). Never sent to the AI (ADR 0001).
   const [glowGrowPicks, setGlowGrowPicks] = useState<Record<'Apple' | 'Banana', GlowGrowPicks>>({ Apple: {}, Banana: {} });
   const [cuesOpen, setCuesOpen] = useState(false);
   const tellCard = (performer: 'Apple' | 'Banana', ticks: Record<string, boolean>, picks = glowGrowPicks[performer]) =>
     glowGrow ? glowGrowCard({ cues: displayedCues, ticks, performer, setting: glowGrow, picks }) : null;
   const bananaTell = tellCard('Banana', bananaCues);
   const appleTell = tellCard('Apple', appleCues);
+  // What is saved: each performer's finished glow and grow (none with the option off)
+  const glowGrowToSave = pairGlowGrow({ Apple: appleTell, Banana: bananaTell });
   useEffect(() => { setCuesOpen(false); }, [step]);
   // With Glow and Grow on, the next button waits for both picks
   const tellPending = (card: ReturnType<typeof tellCard>) => !!card && !card.complete;
@@ -633,6 +639,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         videoBlob: appleVideoBlob || undefined,
         cues: mapCues(appleCues),
       },
+      glowGrow: glowGrowToSave,
       status: 'pending_sync',
       createdAt: new Date().toISOString(),
     };
@@ -685,6 +692,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           appleBlob: appleAlready ? undefined : appleVideoBlob || undefined,
           bananaCues: ticksToSend(bananaCues, !!bananaVideoBlob),
           appleCues: ticksToSend(appleCues, !!appleVideoBlob),
+          glowGrow: glowGrowToSave,
           claimToken: getOrCreatePairClaimToken(lessonId),
         });
 
@@ -736,6 +744,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           videoUrl: cloudUrls.apple,
           cues: mapCues(appleCues),
         },
+        // Per performer, as the teacher's copy merges it: one given now replaces the one before
+        glowGrow: previous?.glowGrow || glowGrowToSave ? { ...previous?.glowGrow, ...glowGrowToSave } : undefined,
         status: previous?.status ?? 'pending_sync',
         createdAt: previous?.createdAt ?? new Date().toISOString(),
       };
@@ -1012,7 +1022,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 <button
                   type="button"
                   disabled={!bananaVideoBlob || tellPending(bananaTell)}
-                  onClick={() => onRefilmDone?.({ performer: 'Banana', videoBlob: bananaVideoBlob, cues: bananaCues, poseFrames: bananaPoseFrames })}
+                  onClick={() => onRefilmDone?.({ performer: 'Banana', videoBlob: bananaVideoBlob, cues: bananaCues, glowGrow: glowGrowToSave?.banana, poseFrames: bananaPoseFrames })}
                   className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 font-black rounded-2xl text-base shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <span>✅ Keep this new video of Banana</span>
@@ -1295,7 +1305,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 <button
                   type="button"
                   disabled={!appleVideoBlob || tellPending(appleTell)}
-                  onClick={() => onRefilmDone?.({ performer: 'Apple', videoBlob: appleVideoBlob, cues: appleCues, poseFrames: applePoseFrames })}
+                  onClick={() => onRefilmDone?.({ performer: 'Apple', videoBlob: appleVideoBlob, cues: appleCues, glowGrow: glowGrowToSave?.apple, poseFrames: applePoseFrames })}
                   className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 font-black rounded-2xl text-base shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <span>✅ Keep this new video of Apple</span>

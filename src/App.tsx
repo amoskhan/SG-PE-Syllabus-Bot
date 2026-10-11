@@ -38,7 +38,7 @@ import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/a
 import { focusCriteria, getAllCuesForSkill, getLessonCues, lessonGradingCues } from './data/peerSyllabusCues';
 import { lessonCuesLine, normaliseLevel } from './utils/gradingReview';
 import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
-import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey, performerStage, performerWork, redoChecklistText, redoFilmCount } from './utils/pairWork';
+import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey, performerStage, performerWork, practiceSessionFrom, redoChecklistText, redoFilmCount, withRefilm } from './utils/pairWork';
 
 type ModelId = 'gemini' | 'claude';
 
@@ -780,37 +780,20 @@ const App: React.FC = () => {
     const k = performerKey(attempt.performer);
     const old = currentAttempt(record, attempt.performer);
     const redoFilms = redoAt ? redoFilmCount(record, attempt.performer, redoAt) : 0;
-    if (redoAt) {
-      // Re-do (#93): the first film replaces the attempt that was sent (the
-      // teacher already has it). The second is the one re-film: the try before
-      // it is uploaded so the teacher sees both.
-      let firstClip = redoFilms > 0 ? record.redoFilms?.[k]?.firstClip : undefined;
-      if (redoFilms === 1) {
-        let url = old.videoUrl;
-        if (!url && old.videoBlob && ctx.teacherId) {
-          url = await uploadPupilClip(old.videoBlob, ctx.teacherId, ctx.lessonId, ctx.pairNumber, `${k}_redo_first_attempt`);
-        }
-        firstClip = { videoUrl: url, cues: old.cues };
-      }
-      record.redoFilms = { ...record.redoFilms, [k]: { requestedAt: redoAt, count: redoFilms + 1, firstClip } };
-    } else {
-      let firstUrl = old.videoUrl;
-      if (!firstUrl && old.videoBlob && ctx.teacherId) {
-        firstUrl = await uploadPupilClip(old.videoBlob, ctx.teacherId, ctx.lessonId, ctx.pairNumber, `${k}_first_attempt`);
-      }
-      record.firstAttempt = { ...record.firstAttempt, [k]: { videoBlob: old.videoBlob, videoUrl: firstUrl, cues: old.cues } };
-      const pending = record.pendingAnalysis?.[k];
-      if (pending) {
-        record.pendingAnalysis = { ...record.pendingAnalysis, [k]: { ...pending, analysedClip: { videoUrl: firstUrl, cues: old.cues } } };
-      }
+    // The attempt before this one is uploaded when the teacher is to see both:
+    // the one re-film (#94), or the re-do's one re-film (#93: its first film
+    // replaces the attempt that was sent, which the teacher already has)
+    let earlierUrl = old.videoUrl;
+    if ((!redoAt || redoFilms === 1) && !earlierUrl && old.videoBlob && ctx.teacherId) {
+      earlierUrl = await uploadPupilClip(old.videoBlob, ctx.teacherId, ctx.lessonId, ctx.pairNumber, redoAt ? `${k}_redo_first_attempt` : `${k}_first_attempt`);
     }
-
-    // No videoUrl yet: the upload below adds it
-    const next = { videoBlob: attempt.videoBlob, videoUrl: undefined, cues: cuesToResults(assessSkillName, attempt.cues) };
-    if (attempt.performer === 'Apple') record.bananaRole = { ...record.bananaRole, ...next };
-    else record.appleRole = { ...record.appleRole, ...next };
-    const stepRef = currentStepRef();
-    if (stepRef) record.peerSteps = { ...record.peerSteps, [k]: stepRef };
+    // The rule for what moves where, glow and grow included, is withRefilm (pairWork.ts)
+    record = withRefilm(
+      record,
+      attempt.performer,
+      { videoBlob: attempt.videoBlob, cues: cuesToResults(assessSkillName, attempt.cues), glowGrow: attempt.glowGrow },
+      { earlierUrl, redoAt, stepRef: currentStepRef() ?? undefined },
+    );
     await putSubmission(record);
     setPairRecord(record);
 
@@ -1073,13 +1056,6 @@ const App: React.FC = () => {
     performerLock(sub.appleSentAt, sub.redoRequestedAt) === 'redo_requested'
     || performerLock(sub.bananaSentAt, sub.redoRequestedAt) === 'redo_requested';
 
-  const peerCuesToMap = (skillName: string, list?: { cueIndex: number; isObserved: boolean }[]): Record<string, boolean> => {
-    const cues = pupilCues(skillName);
-    return Object.fromEntries(
-      cues.map(c => [c.id, !!list?.find(r => r.cueIndex === c.itemNumber)?.isObserved])
-    );
-  };
-
   // Restore the Practice Station chat (AI coach + teacher feedback) for a pair that has
   // already recorded. Video clips are re-fetched from Supabase on demand.
   const handleResumePracticeChat = async () => {
@@ -1092,17 +1068,8 @@ const App: React.FC = () => {
     const cueSkill = aiStep?.skillName || skillName;
 
     if (activePeerSessionData?.pairNumber !== pair.pairNumber) setPupilUsage({ apple: {}, banana: {} });
-    setActivePeerSessionData({
-      pairNumber: pair.pairNumber,
-      lessonId: pair.lessonId,
-      skillName,
-      assessSkillName: cueSkill,
-      pairPhoto: pair.pairPhoto || sub?.pairPhoto || '',
-      applePoseFrames: [],
-      bananaPoseFrames: [],
-      appleCues: peerCuesToMap(cueSkill, sub?.bananaRole?.cues),
-      bananaCues: peerCuesToMap(cueSkill, sub?.appleRole?.cues),
-    });
+    // Only the pair and their ticks: no glow or grow goes toward the AI (pairWork.ts)
+    setActivePeerSessionData(practiceSessionFrom(pair, sub, skillName, cueSkill, pupilCues(cueSkill)));
 
     // Reuse the pair's existing chat if it's still in the list, else start a fresh one
     const existing = sessions.find(

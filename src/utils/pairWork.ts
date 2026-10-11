@@ -1,4 +1,5 @@
-import type { PairSubmissionRecord } from '../services/offline/offlineStorage';
+import type { PairSubmissionRecord, PeerCueResult, StepRef } from '../services/offline/offlineStorage';
+import { PairGlowGrow, SavedGlowGrow, readGlowGrow, readPairGlowGrow } from './glowGrow';
 import { PerformerLock } from './submissionLock';
 
 // Where one performer is on the way to their final submission (GLOSSARY.md:
@@ -87,6 +88,142 @@ export const performerWork = (
     redoFilms: lock === 'redo_requested' ? redoFilmCount(r, p, redoRequestedAt) : 0,
     analysisFailed: !!r?.analysisFailed?.[k],
   };
+};
+
+/** A row of pair_submissions (the teacher's read, or pupil_get_submission) as a pair's record. */
+export function mapRowToSubmission(row: any): PairSubmissionRecord {
+  return {
+    id: row.id,
+    lessonId: row.lesson_id || 'pe-lesson-today',
+    pairNumber: row.pair_number || 1,
+    skillName: row.skill_name || 'Overhand Throw',
+    pairPhoto: row.pair_photo || '',
+    appleRole: {
+      studentPerformer: 'Banana',
+      evaluator: 'Apple',
+      videoUrl: row.banana_video_url || undefined,
+      cues: Array.isArray(row.banana_cues) ? row.banana_cues : [],
+    },
+    bananaRole: {
+      studentPerformer: 'Apple',
+      evaluator: 'Banana',
+      videoUrl: row.apple_video_url || undefined,
+      cues: Array.isArray(row.apple_cues) ? row.apple_cues : [],
+    },
+    aiStudentFeedback: row.ai_student_feedback || undefined,
+    aiTeacherReport: row.ai_teacher_report || undefined,
+    aiChatAnalysis: row.ai_chat_analysis || undefined,
+    firstAttempt: row.first_attempts || undefined,
+    peerSteps: row.peer_steps || undefined,
+    // Absent on older work, with the option off, or before supabase_glow_grow.sql is run
+    glowGrow: readPairGlowGrow(row.glow_grow),
+    status: row.status || 'pending_sync',
+    teacherFeedback: row.teacher_feedback || undefined,
+    teacherStar: row.teacher_star || false,
+    createdAt: row.created_at || new Date().toISOString(),
+    claimToken: row.claim_token || undefined,
+    appleSentAt: row.apple_sent_at || undefined,
+    bananaSentAt: row.banana_sent_at || undefined,
+    redoRequestedAt: row.redo_requested_at || undefined,
+  };
+}
+
+/**
+ * What the Practice Station takes up of a pair's saved work: who the pair is
+ * and each performer's peer ticks, by cue id, for the cues the lesson shows.
+ * Built field by field: a glow or grow on the record is never carried toward
+ * the AI (ADR 0001).
+ */
+export const practiceSessionFrom = (
+  pair: { pairNumber: number; lessonId: string; pairPhoto?: string },
+  sub: PairSubmissionRecord | null | undefined,
+  skillName: string,
+  assessSkillName: string,
+  cues: { id: string; itemNumber: number }[],
+) => {
+  const ticks = (list?: { cueIndex: number; isObserved: boolean }[]): Record<string, boolean> =>
+    Object.fromEntries(cues.map(c => [c.id, !!list?.find(r => r.cueIndex === c.itemNumber)?.isObserved]));
+  return {
+    pairNumber: pair.pairNumber,
+    lessonId: pair.lessonId,
+    skillName,
+    assessSkillName,
+    pairPhoto: pair.pairPhoto || sub?.pairPhoto || '',
+    applePoseFrames: [] as string[],
+    bananaPoseFrames: [] as string[],
+    appleCues: ticks(sub?.bananaRole?.cues),
+    bananaCues: ticks(sub?.appleRole?.cues),
+  };
+};
+
+// ── Filming again ───────────────────────────────────────────────────────────
+
+/**
+ * The pair's record once a performer has filmed again and been ticked.
+ *
+ * The one re-film (#94): the attempt before it becomes the first attempt, with
+ * its ticks and its glow and grow (#156), so the teacher sees both.
+ *
+ * After a redo request (#93, `redoAt`): the first film replaces the attempt
+ * that was sent, and the second is the re-do's one re-film, which keeps the
+ * try before it. Either way the new attempt's glow and grow replace the old.
+ *
+ * `earlierUrl` is where the attempt before this one is stored, when it is kept.
+ */
+export const withRefilm = (
+  record: PairSubmissionRecord,
+  performer: Performer,
+  next: { videoBlob: Blob; cues: PeerCueResult[]; glowGrow?: SavedGlowGrow },
+  opts: { earlierUrl?: string; redoAt?: string; stepRef?: StepRef } = {},
+): PairSubmissionRecord => {
+  const r: PairSubmissionRecord = { ...record };
+  const k = performerKey(performer);
+  const old = currentAttempt(r, performer);
+  const said = r.glowGrow?.[k];
+
+  if (opts.redoAt) {
+    const films = redoFilmCount(r, performer, opts.redoAt);
+    const firstClip = films === 1 ? { videoUrl: opts.earlierUrl, cues: old.cues }
+      : films > 0 ? r.redoFilms?.[k]?.firstClip : undefined;
+    r.redoFilms = { ...r.redoFilms, [k]: { requestedAt: opts.redoAt, count: films + 1, firstClip } };
+  } else {
+    r.firstAttempt = {
+      ...r.firstAttempt,
+      [k]: { videoBlob: old.videoBlob, videoUrl: opts.earlierUrl, cues: old.cues, ...(said ? { glowGrow: said } : {}) },
+    };
+    // The analysis was about the earlier clip. It never carries a glow or grow (ADR 0001).
+    const pending = r.pendingAnalysis?.[k];
+    if (pending) {
+      r.pendingAnalysis = { ...r.pendingAnalysis, [k]: { ...pending, analysedClip: { videoUrl: opts.earlierUrl, cues: old.cues } } };
+    }
+  }
+
+  // No videoUrl yet: sending the record adds it
+  const current = { videoBlob: next.videoBlob, videoUrl: undefined, cues: next.cues };
+  if (performer === 'Apple') r.bananaRole = { ...r.bananaRole, ...current };
+  else r.appleRole = { ...r.appleRole, ...current };
+
+  const { [k]: _earlier, ...others } = r.glowGrow ?? {};
+  const glowGrow: PairGlowGrow = { ...others, ...(next.glowGrow ? { [k]: next.glowGrow } : {}) };
+  r.glowGrow = Object.keys(glowGrow).length ? glowGrow : undefined;
+
+  if (opts.stepRef) r.peerSteps = { ...r.peerSteps, [k]: opts.stepRef };
+  return r;
+};
+
+/**
+ * Each performer's earlier attempt (once they filmed again) that has been
+ * uploaded, as it goes to the teacher: its link, its ticks, and its glow and
+ * grow when it had one.
+ */
+export const firstAttemptsToSend = (s: PairSubmissionRecord) => {
+  const out: Record<string, { videoUrl: string; cues: unknown[]; glowGrow?: SavedGlowGrow }> = {};
+  for (const k of ['apple', 'banana'] as const) {
+    const a = s.firstAttempt?.[k];
+    const said = readGlowGrow(a?.glowGrow);
+    if (a?.videoUrl) out[k] = { videoUrl: a.videoUrl, cues: a.cues ?? [], ...(said ? { glowGrow: said } : {}) };
+  }
+  return Object.keys(out).length ? out : undefined;
 };
 
 /**

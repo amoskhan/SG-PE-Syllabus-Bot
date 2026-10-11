@@ -74,7 +74,7 @@ Each mode only needs to open and respond; full flows are not covered here.
 - [ ] Dashboard — student list renders, grouped by class
 - [ ] Return to `home_screen` without a reload
 
-## 5a. Glow and Grow — 4 min
+## 5a. Glow and Grow — 8 min
 
 Needs a lesson dated today and a second device (or window) joined as a pair.
 
@@ -142,13 +142,71 @@ Needs a lesson dated today and a second device (or window) joined as a pair.
       shows no card, never folds the cue list, and lets the pair move on
       without ticking every cue
 
-Covers: `glowGrow.ts` (rules), `GlowGrowPanel.tsx`, `StepBuilder.tsx`,
-`glowGrowFor()`, `withSkill()`, `lastCuePlan()` in `lessonFlow.ts`,
-`draftPicks()` in `peerDraft.ts`.
+**Saved for the teacher (#156): before the database change**
 
-> Known limitation, not a bug: the glow and grow are kept on the pupil's
-> device only (in the draft, until the pair's work is saved). They are not
-> saved for the teacher.
+Do these first if `supabase/supabase_glow_grow.sql` has not been run yet.
+
+- [ ] With Glow and Grow on, a pair finishes both turns and taps "Save
+      our videos". It saves with no error, and the Review Tray shows the
+      clips and ticks as before, with no glow or grow
+- [ ] Our progress on the pair's device shows each performer's glow and
+      grow under their ticks (from the device's own copy)
+
+**Saved for the teacher: the database change**
+
+- [ ] Run `supabase/supabase_glow_grow.sql` in the Supabase SQL editor,
+      outside a lesson. It finishes with no error
+- [ ] Run it a second time. Still no error, and saved work is unchanged
+
+**Saved for the teacher: Review Tray and Our progress**
+
+- [ ] With Glow and Grow on, a pair picks a cue as the glow and types an
+      own idea as the grow for Banana, swaps, and picks for Apple. Tap
+      "Save our videos"
+- [ ] On the teacher's device, with that pair already open on the Review
+      Tray: Banana's glow and grow appear under Banana's ticks, and
+      Apple's under Apple's, without closing and reopening the pair
+- [ ] The two lines are labelled "Glow" and "Grow" and read in the wording
+      the pupils saw (your own cue wording included). The own idea is
+      marked "Own idea"
+- [ ] Type an own idea with markup in it (`<b>bold</b> *stars*`). It shows
+      as typed, on both screens
+- [ ] On the pair's device, Our progress shows each performer's glow and
+      grow under their ticks. Refresh, and go Home and back: still there
+- [ ] Join the same pair on a device that did not record (same claim):
+      Our progress still shows the glow and grow, from the teacher's copy
+- [ ] Banana films again with a different glow and grow. Our progress
+      shows the new ones under the ticks and the earlier ones in "First
+      attempt". The Review Tray shows the same: new ones under the ticks,
+      earlier ones with the first attempt
+- [ ] Banana submits their final recording. On the pair's device, change
+      nothing and submit Apple's: it goes through. Banana's glow and grow
+      on the Review Tray are unchanged
+- [ ] Tap "Send Back for Re-Do", film Banana again with new picks. The
+      new glow and grow replace the old on both screens
+- [ ] Open a pair from a lesson without Glow and Grow, and one saved
+      before this feature: the Review Tray and Our progress look as they
+      always did, with no empty section
+- [ ] In the browser's network tab, the requests to `/api/claude` (the
+      automatic AI feedback and a Practice Station analysis) contain no
+      glow or grow text. No level changes when a glow or grow is saved
+
+Covers: `glowGrow.ts` (rules, saved form), `GlowGrowPanel.tsx`,
+`GlowGrowSaid.tsx`, `StepBuilder.tsx`, `glowGrowFor()`, `withSkill()`,
+`lastCuePlan()` in `lessonFlow.ts`, `draftPicks()` in `peerDraft.ts`,
+`withRefilm()`, `mapRowToSubmission()`, `practiceSessionFrom()` in
+`pairWork.ts`, `supabase_glow_grow.sql`.
+
+> The lock, checked by hand: the app never changes a glow and grow after
+> a final submission, so this needs a hand-made request. Call
+> `pupil_save_submission` (with the lesson pass and the pair's claim
+> token) with a changed `glow_grow` entry for a performer who has
+> submitted. It must come back `locked`, and the saved entry must stay.
+>
+> Run the SQL file outside a lesson. If it is run part-way through one in
+> which a performer has already submitted, that performer's glow and grow
+> (not saved before the file was run) counts as a change, so the pair's
+> later saves come back `locked` until a redo request.
 
 ## 6. Cron endpoints — 1 min
 

@@ -1,6 +1,8 @@
 import { supabase } from "./db/supabaseClient";
 import { PairSubmissionRecord, getSubmission, putSubmission, getLessonPass } from "./offline/offlineStorage";
 import type { LessonStep } from "../utils/lessonFlow";
+import type { PairGlowGrow } from "../utils/glowGrow";
+import { firstAttemptsToSend, mapRowToSubmission } from "../utils/pairWork";
 
 export async function backupSubmissionToSupabase(
   submission: PairSubmissionRecord,
@@ -88,8 +90,9 @@ export async function backupSubmissionToSupabase(
     ai_student_feedback: submission.aiStudentFeedback,
     ai_teacher_report: submission.aiTeacherReport,
     ai_chat_analysis: submission.aiChatAnalysis,
-    first_attempts: uploadedFirstAttempts(submission),
+    first_attempts: firstAttemptsToSend(submission),
     peer_steps: submission.peerSteps,
+    glow_grow: submission.glowGrow,
     created_at: submission.createdAt,
   });
   if (result === "claimed") {
@@ -106,16 +109,6 @@ export async function backupSubmissionToSupabase(
 
   return { bananaVideoUrl, appleVideoUrl };
 }
-
-/** Each performer's earlier attempt (once they filmed again) that has been uploaded: links and ticks only. */
-const uploadedFirstAttempts = (s: PairSubmissionRecord) => {
-  const out: Record<string, { videoUrl: string; cues: unknown[] }> = {};
-  for (const k of ["apple", "banana"] as const) {
-    const a = s.firstAttempt?.[k];
-    if (a?.videoUrl) out[k] = { videoUrl: a.videoUrl, cues: a.cues ?? [] };
-  }
-  return Object.keys(out).length ? out : undefined;
-};
 
 /**
  * Upload one pupil clip into today's lesson folder and return its stored link,
@@ -140,40 +133,8 @@ export async function uploadPupilClip(
   return supabase.storage.from("student-videos").getPublicUrl(path).data.publicUrl;
 }
 
-export function mapRowToSubmission(row: any): PairSubmissionRecord {
-  return {
-    id: row.id,
-    lessonId: row.lesson_id || 'pe-lesson-today',
-    pairNumber: row.pair_number || 1,
-    skillName: row.skill_name || 'Overhand Throw',
-    pairPhoto: row.pair_photo || '',
-    appleRole: {
-      studentPerformer: 'Banana',
-      evaluator: 'Apple',
-      videoUrl: row.banana_video_url || undefined,
-      cues: Array.isArray(row.banana_cues) ? row.banana_cues : [],
-    },
-    bananaRole: {
-      studentPerformer: 'Apple',
-      evaluator: 'Banana',
-      videoUrl: row.apple_video_url || undefined,
-      cues: Array.isArray(row.apple_cues) ? row.apple_cues : [],
-    },
-    aiStudentFeedback: row.ai_student_feedback || undefined,
-    aiTeacherReport: row.ai_teacher_report || undefined,
-    aiChatAnalysis: row.ai_chat_analysis || undefined,
-    firstAttempt: row.first_attempts || undefined,
-    peerSteps: row.peer_steps || undefined,
-    status: row.status || 'pending_sync',
-    teacherFeedback: row.teacher_feedback || undefined,
-    teacherStar: row.teacher_star || false,
-    createdAt: row.created_at || new Date().toISOString(),
-    claimToken: row.claim_token || undefined,
-    appleSentAt: row.apple_sent_at || undefined,
-    bananaSentAt: row.banana_sent_at || undefined,
-    redoRequestedAt: row.redo_requested_at || undefined,
-  };
-}
+// A database row as a pair's record: utils/pairWork.ts
+export { mapRowToSubmission };
 
 // ─── Pupil-side access (no sign-in) ──────────────────────────────────────────
 // Pupil devices can't read or write the pair tables directly (see
@@ -221,6 +182,9 @@ export async function savePupilSubmission(fields: {
   ai_chat_analysis?: unknown;
   first_attempts?: unknown;
   peer_steps?: unknown;
+  // Each performer's glow and grow (#156), sent with their ticks. A database
+  // without supabase_glow_grow.sql ignores it.
+  glow_grow?: PairGlowGrow;
   created_at?: string;
 }): Promise<PupilWriteResult> {
   const { data, error } = await supabase.rpc("pupil_save_submission", {

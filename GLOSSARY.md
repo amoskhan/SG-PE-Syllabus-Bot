@@ -144,7 +144,7 @@ An assessor ticking cues while watching the performer; the ticks are kept as evi
 _Avoid_: Peer feedback, peer coaching
 
 **Glow and Grow**:
-What an assessor tells the performer after ticking every cue, when the teacher switched it on for the assess step: one glow (something done well, from the 👍 cues) and one grow (something to try: a 👎 cue or the assessor's own idea). The app builds the sentence from the teacher's two starters; no AI is involved and the AI is never sent it.
+What an assessor tells the performer after ticking every cue, when the teacher switched it on for the assess step: one glow (something done well, from the 👍 cues) and one grow (something to try: a 👎 cue or the assessor's own idea). The app builds the sentence from the teacher's two starters; no AI is involved and the AI is never sent it. It is kept with the performer's ticks as evidence for the teacher, in the wording the pupils saw (an own idea in the assessor's own words), and shown under those ticks on the Review Tray and on Our progress. It never sets or changes a level. It locks with the performer's work at their final submission.
 _Avoid_: Peer feedback, coaching, comment, next step
 
 **Analysis**:

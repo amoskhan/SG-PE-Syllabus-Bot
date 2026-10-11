@@ -47,6 +47,81 @@ export interface GlowGrowPicks {
   grow?: GlowGrowPick;
 }
 
+/**
+ * A finished glow and grow, as it is saved with the performer's ticks for the
+ * teacher (#156). The teacher's starters are not saved with it.
+ */
+export interface SavedGlowGrow {
+  glow: GlowGrowPick;
+  grow: GlowGrowPick;
+}
+
+/** A pair's saved glow and grow, by the performer each was said TO. */
+export interface PairGlowGrow {
+  apple?: SavedGlowGrow;
+  banana?: SavedGlowGrow;
+}
+
+const savedPick = (pick: unknown): GlowGrowPick | undefined => {
+  const { source, text } = (pick ?? {}) as Partial<GlowGrowPick>;
+  if (typeof text !== 'string' || !text.trim() || !source) return undefined;
+  if (source.kind === 'cue') {
+    return typeof source.itemNumber === 'number' ? { source: { kind: 'cue', itemNumber: source.itemNumber }, text: text.trim() } : undefined;
+  }
+  return source.kind === 'fixed' || source.kind === 'own' ? { source: { kind: source.kind }, text: text.trim() } : undefined;
+};
+
+/**
+ * One performer's glow and grow from saved data (the teacher's copy, or this
+ * device's). Anything that isn't a whole glow and grow reads as none.
+ */
+export const readGlowGrow = (value: unknown): SavedGlowGrow | undefined => {
+  const { glow, grow } = (value ?? {}) as { glow?: unknown; grow?: unknown };
+  const saved = { glow: savedPick(glow), grow: savedPick(grow) };
+  return saved.glow && saved.grow ? { glow: saved.glow, grow: saved.grow } : undefined;
+};
+
+/** The picks in the form that is saved. Nothing is saved until both are chosen. */
+export const savedGlowGrow = (picks?: GlowGrowPicks): SavedGlowGrow | undefined => readGlowGrow(picks);
+
+/** A pair's saved glow and grow (the `glow_grow` column), or none. */
+export const readPairGlowGrow = (value: unknown): PairGlowGrow | undefined => {
+  const { apple, banana } = (value ?? {}) as { apple?: unknown; banana?: unknown };
+  const pair: PairGlowGrow = {};
+  const a = readGlowGrow(apple);
+  const b = readGlowGrow(banana);
+  if (a) pair.apple = a;
+  if (b) pair.banana = b;
+  return a || b ? pair : undefined;
+};
+
+export interface GlowGrowLine {
+  label: 'Glow' | 'Grow';
+  text: string;
+  own: boolean; // the assessor's own idea, in their own words
+}
+
+/**
+ * The two lines a saved glow and grow is shown as, on the Review Tray and Our
+ * progress. The teacher's starters aren't saved, so the lines are labelled
+ * "Glow" and "Grow". None for anything that isn't a whole glow and grow.
+ */
+export const glowGrowLines = (value: unknown): GlowGrowLine[] => {
+  const said = readGlowGrow(value);
+  if (!said) return [];
+  return [
+    { label: 'Glow', text: said.glow.text, own: said.glow.source.kind === 'own' },
+    { label: 'Grow', text: said.grow.text, own: said.grow.source.kind === 'own' },
+  ];
+};
+
+/** What a pair's tick screen saves: each performer's finished card, or nothing for one that isn't. */
+export const pairGlowGrow = (cards: Record<Performer, GlowGrowCard | null>): PairGlowGrow | undefined =>
+  readPairGlowGrow({
+    apple: cards.Apple?.complete ? cards.Apple.picks : undefined,
+    banana: cards.Banana?.complete ? cards.Banana.picks : undefined,
+  });
+
 export interface GlowGrowCard {
   allTicked: boolean;        // every displayed cue is ticked: only then is the card shown
   tickedCount: number;

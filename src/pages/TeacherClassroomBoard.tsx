@@ -36,6 +36,7 @@ import { ALL, ClassFilter, fitFilter, getClassFilter, isGraded, matchesFilter, s
 import { mediaPaths, removeTeachMedia } from '../services/teachMediaService';
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
+import { GlowGrowSaid } from '../components/peer/GlowGrowSaid';
 import { analysesSentKey, effectiveLevel, normaliseLevel } from '../utils/gradingReview';
 import { LessonStep, currentIndex, stepLabel } from '../utils/lessonFlow';
 import type { StepRef } from '../services/offline/offlineStorage';
@@ -158,6 +159,8 @@ const StepTag: React.FC<{ step?: StepRef; mainSkill: string }> = ({ step, mainSk
 const reviewSignature = (s: PairSubmissionRecord) => JSON.stringify([
   s.appleRole.videoUrl, s.bananaRole.videoUrl, s.appleRole.cues, s.bananaRole.cues,
   s.aiChatAnalysis, s.firstAttempt && { apple: s.firstAttempt.apple?.videoUrl, banana: s.firstAttempt.banana?.videoUrl }, s.peerSteps,
+  // Each performer's glow and grow (#156), so one that arrives shows on an open pair
+  s.glowGrow, s.firstAttempt && { apple: s.firstAttempt.apple?.glowGrow, banana: s.firstAttempt.banana?.glowGrow },
   s.aiTeacherReport?.generatedAt, s.appleSentAt, s.bananaSentAt, s.redoRequestedAt, s.status, s.teacherFeedback, s.teacherStar,
 ]);
 
@@ -1162,6 +1165,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     <p className="text-[11px] text-slate-500">
                       Peer ticks: {activeReviewSub.firstAttempt.banana.cues.filter(c => c.isObserved).length}/{activeReviewSub.firstAttempt.banana.cues.length}
                     </p>
+                    <GlowGrowSaid said={activeReviewSub.firstAttempt.banana.glowGrow} className="mt-1.5" />
                   </details>
                 )}
                 <div className="space-y-1.5 mt-3">
@@ -1174,6 +1178,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     </div>
                   ))}
                 </div>
+                {/* What the assessor told Banana (#156); nothing when the lesson had no Glow and Grow */}
+                <GlowGrowSaid said={activeReviewSub.glowGrow?.banana} className="mt-2" />
               </div>
 
               {/* Turn 2: Apple Performed */}
@@ -1208,6 +1214,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     <p className="text-[11px] text-slate-500">
                       Peer ticks: {activeReviewSub.firstAttempt.apple.cues.filter(c => c.isObserved).length}/{activeReviewSub.firstAttempt.apple.cues.length}
                     </p>
+                    <GlowGrowSaid said={activeReviewSub.firstAttempt.apple.glowGrow} className="mt-1.5" />
                   </details>
                 )}
                 <div className="space-y-1.5 mt-3">
@@ -1220,6 +1227,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     </div>
                   ))}
                 </div>
+                {/* What the assessor told Apple (#156) */}
+                <GlowGrowSaid said={activeReviewSub.glowGrow?.apple} className="mt-2" />
               </div>
 
             </div>
@@ -1340,6 +1349,8 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                                 Peer ticks for the first attempt: {entry.analysedClip.cues.filter(c => c.isObserved).length}/{entry.analysedClip.cues.length}
                               </p>
                             )}
+                            {/* Kept on the first attempt, not on the analysis: the AI never sees it (#156) */}
+                            <GlowGrowSaid said={activeReviewSub.firstAttempt?.[who]?.glowGrow} className="mt-1.5" />
                           </div>
                         )}
                         {entry.teacherGrades && (
