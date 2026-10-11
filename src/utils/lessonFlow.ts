@@ -2,6 +2,7 @@ import { ALL_FMS_SKILLS } from '../data/fundamentalMovementSkillsData';
 import { ALL_GYMNASTICS_SKILLS, isPartnerSkill } from '../data/gymnasticsSkillsData';
 import { teachPages } from './teachPages';
 import type { CuePlan } from '../data/peerSyllabusCues';
+import type { GlowGrowSetting } from './glowGrow';
 
 // The rules of a lesson's steps (GLOSSARY.md: Lesson, Lesson Step; ADR 0002).
 // A teacher builds each lesson as an ordered list of Teach, Practise and Assess
@@ -29,8 +30,9 @@ export interface LessonStep {
   instruction?: string;        // what pupils are told to do at this step
   teach?: { media: TeachMedia[]; showCues: boolean; showReferenceImage: boolean };
   practise?: { films: boolean };
-  // With the teacher's cue plan (#136): which cues pupils tick, in whose wording, plus extras
-  assess?: { method: AssessmentMethod } & CuePlan;
+  // With the teacher's cue plan (#136): which cues pupils tick, in whose wording, plus extras.
+  // glowGrow (#151): absent = off.
+  assess?: { method: AssessmentMethod; glowGrow?: GlowGrowSetting } & CuePlan;
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -171,6 +173,13 @@ export const findLessonStep = (steps: LessonStep[], kind: StepKind, method?: Ass
  */
 export const cuePlanFor = (steps: LessonStep[], skillName: string): CuePlan | undefined =>
   steps.find(s => s.kind === 'assess' && s.skillName === skillName)?.assess;
+
+/**
+ * The Glow and Grow setting for a skill, or undefined when it is off. Read from
+ * the lesson's first assess step for the skill, as the cue plan is.
+ */
+export const glowGrowFor = (steps: LessonStep[], skillName: string): GlowGrowSetting | undefined =>
+  steps.find(s => s.kind === 'assess' && s.skillName === skillName)?.assess?.glowGrow;
 
 /** Whether the teacher set anything in a cue plan. */
 const hasCuePlan = (plan: CuePlan | undefined) =>

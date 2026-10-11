@@ -143,6 +143,10 @@ _Avoid_: Excellent, Proficient
 An assessor ticking cues while watching the performer; the ticks are kept as evidence for the teacher's assessment but never set a level themselves.
 _Avoid_: Peer feedback, peer coaching
 
+**Glow and Grow**:
+What an assessor tells the performer after ticking every cue, when the teacher switched it on for the assess step: one glow (something done well, from the 👍 cues) and one grow (something to try: a 👎 cue or the assessor's own idea). The app builds the sentence from the teacher's two starters; no AI is involved and the AI is never sent it.
+_Avoid_: Peer feedback, coaching, comment, next step
+
 **Analysis**:
 The AI's reading of a clip of one person performing an FMS or gymnastics skill: which skill it shows, and its suggested grading against the checklist, judged from the video alone and never from pupils' cue ticks. Games concepts and partner skills (such as Partner Counterbalance) are never analysed.
 

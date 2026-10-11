@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     LessonStep, canUseAiAnalysis, defaultSteps, legacySteps, nextScreen, progressFor,
-    runsAiPeerFeedback, stepsOrLegacy, validateLesson, followMainSkill, cuePlanFor, lastCuePlan,
+    runsAiPeerFeedback, stepsOrLegacy, validateLesson, followMainSkill, cuePlanFor, lastCuePlan, glowGrowFor,
 } from './lessonFlow';
 
 const step = (id: string, over: Partial<LessonStep> = {}): LessonStep =>
@@ -193,5 +193,24 @@ describe('lastCuePlan', () => {
         expect(lastCuePlan(lessons, 'Shoulder Stand')?.focusCues).toEqual([1, 2]);
         expect(lastCuePlan(lessons, 'Shoulder Stand', 'a')).toBeUndefined();
         expect(lastCuePlan(lessons, 'Kick')).toBeUndefined();
+    });
+});
+
+describe('glowGrowFor', () => {
+    const assess = (id: string, skillName: string, glowGrow?: { glowStarter: string; growStarter: string }): LessonStep =>
+        ({ id, kind: 'assess', skillName, assess: { method: 'peer_assessment', ...(glowGrow ? { glowGrow } : {}) } });
+    const mine = { glowStarter: 'I liked how you', growStarter: '' };
+
+    it('reads the setting from the first assess step for the skill', () => {
+        const steps = [assess('a', 'Kick'), assess('b', 'Shoulder Stand', mine), assess('c', 'Shoulder Stand')];
+        expect(glowGrowFor(steps, 'Shoulder Stand')).toEqual(mine);
+        // A later step on the skill follows the first, even when only the later one has it
+        expect(glowGrowFor([assess('a', 'Kick'), assess('b', 'Kick', mine)], 'Kick')).toBeUndefined();
+    });
+
+    it('is off in a lesson without the setting', () => {
+        expect(glowGrowFor(defaultSteps('Kick'), 'Kick')).toBeUndefined();
+        expect(glowGrowFor(legacySteps('Kick'), 'Kick')).toBeUndefined();
+        expect(glowGrowFor([assess('a', 'Shoulder Stand', mine)], 'Kick')).toBeUndefined();
     });
 });

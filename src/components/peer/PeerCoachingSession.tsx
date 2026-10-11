@@ -22,6 +22,8 @@ import { uploadGuestVideo, uploadPeerSessionToTeacher } from '../../services/stu
 import { LOCKED_MESSAGE } from '../../utils/submissionLock';
 import { poseDetectionService } from '../../services/vision/poseDetectionService';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
+import { GlowGrowPicks, GlowGrowSetting, glowGrowCard } from '../../utils/glowGrow';
+import { GlowGrowPanel } from './GlowGrowPanel';
 
 export interface CompletedPeerSession {
   pairNumber: number;
@@ -58,6 +60,8 @@ interface PeerCoachingSessionProps {
   cueSkillName?: string;
   // The teacher's cue plan for this lesson (#136); none means every cue as the app words it
   cuePlan?: CuePlan;
+  // Glow and Grow for this skill (#151); absent = off, and ticking stays optional
+  glowGrow?: GlowGrowSetting;
   // Clips of this pair the teacher already has (from an earlier visit to this
   // screen): the pair carries on from whoever hasn't been filmed
   cloudClips?: { banana?: string; apple?: string };
@@ -92,6 +96,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   onRefilmDone,
   nextIsAiBuddy = true,
   cuePlan,
+  glowGrow,
   cloudClips,
   cueSkillName,
 }) => {
@@ -131,6 +136,18 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const uploadInputBananaRef = useRef<HTMLInputElement>(null); // file upload for Banana performer
   const uploadInputAppleRef = useRef<HTMLInputElement>(null);  // file upload for Apple performer
   const displayedCues: PeerSyllabusCue[] = getLessonCues(cueSkill, cuePlan);
+
+  // ── Glow and Grow: what each assessor chose to tell the performer ──
+  // Kept on this screen only: never saved for the teacher, never sent to the AI (ADR 0001).
+  const [glowGrowPicks, setGlowGrowPicks] = useState<Record<'Apple' | 'Banana', GlowGrowPicks>>({ Apple: {}, Banana: {} });
+  const [cuesOpen, setCuesOpen] = useState(false);
+  const tellCard = (performer: 'Apple' | 'Banana', ticks: Record<string, boolean>, picks = glowGrowPicks[performer]) =>
+    glowGrow ? glowGrowCard({ cues: displayedCues, ticks, performer, setting: glowGrow, picks }) : null;
+  const bananaTell = tellCard('Banana', bananaCues);
+  const appleTell = tellCard('Apple', appleCues);
+  useEffect(() => { setCuesOpen(false); }, [step]);
+  // With Glow and Grow on, the next button waits for both picks
+  const tellPending = (card: ReturnType<typeof tellCard>) => !!card && !card.complete;
 
   // ── Draft: keep the pair's place if they leave or refresh ──
   // A re-film is one short task that starts from the pair's saved work, so it has no draft.
@@ -540,6 +557,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     } else {
       setBananaCues((prev) => ({ ...prev, [cueId]: value }));
     }
+    // A changed tick clears a pick that no longer fits, and the last tick folds the list again
+    const performer = isBananaReview ? 'Apple' : 'Banana';
+    const card = tellCard(performer, { ...(isBananaReview ? appleCues : bananaCues), [cueId]: value });
+    if (card) {
+      setGlowGrowPicks((prev) => ({ ...prev, [performer]: card.picks }));
+      if (card.allTicked) setCuesOpen(false);
+    }
   };
 
   /**
@@ -916,8 +940,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             )}
 
 
-            {/* MOE Syllabus Peer Cues List */}
-            <div className="space-y-2 mb-3">
+            {/* MOE Syllabus Peer Cues List (folded once every cue is ticked, with Glow and Grow on) */}
+            <div className={`space-y-2 mb-3 ${bananaTell?.allTicked && !cuesOpen ? 'hidden' : ''}`}>
               {displayedCues.map((cue) => {
                 const isChecked = bananaCues[cue.id];
                 return (
@@ -968,12 +992,23 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               })}
             </div>
 
+            {bananaTell && (
+              <GlowGrowPanel
+                card={bananaTell}
+                performer="Banana"
+                cueCount={displayedCues.length}
+                cuesOpen={cuesOpen}
+                onCuesOpen={setCuesOpen}
+                onPicks={(picks) => setGlowGrowPicks((prev) => ({ ...prev, Banana: picks }))}
+              />
+            )}
+
             {/* Actions: Re-do, Upload, Continue */}
             <div className="flex flex-col gap-2 mt-2">
               {refilmPerformer === 'Banana' ? (
                 <button
                   type="button"
-                  disabled={!bananaVideoBlob}
+                  disabled={!bananaVideoBlob || tellPending(bananaTell)}
                   onClick={() => onRefilmDone?.({ performer: 'Banana', videoBlob: bananaVideoBlob, cues: bananaCues, poseFrames: bananaPoseFrames })}
                   className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 font-black rounded-2xl text-base shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
@@ -982,8 +1017,9 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               ) : (
                 <button
                   type="button"
+                  disabled={tellPending(bananaTell)}
                   onClick={() => setStep('SWAP_PROMPT')}
-                  className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 font-black rounded-2xl text-base shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 font-black rounded-2xl text-base shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <span>Next: Swap Roles 🍎 ⇄ 🍌</span>
                   <span>→</span>
@@ -1186,8 +1222,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             )}
 
 
-            {/* MOE Syllabus Peer Cues List */}
-            <div className="space-y-2 mb-3">
+            {/* MOE Syllabus Peer Cues List (folded once every cue is ticked, with Glow and Grow on) */}
+            <div className={`space-y-2 mb-3 ${appleTell?.allTicked && !cuesOpen ? 'hidden' : ''}`}>
               {displayedCues.map((cue) => {
                 const isChecked = appleCues[cue.id];
                 return (
@@ -1238,13 +1274,24 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               })}
             </div>
 
+            {appleTell && (
+              <GlowGrowPanel
+                card={appleTell}
+                performer="Apple"
+                cueCount={displayedCues.length}
+                cuesOpen={cuesOpen}
+                onCuesOpen={setCuesOpen}
+                onPicks={(picks) => setGlowGrowPicks((prev) => ({ ...prev, Apple: picks }))}
+              />
+            )}
+
             {/* Actions: Prominent Submit + Secondary Actions */}
             <div className="flex flex-col gap-2 mt-2">
               {/* PRIMARY ACTION BUTTON: saves only; the final submission is in the Practice Station */}
               {refilmPerformer === 'Apple' ? (
                 <button
                   type="button"
-                  disabled={!appleVideoBlob}
+                  disabled={!appleVideoBlob || tellPending(appleTell)}
                   onClick={() => onRefilmDone?.({ performer: 'Apple', videoBlob: appleVideoBlob, cues: appleCues, poseFrames: applePoseFrames })}
                   className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 font-black rounded-2xl text-base shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
@@ -1253,7 +1300,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               ) : (
                 <button
                   type="button"
-                  disabled={isSaving}
+                  disabled={isSaving || tellPending(appleTell)}
                   onClick={handleSubmitSession}
                   className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 font-black rounded-2xl text-base shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                 >

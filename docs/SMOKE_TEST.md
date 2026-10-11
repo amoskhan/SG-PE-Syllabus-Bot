@@ -74,6 +74,56 @@ Each mode only needs to open and respond; full flows are not covered here.
 - [ ] Dashboard — student list renders, grouped by class
 - [ ] Return to `home_screen` without a reload
 
+## 5a. Glow and Grow — 4 min
+
+Needs a lesson dated today and a second device (or window) joined as a pair.
+
+**Lesson Planner**
+
+- [ ] An assess step (try both assessment methods) has a Glow and Grow
+      checkbox under the cue list, unticked on a new step
+- [ ] Tick it. Two starter fields appear: "You did well at" and "Next, try"
+- [ ] Reword one starter, clear the other, change a cue's wording, save,
+      reopen the lesson. The checkbox and both starters are as you left them
+- [ ] A second assess step on the same skill says Glow and Grow is on, as
+      set in the first step, and has no checkbox of its own
+
+**Tick screen, Glow and Grow on**
+
+- [ ] Before every cue is ticked: no "Tell" card, and "Next: Swap Roles"
+      is disabled
+- [ ] Tick the last cue. The cue list folds to "N cues ticked" with
+      "change", and the "Tell Banana" card appears
+- [ ] Glow buttons are the 👍 cues, grow buttons the 👎 cues then "My own
+      idea", in the wording you ticked (focus cues only, your own wording,
+      extra cues)
+- [ ] The starters read as typed; the cleared one shows its default
+- [ ] Tap "My own idea": a text box opens (80 characters). The next
+      button stays disabled until something is typed
+- [ ] With a glow and a grow chosen, the sentence shows, starting with
+      "Banana,", and the next button unlocks
+- [ ] Nothing is spoken until "Hear it" is tapped; then the sentence is
+      read aloud
+- [ ] Tap "change", flip the tick your glow came from. The list folds
+      again, that glow is no longer chosen and the next button is disabled
+- [ ] Tick every cue 👎: the only glow is "You gave it a go". Tick every
+      cue 👍: the only grow is "My own idea"
+- [ ] After the swap, Banana gets a "Tell Apple" card, and "Save our
+      videos" waits for both picks
+- [ ] A re-film: "Keep this new video" waits for every tick and both picks
+
+**Tick screen, Glow and Grow off**
+
+- [ ] A lesson without the setting (and one planned before this feature)
+      shows no card, never folds the cue list, and lets the pair move on
+      without ticking every cue
+
+Covers: `glowGrow.ts` (rules), `GlowGrowPanel.tsx`, `StepBuilder.tsx`,
+`glowGrowFor()` in `lessonFlow.ts`.
+
+> Known limitation, not a bug: the glow and grow are not yet kept if the
+> page is refreshed (the ticks are), and they are not saved for the teacher.
+
 ## 6. Cron endpoints — 1 min
 
 Not triggered by any user action, so they fail silently. Both run at

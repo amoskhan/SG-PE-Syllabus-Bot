@@ -29,7 +29,7 @@ import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef, getPeerDraft, clearPeerDrafts } from './services/offline/offlineStorage';
 import { draftSummary, peerDraftId } from './utils/peerDraft';
-import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
+import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, glowGrowFor, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep } from './services/cloudSyncService';
@@ -2636,6 +2636,9 @@ const App: React.FC = () => {
           onSendToAiBuddy={handlePeerStepDone}
           cueSkillName={stepScreen.kind === 'step' && stepScreen.step.kind === 'assess' ? stepScreen.step.skillName : undefined}
           cuePlan={cuePlanFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
+            ? stepScreen.step.skillName
+            : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
+          glowGrow={glowGrowFor(lessonSteps, stepScreen.kind === 'step' && stepScreen.step.kind === 'assess'
             ? stepScreen.step.skillName
             : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw')}
           nextIsAiBuddy={isAiStep(stepScreen) || isAiStep(nextScreen(lessonSteps, pairProgress, 'next'))}
