@@ -144,11 +144,15 @@ export async function runPeerCoachingAnalysis(
   // needs the lesson pass (see aiAccess.ts)
   pair?: { lessonId: string; pairNumber: number },
   // The criteria this lesson focuses on (#136); the feedback leads with them
-  focus: string[] = []
+  focus: string[] = [],
+  // A gymnastics lesson's own cues (#150): graded in place of the skill's checklist
+  gradeOn?: string[]
 ): Promise<PeerCoachingAIResult> {
   const access: PupilAiRequest | undefined = pair && { ...pair, performer: "pair", purpose: "peer_feedback" };
   const cues = getSkillCues(skillName);
-  const criteriaList = cues.map(c => `${c.itemNumber}. ${c.syllabusCriterion}`).join("\n");
+  const criteriaList = gradeOn?.length
+    ? gradeOn.map((c, i) => `${i + 1}. ${c}`).join("\n")
+    : cues.map(c => `${c.itemNumber}. ${c.syllabusCriterion}`).join("\n");
 
   onProgress?.("Extracting video frames...");
   const [bananaFrames, appleFrames] = await Promise.all([

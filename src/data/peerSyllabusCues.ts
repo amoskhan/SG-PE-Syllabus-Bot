@@ -4,7 +4,7 @@
  */
 
 import { getSkillChecklist } from './fundamentalMovementSkillsData';
-import { getGymnasticsChecklist } from './gymnasticsSkillsData';
+import { ALL_GYMNASTICS_SKILLS, getGymnasticsChecklist } from './gymnasticsSkillsData';
 
 export interface PeerSyllabusCue {
   id: string;
@@ -745,4 +745,24 @@ export const focusCriteria = (skillName: string, plan?: CuePlan): string[] => {
   if (!focus.length || focus.length === all.length) return [];
   // A gymnastics criterion is "Name: description", and its name is enough
   return focus.map(c => (c.detail ? c.syllabusCriterion.split(':')[0].trim() : c.syllabusCriterion));
+};
+
+/**
+ * What the AI grades a gymnastics skill against when the teacher set the
+ * lesson's cues (#150): the picked criteria, in the criterion's wording, then
+ * the teacher's extra cues. Undefined when the AI grades the full checklist:
+ * an FMS skill (its checklist is fixed) or a lesson where nothing was set.
+ */
+export const lessonGradingCues = (skillName: string, plan?: CuePlan): { name: string; text: string }[] | undefined => {
+  if (!ALL_GYMNASTICS_SKILLS.includes(skillName)) return undefined;
+  const all = getSkillCues(skillName);
+  const picked = plan?.focusCues;
+  const focus = picked?.length ? all.filter(c => picked.includes(c.itemNumber)) : [];
+  const chosen = focus.length ? focus : all;
+  const extras = (plan?.extraCues ?? []).map(t => t.trim()).filter(Boolean);
+  if (chosen.length === all.length && !extras.length) return undefined;
+  return [
+    ...chosen.map(c => ({ name: c.syllabusCriterion.split(':')[0].trim(), text: c.syllabusCriterion })),
+    ...extras.map(t => ({ name: t, text: t })),
+  ];
 };
