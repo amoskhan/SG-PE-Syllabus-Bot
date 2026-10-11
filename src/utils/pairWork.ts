@@ -1,5 +1,5 @@
 import type { PairSubmissionRecord, PeerCueResult, StepRef } from '../services/offline/offlineStorage';
-import { PairGlowGrow, SavedGlowGrow, readGlowGrow, readPairGlowGrow } from './glowGrow';
+import { PairGlowGrow, SavedGlowGrow, glowGrowToSend, readGlowGrow, readPairGlowGrow } from './glowGrow';
 import { PerformerLock } from './submissionLock';
 
 // Where one performer is on the way to their final submission (GLOSSARY.md:
@@ -225,6 +225,14 @@ export const firstAttemptsToSend = (s: PairSubmissionRecord) => {
   }
   return Object.keys(out).length ? out : undefined;
 };
+
+/**
+ * The glow and grow that goes to the teacher with a pair's record: for each
+ * performer whose ticks the record holds, theirs, or a clear when their
+ * current attempt has none (glowGrowToSend).
+ */
+export const recordGlowGrowToSend = (s: PairSubmissionRecord) =>
+  glowGrowToSend(s.glowGrow, { apple: currentAttempt(s, 'Apple').cues, banana: currentAttempt(s, 'Banana').cues });
 
 /**
  * The checklist sent for the teacher to grade when there's no AI analysis: a

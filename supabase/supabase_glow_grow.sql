@@ -31,11 +31,12 @@ alter table public.pair_submissions
   add column if not exists glow_grow jsonb;
 
 -- ── 2. Only what a glow and grow is made of is kept ─────────────────────────
--- Two small helpers for pupil_save_submission. They read nothing from the
--- database: they only tidy the JSON a device sent.
+-- Four small helpers for pupil_save_submission. They read nothing from the
+-- database: they only tidy the JSON a device sent, and return null (never an
+-- error) for anything that isn't the shape they expect.
 --
--- One pick: where it came from and its wording, cut to 200 characters. Null
--- for anything else.
+-- One pick: where it came from and its wording, trimmed (spaces, tabs and line
+-- breaks, as the app does) and cut to 200 characters. Null for anything else.
 create or replace function public.glow_grow_pick(p jsonb)
 returns jsonb
 language sql
@@ -44,44 +45,80 @@ as $$
   select case
     when jsonb_typeof(p) is distinct from 'object'
       or jsonb_typeof(p->'text') is distinct from 'string'
-      or btrim(p->>'text') = '' then null
+      or s.txt = '' then null
     when p->'source'->>'kind' = 'cue' and jsonb_typeof(p->'source'->'itemNumber') = 'number' then
       jsonb_build_object(
         'source', jsonb_build_object('kind', 'cue', 'itemNumber', p->'source'->'itemNumber'),
-        'text', left(p->>'text', 200))
+        'text', left(s.txt, 200))
     when p->'source'->>'kind' in ('fixed', 'own') then
       jsonb_build_object(
         'source', jsonb_build_object('kind', p->'source'->>'kind'),
-        'text', left(p->>'text', 200))
+        'text', left(s.txt, 200))
+  end
+  from (select btrim(p->>'text', E' \t\n\r') as txt) s;
+$$;
+
+-- One performer's entry: a whole glow and grow, each a pick. Null for anything
+-- else. Used for the entry kept with the current attempt and for the one kept
+-- in a first-attempt snapshot.
+create or replace function public.glow_grow_entry(p jsonb)
+returns jsonb
+language sql
+immutable
+as $$
+  select case
+    when public.glow_grow_pick(p->'glow') is not null and public.glow_grow_pick(p->'grow') is not null then
+      jsonb_build_object(
+        'glow', public.glow_grow_pick(p->'glow'),
+        'grow', public.glow_grow_pick(p->'grow'))
   end;
 $$;
 
--- What a device sent as glow_grow: only the apple and banana entries, and of
--- each only a whole glow and grow. Null when nothing is left.
+-- What a device sent as glow_grow: only the apple and banana keys. Each is
+-- that performer's entry, or JSON null, which asks for the stored entry to be
+-- removed (the device sends it with ticks for an attempt that has no glow and
+-- grow, so an earlier attempt's never stays under newer ticks). A key that is
+-- absent, or holds anything else, is left out: that performer is left alone.
+-- Null when nothing is left.
 create or replace function public.clean_glow_grow(p jsonb)
 returns jsonb
 language sql
 immutable
 as $$
-  select nullif(
-    case when jsonb_typeof(p) = 'object' then
-      (case when public.glow_grow_pick(p->'apple'->'glow') is not null and public.glow_grow_pick(p->'apple'->'grow') is not null
-            then jsonb_build_object('apple', jsonb_build_object(
-                   'glow', public.glow_grow_pick(p->'apple'->'glow'),
-                   'grow', public.glow_grow_pick(p->'apple'->'grow')))
-            else '{}'::jsonb end)
-      ||
-      (case when public.glow_grow_pick(p->'banana'->'glow') is not null and public.glow_grow_pick(p->'banana'->'grow') is not null
-            then jsonb_build_object('banana', jsonb_build_object(
-                   'glow', public.glow_grow_pick(p->'banana'->'glow'),
-                   'grow', public.glow_grow_pick(p->'banana'->'grow')))
-            else '{}'::jsonb end)
-    end,
-    '{}'::jsonb);
+  select jsonb_object_agg(k.performer, e.entry)
+  from unnest(array['apple', 'banana']) as k(performer)
+  cross join lateral (
+    select case when jsonb_typeof(p->k.performer) = 'null' then 'null'::jsonb
+                else public.glow_grow_entry(p->k.performer) end as entry
+  ) e
+  where e.entry is not null;
+$$;
+
+-- What a device sent as first_attempts: unchanged, except that a snapshot's
+-- glowGrow gets the same cleaning as an entry above. One that fails is removed
+-- from its snapshot; the rest of the snapshot is kept. Null unless an object.
+create or replace function public.clean_first_attempts(p jsonb)
+returns jsonb
+language sql
+immutable
+as $$
+  select case when jsonb_typeof(p) = 'object' then
+    coalesce(
+      (select jsonb_object_agg(
+                a.key,
+                case
+                  when jsonb_typeof(a.value) is distinct from 'object' or not a.value ? 'glowGrow' then a.value
+                  when public.glow_grow_entry(a.value->'glowGrow') is null then a.value - 'glowGrow'
+                  else jsonb_set(a.value, '{glowGrow}', public.glow_grow_entry(a.value->'glowGrow'))
+                end)
+       from jsonb_each(case when jsonb_typeof(p) = 'object' then p else '{}'::jsonb end) a),
+      '{}'::jsonb)
+  end;
 $$;
 
 -- ── 3. Pupil save: also keep each performer's glow and grow ─────────────────
--- Same as supabase_submission_lock.sql, plus glow_grow. Returns
+-- Same as supabase_submission_lock.sql, plus glow_grow and the cleaning of a
+-- first attempt's own glowGrow. Returns
 -- 'ok' | 'claimed' | 'invalid_lesson' | 'locked'.
 create or replace function public.pupil_save_submission(p jsonb)
 returns text
@@ -108,9 +145,11 @@ declare
   v_ai_student jsonb := case when jsonb_typeof(p->'ai_student_feedback') = 'object' then p->'ai_student_feedback' end;
   v_ai_teacher jsonb := case when jsonb_typeof(p->'ai_teacher_report')   = 'object' then p->'ai_teacher_report' end;
   v_ai_chat    jsonb := case when jsonb_typeof(p->'ai_chat_analysis')    = 'object' then p->'ai_chat_analysis' end;
-  v_first      jsonb := case when jsonb_typeof(p->'first_attempts')      = 'object' then p->'first_attempts' end;
+  -- Ignored unless an object; a snapshot's glowGrow is cleaned like an entry below (#156)
+  v_first      jsonb := public.clean_first_attempts(p->'first_attempts');
   v_peer_steps jsonb := case when jsonb_typeof(p->'peer_steps')          = 'object' then p->'peer_steps' end;
-  -- Ignored unless an object; only whole apple / banana entries are kept (#156)
+  -- Ignored unless an object. Per performer: a whole entry, or JSON null to
+  -- remove the stored one; an absent key leaves that performer alone (#156)
   v_glow_grow  jsonb := public.clean_glow_grow(p->'glow_grow');
   v_pupil      boolean;
   v_apple_new  boolean;  -- this write changes Apple's work
@@ -170,9 +209,10 @@ begin
       if public.performer_locked(v_row, 'banana') then v_peer_steps := v_peer_steps - 'banana'; end if;
     end if;
     -- A glow and grow (#156) is locked with the performer's work. A locked
-    -- performer's is dropped, not refused: a device re-sends the whole record,
-    -- and one whose entry was never stored (this file run mid-lesson) must
-    -- still be able to save the other performer's work.
+    -- performer's is dropped, not refused, whether it is an entry or a null
+    -- asking to remove one: a device re-sends the whole record, and one whose
+    -- entry was never stored (this file run mid-lesson) must still be able to
+    -- save the other performer's work.
     if v_pupil and v_glow_grow is not null then
       if public.performer_locked(v_row, 'apple')  then v_glow_grow := v_glow_grow - 'apple';  end if;
       if public.performer_locked(v_row, 'banana') then v_glow_grow := v_glow_grow - 'banana'; end if;
@@ -200,8 +240,10 @@ begin
                                  else coalesce(first_attempts, '{}'::jsonb) || v_first end,
       peer_steps          = case when v_peer_steps is null then peer_steps
                                  else coalesce(peer_steps, '{}'::jsonb) || v_peer_steps end,
+      -- Merged per performer too; a null in what was sent removes that
+      -- performer's entry (an entry itself never holds a null)
       glow_grow           = case when v_glow_grow is null then glow_grow
-                                 else coalesce(glow_grow, '{}'::jsonb) || v_glow_grow end,
+                                 else nullif(jsonb_strip_nulls(coalesce(glow_grow, '{}'::jsonb) || v_glow_grow), '{}'::jsonb) end,
       -- Sending a performer's analysis is what "sent" means (stamped here, not by the device)
       apple_sent_at       = case when v_ai_chat ? 'apple' and v_ai_chat->'apple' is distinct from ai_chat_analysis->'apple'
                                  then now() else apple_sent_at end,
@@ -224,7 +266,8 @@ begin
        v_token, v_photo, v_banana, v_apple,
        coalesce(v_banana_cues, '[]'::jsonb),
        coalesce(v_apple_cues, '[]'::jsonb),
-       v_ai_student, v_ai_teacher, v_ai_chat, v_first, v_peer_steps, v_glow_grow,
+       v_ai_student, v_ai_teacher, v_ai_chat, v_first, v_peer_steps,
+       nullif(jsonb_strip_nulls(v_glow_grow), '{}'::jsonb),  -- a null has nothing to remove on a new row
        case when v_ai_chat ? 'apple'  then now() end,
        case when v_ai_chat ? 'banana' then now() end,
        coalesce((p->>'created_at')::timestamptz, now()),

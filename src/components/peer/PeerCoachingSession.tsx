@@ -22,7 +22,7 @@ import { uploadGuestVideo, uploadPeerSessionToTeacher } from '../../services/stu
 import { LOCKED_MESSAGE } from '../../utils/submissionLock';
 import { poseDetectionService } from '../../services/vision/poseDetectionService';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
-import { GlowGrowPicks, GlowGrowSetting, SavedGlowGrow, glowGrowCard, pairGlowGrow } from '../../utils/glowGrow';
+import { GlowGrowPicks, GlowGrowSetting, SavedGlowGrow, glowGrowAfterSend, glowGrowCard, glowGrowToSend, pairGlowGrow } from '../../utils/glowGrow';
 import { GlowGrowPanel } from './GlowGrowPanel';
 
 export interface CompletedPeerSession {
@@ -677,6 +677,10 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     // Ticks made on an earlier visit and lost with it are left as the teacher has them
     const ticksToSend = (rated: Record<string, boolean>, hasClip: boolean) =>
       hasClip || Object.keys(rated).length > 0 ? mapCues(rated) : undefined;
+    const ticksSent = { banana: ticksToSend(bananaCues, !!bananaVideoBlob), apple: ticksToSend(appleCues, !!appleVideoBlob) };
+    // A glow and grow goes with the ticks: theirs, or a clear when this attempt
+    // has none, so an earlier one never stays under these ticks
+    const glowGrowSent = glowGrowToSend(glowGrowToSave, ticksSent);
     const cloudUrls: { apple?: string; banana?: string } = { banana: bananaAlready, apple: appleAlready };
     try {
       // ── Cloud upload (teacher always provides teacherId via QR scan) ────────
@@ -690,9 +694,9 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           pairPhoto,
           bananaBlob: bananaAlready ? undefined : bananaVideoBlob || undefined,
           appleBlob: appleAlready ? undefined : appleVideoBlob || undefined,
-          bananaCues: ticksToSend(bananaCues, !!bananaVideoBlob),
-          appleCues: ticksToSend(appleCues, !!appleVideoBlob),
-          glowGrow: glowGrowToSave,
+          bananaCues: ticksSent.banana,
+          appleCues: ticksSent.apple,
+          glowGrow: glowGrowSent,
           claimToken: getOrCreatePairClaimToken(lessonId),
         });
 
@@ -744,8 +748,9 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           videoUrl: cloudUrls.apple,
           cues: mapCues(appleCues),
         },
-        // Per performer, as the teacher's copy merges it: one given now replaces the one before
-        glowGrow: previous?.glowGrow || glowGrowToSave ? { ...previous?.glowGrow, ...glowGrowToSave } : undefined,
+        // Per performer, as the teacher's copy merges it: one given now replaces
+        // the one before, and one cleared is removed here too
+        glowGrow: glowGrowAfterSend(previous?.glowGrow, glowGrowSent),
         status: previous?.status ?? 'pending_sync',
         createdAt: previous?.createdAt ?? new Date().toISOString(),
       };

@@ -1,7 +1,7 @@
 import { supabase } from './db/supabaseClient';
 import { Student, SkillAnalysis } from '../types';
 import { savePupilSubmission } from './cloudSyncService';
-import type { PairGlowGrow } from '../utils/glowGrow';
+import type { PairGlowGrowToSend } from '../utils/glowGrow';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -210,7 +210,7 @@ export const uploadPeerSessionToTeacher = async (params: {
   appleBlob?: Blob;    // Video of Apple PERFORMING (recorded by Banana)
   bananaCues?: any[];
   appleCues?: any[];
-  glowGrow?: PairGlowGrow; // each performer's glow and grow (#156), sent with their ticks
+  glowGrow?: PairGlowGrowToSend; // with each performer's ticks (#156): their glow and grow, or null to clear it (glowGrowToSend)
   claimToken?: string; // identifies the group that owns this pair
 }): Promise<{ bananaVideoUrl?: string; appleVideoUrl?: string; success: boolean; blocked?: boolean; invalidLesson?: boolean; locked?: boolean }> => {
   const { teacherId, lessonId, pairNumber, skillName, pairPhoto, bananaBlob, appleBlob, bananaCues, appleCues, glowGrow, claimToken } = params;

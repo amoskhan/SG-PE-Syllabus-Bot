@@ -157,6 +157,8 @@ Do these first if `supabase/supabase_glow_grow.sql` has not been run yet.
 - [ ] Run `supabase/supabase_glow_grow.sql` in the Supabase SQL editor.
       It finishes with no error
 - [ ] Run it a second time. Still no error, and saved work is unchanged
+      (if you ran an earlier copy of this file, run this one: clearing a
+      glow and grow, below, needs it)
 
 **Saved for the teacher: Review Tray and Our progress**
 
@@ -179,6 +181,12 @@ Do these first if `supabase/supabase_glow_grow.sql` has not been run yet.
       shows the new ones under the ticks and the earlier ones in "First
       attempt". The Review Tray shows the same: new ones under the ticks,
       earlier ones with the first attempt
+- [ ] Untick Glow and Grow on the lesson's assess step and save. On the
+      pair's device (reload so it has the change), Apple films again:
+      there is no "Tell" card. Our progress and the Review Tray show
+      Apple's new ticks with no glow or grow under them, and Apple's
+      earlier glow and grow only with the first attempt. Banana's are
+      unchanged. Tick Glow and Grow again before the next checks
 - [ ] Banana submits their final recording. On the pair's device, change
       nothing and submit Apple's: it goes through. Banana's glow and grow
       on the Review Tray are unchanged
@@ -194,8 +202,9 @@ Do these first if `supabase/supabase_glow_grow.sql` has not been run yet.
 Covers: `glowGrow.ts` (rules, saved form), `GlowGrowPanel.tsx`,
 `GlowGrowSaid.tsx`, `StepBuilder.tsx`, `glowGrowFor()`, `withSkill()`,
 `lastCuePlan()` in `lessonFlow.ts`, `draftPicks()` in `peerDraft.ts`,
-`withRefilm()`, `mapRowToSubmission()`, `practiceSessionFrom()` in
-`pairWork.ts`, `supabase_glow_grow.sql`.
+`glowGrowToSend()`, `glowGrowAfterSend()`, `withRefilm()`,
+`recordGlowGrowToSend()`, `mapRowToSubmission()`, `practiceSessionFrom()`
+in `pairWork.ts`, `supabase_glow_grow.sql`.
 
 > The lock, checked by hand: the app never changes a glow and grow after
 > a final submission, so this needs a hand-made request. Call
@@ -203,7 +212,9 @@ Covers: `glowGrow.ts` (rules, saved form), `GlowGrowPanel.tsx`,
 > token) with a changed `glow_grow` entry for a performer who has
 > submitted. It must come back `ok`, and the saved entry must stay as it
 > was: a locked performer's glow and grow is dropped from the write, not
-> refused, so the rest of the pair's work still saves.
+> refused, so the rest of the pair's work still saves. The same goes for
+> `"glow_grow": {"banana": null}` (which removes an unlocked performer's
+> entry): for a performer who has submitted, the entry stays.
 
 ## 6. Cron endpoints — 1 min
 

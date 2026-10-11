@@ -95,6 +95,47 @@ export const readPairGlowGrow = (value: unknown): PairGlowGrow | undefined => {
   return a || b ? pair : undefined;
 };
 
+/**
+ * What a device sends as `glow_grow`, per performer: their glow and grow, or
+ * null to clear the one the teacher's copy holds. A performer left out is left
+ * alone (supabase_glow_grow.sql).
+ */
+export type PairGlowGrowToSend = { apple?: SavedGlowGrow | null; banana?: SavedGlowGrow | null };
+
+/**
+ * A glow and grow goes with the performer's peer ticks: for each performer
+ * whose ticks are being sent, their glow and grow for that attempt, or an
+ * explicit clear when it has none (the option was switched off since), so an
+ * earlier attempt's never stays under newer ticks. `ticks` is each performer's
+ * ticks as sent; none sent (the early auto-save of a clip) sends nothing.
+ */
+export const glowGrowToSend = (
+  glowGrow: unknown,
+  ticks: { apple?: unknown[]; banana?: unknown[] },
+): PairGlowGrowToSend | undefined => {
+  const pair = (glowGrow ?? {}) as { apple?: unknown; banana?: unknown };
+  const out: PairGlowGrowToSend = {};
+  for (const k of ['apple', 'banana'] as const) {
+    if (ticks[k]?.length) out[k] = readGlowGrow(pair[k]) ?? null;
+  }
+  return Object.keys(out).length ? out : undefined;
+};
+
+/**
+ * This device's record once `sent` has gone to the teacher, merged as the
+ * teacher's copy merges it: a performer's entry replaces the one before, a
+ * clear removes it, and a performer who wasn't sent keeps theirs.
+ */
+export const glowGrowAfterSend = (previous: unknown, sent: PairGlowGrowToSend | undefined): PairGlowGrow | undefined => {
+  const kept = { ...readPairGlowGrow(previous) };
+  for (const k of ['apple', 'banana'] as const) {
+    const entry = sent?.[k];
+    if (entry) kept[k] = entry;
+    else if (entry === null) delete kept[k];
+  }
+  return readPairGlowGrow(kept);
+};
+
 export interface GlowGrowLine {
   label: 'Glow' | 'Grow';
   text: string;

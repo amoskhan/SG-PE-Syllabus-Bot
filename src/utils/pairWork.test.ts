@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { firstAttemptsToSend, mapRowToSubmission, noAnalysisChecklistText, performerStage, performerWork, PerformerWork, redoChecklistText, withRefilm } from './pairWork';
+import { firstAttemptsToSend, mapRowToSubmission, noAnalysisChecklistText, performerStage, performerWork, PerformerWork, recordGlowGrowToSend, redoChecklistText, withRefilm } from './pairWork';
 import { parseAiCriteria } from './gradingReview';
 import type { PairSubmissionRecord } from '../services/offline/offlineStorage';
 
@@ -179,6 +179,23 @@ describe('filming again', () => {
     it('sends the first attempt to the teacher with its glow and grow', () => {
         const r = withRefilm(record(), 'Banana', { videoBlob: clip, cues: [tick(true)], glowGrow: second }, { earlierUrl: 'banana-1.mp4' });
         expect(firstAttemptsToSend(r)).toEqual({ banana: { videoUrl: 'banana-1.mp4', cues: [tick(false)], glowGrow: first } });
+    });
+
+    it("clears the earlier glow and grow from the teacher's copy when the new attempt has none", () => {
+        // Glow and Grow was switched off on the step before Banana filmed again
+        const r = withRefilm(record(), 'Banana', { videoBlob: clip, cues: [tick(true)] }, { earlierUrl: 'banana-1.mp4' });
+        expect(r.glowGrow).toEqual({ apple: forApple });
+        expect(recordGlowGrowToSend(r)).toEqual({ banana: null, apple: forApple });
+        // It is still kept with the attempt it was about
+        expect(firstAttemptsToSend(r)?.banana.glowGrow).toEqual(first);
+    });
+
+    it("sends no glow and grow for a performer who hasn't been ticked", () => {
+        const r = record({ bananaRole: { studentPerformer: 'Apple', evaluator: 'Banana', videoUrl: 'apple-1.mp4', cues: [] } });
+        expect(recordGlowGrowToSend(r)).toEqual({ banana: first });
+        // The early auto-save of a clip: no ticks yet, so nothing is sent or cleared
+        const early = record({ glowGrow: undefined, appleRole: { studentPerformer: 'Banana', evaluator: 'Apple', cues: [] }, bananaRole: { studentPerformer: 'Apple', evaluator: 'Banana', cues: [] } });
+        expect(recordGlowGrowToSend(early)).toBeUndefined();
     });
 
     it('looks as it does today in a lesson without Glow and Grow', () => {

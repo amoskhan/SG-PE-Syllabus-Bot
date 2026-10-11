@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GlowGrowSource, addHeard, glowGrowCard, glowGrowLines, isPicked, pairGlowGrow, pickChoice, readGlowGrow, readPairGlowGrow, savedGlowGrow } from './glowGrow';
+import { GlowGrowSource, addHeard, glowGrowCard, glowGrowAfterSend, glowGrowLines, glowGrowToSend, isPicked, pairGlowGrow, pickChoice, readGlowGrow, readPairGlowGrow, savedGlowGrow } from './glowGrow';
 import { getLessonCues } from '../data/peerSyllabusCues';
 
 // Shoulder Stand: four short cues, ids shoulder-stand-1..4
@@ -258,5 +258,42 @@ describe('saving a glow and grow for the teacher', () => {
     expect(readPairGlowGrow({ apple: said, banana: said })).toEqual({ apple: said, banana: said });
     expect(readPairGlowGrow({ banana: said, apple: { glow: 'nice' }, carrot: said })).toEqual({ banana: said });
     for (const none of [undefined, null, 'x', [], {}, { apple: 3 }]) expect(readPairGlowGrow(none)).toBeUndefined();
+  });
+});
+
+describe("what is sent with a performer's peer ticks", () => {
+  const said = { glow: { source: cue(1), text: 'Hands under your hips' }, grow: { source: own, text: 'Point your toes' } };
+  const other = { glow: { source: { kind: 'fixed' as const }, text: 'You gave it a go' }, grow: { source: cue(2), text: 'Hips up high' } };
+  const ticks = [{ cueIndex: 1, isObserved: true }];
+  // What reaches the database is plain JSON: a key that is absent means "leave it alone"
+  const wire = (sent: unknown) => JSON.parse(JSON.stringify({ glow_grow: sent })).glow_grow;
+
+  it("sends each ticked performer's glow and grow", () => {
+    expect(wire(glowGrowToSend({ apple: said, banana: other }, { apple: ticks, banana: ticks }))).toEqual({ apple: said, banana: other });
+  });
+
+  it('sends an explicit clear for a ticked performer whose attempt has none', () => {
+    expect(wire(glowGrowToSend({ banana: other }, { apple: ticks, banana: ticks }))).toEqual({ apple: null, banana: other });
+    expect(wire(glowGrowToSend(undefined, { apple: ticks, banana: ticks }))).toEqual({ apple: null, banana: null });
+    // An entry that isn't a whole glow and grow is none
+    expect(wire(glowGrowToSend({ apple: { glow: said.glow } }, { apple: ticks }))).toEqual({ apple: null });
+  });
+
+  it("leaves a performer alone when their ticks aren't sent", () => {
+    expect(wire(glowGrowToSend({ apple: said, banana: other }, { apple: ticks, banana: [] }))).toEqual({ apple: said });
+    expect(wire(glowGrowToSend(undefined, { banana: ticks }))).toEqual({ banana: null });
+    // The early auto-save of a clip carries no ticks: nothing is sent at all
+    expect(wire(glowGrowToSend({ apple: said }, { apple: [], banana: undefined }))).toBeUndefined();
+    expect(wire(glowGrowToSend(undefined, {}))).toBeUndefined();
+  });
+
+  it("leaves this device's record as the teacher's copy ends up", () => {
+    // Performer by performer: replaced, cleared, or left alone
+    expect(glowGrowAfterSend({ apple: said, banana: other }, { apple: other })).toEqual({ apple: other, banana: other });
+    expect(glowGrowAfterSend({ apple: said, banana: other }, { apple: null })).toEqual({ banana: other });
+    expect(glowGrowAfterSend({ apple: said }, { apple: null, banana: null })).toBeUndefined();
+    expect(glowGrowAfterSend({ apple: said }, undefined)).toEqual({ apple: said });
+    expect(glowGrowAfterSend(undefined, { banana: other })).toEqual({ banana: other });
+    expect(glowGrowAfterSend(undefined, undefined)).toBeUndefined();
   });
 });

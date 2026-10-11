@@ -1,8 +1,8 @@
 import { supabase } from "./db/supabaseClient";
 import { PairSubmissionRecord, getSubmission, putSubmission, getLessonPass } from "./offline/offlineStorage";
 import type { LessonStep } from "../utils/lessonFlow";
-import type { PairGlowGrow } from "../utils/glowGrow";
-import { firstAttemptsToSend, mapRowToSubmission } from "../utils/pairWork";
+import type { PairGlowGrowToSend } from "../utils/glowGrow";
+import { firstAttemptsToSend, mapRowToSubmission, recordGlowGrowToSend } from "../utils/pairWork";
 
 export async function backupSubmissionToSupabase(
   submission: PairSubmissionRecord,
@@ -92,7 +92,8 @@ export async function backupSubmissionToSupabase(
     ai_chat_analysis: submission.aiChatAnalysis,
     first_attempts: firstAttemptsToSend(submission),
     peer_steps: submission.peerSteps,
-    glow_grow: submission.glowGrow,
+    // With each performer's ticks: theirs, or a clear when the attempt has none
+    glow_grow: recordGlowGrowToSend(submission),
     created_at: submission.createdAt,
   });
   if (result === "claimed") {
@@ -182,9 +183,10 @@ export async function savePupilSubmission(fields: {
   ai_chat_analysis?: unknown;
   first_attempts?: unknown;
   peer_steps?: unknown;
-  // Each performer's glow and grow (#156), sent with their ticks. A database
-  // without supabase_glow_grow.sql ignores it.
-  glow_grow?: PairGlowGrow;
+  // Each performer's glow and grow (#156), sent with their ticks: null clears
+  // the stored one, a performer left out is left alone. A database without
+  // supabase_glow_grow.sql ignores it.
+  glow_grow?: PairGlowGrowToSend;
   created_at?: string;
 }): Promise<PupilWriteResult> {
   const { data, error } = await supabase.rpc("pupil_save_submission", {
