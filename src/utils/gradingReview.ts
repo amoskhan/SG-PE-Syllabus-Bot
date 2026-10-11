@@ -141,3 +141,15 @@ export const levelFromCriteria = (results: CriterionResult[], currentLevel?: str
   if (met / results.length < 0.5) return 'Beginning';
   return 'Developing';
 };
+
+/**
+ * Changes whenever a performer's analysis or re-do reaches the teacher, so the
+ * Review Tray re-reads the pupils' gradings for the pair it has open (#147).
+ * The gradings are copied into the pupils' records when an analysis is sent.
+ */
+export const analysesSentKey = (sub?: {
+  aiChatAnalysis?: Partial<Record<'apple' | 'banana', { submittedAt?: string; redo?: { submittedAt?: string } }>>;
+} | null): string =>
+  (['apple', 'banana'] as const)
+    .map(who => `${sub?.aiChatAnalysis?.[who]?.submittedAt ?? ''}/${sub?.aiChatAnalysis?.[who]?.redo?.submittedAt ?? ''}`)
+    .join('|');

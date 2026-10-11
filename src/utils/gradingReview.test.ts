@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAiCriteria, normaliseLevel, levelFromCriteria, checklistNames, checklistResults, effectiveCriteria, lessonCuesLine, lessonCueNames } from './gradingReview';
+import { parseAiCriteria, normaliseLevel, levelFromCriteria, checklistNames, checklistResults, effectiveCriteria, analysesSentKey, lessonCuesLine, lessonCueNames } from './gradingReview';
 import { lessonChecklistText } from '../services/ai/lessonChecklist';
 import type { SkillAnalysis } from '../types';
 
@@ -150,5 +150,23 @@ describe("an analysis graded on the lesson's cues (#150)", () => {
         expect(prompt).toContain('Grade ONLY these 2');
         expect(prompt).toContain('1. Base of Support: ...\n2. Chin tucked to the chest');
         expect(prompt).toMatch(/Competent if every cue is ✅/);
+    });
+});
+
+describe('analysesSentKey', () => {
+    const apple = { submittedAt: '2026-10-11T01:00:00Z' };
+    it("changes when the second performer's analysis arrives (#147)", () => {
+        expect(analysesSentKey({ aiChatAnalysis: { apple } }))
+            .not.toBe(analysesSentKey({ aiChatAnalysis: { apple, banana: { submittedAt: '2026-10-11T01:05:00Z' } } }));
+    });
+
+    it('changes when a re-do is sent', () => {
+        expect(analysesSentKey({ aiChatAnalysis: { apple } }))
+            .not.toBe(analysesSentKey({ aiChatAnalysis: { apple: { ...apple, redo: { submittedAt: '2026-10-11T02:00:00Z' } } } }));
+    });
+
+    it('stays the same when nothing new was sent', () => {
+        expect(analysesSentKey({ aiChatAnalysis: { apple } })).toBe(analysesSentKey({ aiChatAnalysis: { apple: { ...apple } } }));
+        expect(analysesSentKey(null)).toBe(analysesSentKey({}));
     });
 });
