@@ -36,7 +36,7 @@ import { ALL, ClassFilter, fitFilter, getClassFilter, isGraded, matchesFilter, s
 import { mediaPaths, removeTeachMedia } from '../services/teachMediaService';
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
-import { effectiveLevel, normaliseLevel } from '../utils/gradingReview';
+import { analysesSentKey, effectiveLevel, normaliseLevel } from '../utils/gradingReview';
 import { LessonStep, currentIndex, stepLabel } from '../utils/lessonFlow';
 import type { StepRef } from '../services/offline/offlineStorage';
 import { performerLock } from '../utils/submissionLock';
@@ -383,14 +383,28 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   }, [submissions]);
 
   // The copies of the open submission's analyses in the pupils' own records:
-  // per performer, oldest first (the last is a re-do's, once one is sent, #93)
+  // per performer, oldest first (the last is a re-do's, once one is sent, #93).
+  // Re-read whenever an analysis or re-do arrives while the pair is open (#147).
   const [subGradings, setSubGradings] = useState<Partial<Record<Performer, SkillAnalysis[]>>>({});
-  const redoSentKey = `${activeReviewSub?.aiChatAnalysis?.apple?.redo?.submittedAt}|${activeReviewSub?.aiChatAnalysis?.banana?.redo?.submittedAt}`;
+  const sentKey = analysesSentKey(activeReviewSub);
+  const gradingsForRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    setSubGradings({});
-    if (activeReviewSub && teacherId) fetchSubmissionGradings(activeReviewSub.id).then(setSubGradings);
+    // Opening another pair starts empty. A new analysis for the same pair only
+    // adds to what is shown: an open review panel stays put, unsaved edits and all.
+    const id = activeReviewSub?.id;
+    if (id !== gradingsForRef.current) setSubGradings({});
+    gradingsForRef.current = id;
+    if (activeReviewSub && teacherId) {
+      fetchSubmissionGradings(activeReviewSub.id).then(fresh => {
+        if (gradingsForRef.current !== id) return; // another pair was opened meanwhile
+        setSubGradings(prev => ({
+          apple: (fresh.apple?.length ?? 0) > (prev.apple?.length ?? 0) ? fresh.apple : prev.apple ?? fresh.apple,
+          banana: (fresh.banana?.length ?? 0) > (prev.banana?.length ?? 0) ? fresh.banana : prev.banana ?? fresh.banana,
+        }));
+      });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeReviewSub?.id, teacherId, redoSentKey]);
+  }, [activeReviewSub?.id, teacherId, sentKey]);
 
   // Name (or re-name) a pupil straight from the tray; the database then files
   // this pair's analysis under them, so re-read the gradings afterwards.
