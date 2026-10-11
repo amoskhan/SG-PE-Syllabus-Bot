@@ -29,6 +29,25 @@ describe('peer draft storage', () => {
         expect(back?.appleVideoBlob).toBeUndefined();
     });
 
+    it('gives back the glow and grow with the clip and ticks', async () => {
+        const bananaPicks = {
+            glow: { source: { kind: 'cue' as const, itemNumber: 1 }, text: 'Hands hold the lower back, elbows on the mat' },
+            grow: { source: { kind: 'own' as const }, text: 'Point your toes' },
+        };
+        await putPeerDraft(draft({ id: 'draft-picks', bananaPicks, applePicks: {} }));
+        const back = await getPeerDraft('draft-picks');
+        expect(back?.bananaPicks).toEqual(bananaPicks);
+        expect(back?.applePicks).toEqual({});
+        expect(back?.bananaCues).toEqual({ 'shoulder-stand-1': true });
+        expect(await back!.bananaVideoBlob!.text()).toBe('banana clip');
+    });
+
+    it('gives back a draft saved before Glow and Grow, with no picks', async () => {
+        const back = await getPeerDraft(peerDraftId('L1', 2, 'Shoulder Stand'));
+        expect(back?.bananaCues).toEqual({ 'shoulder-stand-1': true });
+        expect(back?.bananaPicks).toBeUndefined();
+    });
+
     it('saves a draft that has ticks but no clip', async () => {
         await putPeerDraft(draft({ id: 'draft-ticks', bananaVideoBlob: undefined }));
         expect((await getPeerDraft('draft-ticks'))?.bananaCues).toEqual({ 'shoulder-stand-1': true });

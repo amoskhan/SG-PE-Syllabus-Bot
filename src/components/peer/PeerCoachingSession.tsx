@@ -5,7 +5,7 @@ import {
   PeerSyllabusCue,
 } from '../../data/peerSyllabusCues';
 import { speechService } from '../../services/speechService';
-import { draftHasWork, peerDraftId, resumeStep } from '../../utils/peerDraft';
+import { draftHasWork, draftPicks, peerDraftId, resumeStep } from '../../utils/peerDraft';
 import {
   queuePairSubmission,
   PairSubmissionRecord,
@@ -138,7 +138,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const displayedCues: PeerSyllabusCue[] = getLessonCues(cueSkill, cuePlan);
 
   // ── Glow and Grow: what each assessor chose to tell the performer ──
-  // Kept on this screen only: never saved for the teacher, never sent to the AI (ADR 0001).
+  // Kept on this device only (in the draft below): never saved for the teacher, never sent to the AI (ADR 0001).
   const [glowGrowPicks, setGlowGrowPicks] = useState<Record<'Apple' | 'Banana', GlowGrowPicks>>({ Apple: {}, Banana: {} });
   const [cuesOpen, setCuesOpen] = useState(false);
   const tellCard = (performer: 'Apple' | 'Banana', ticks: Record<string, boolean>, picks = glowGrowPicks[performer]) =>
@@ -171,6 +171,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         if (draft.appleVideoBlob) { setAppleVideoBlob(draft.appleVideoBlob); setAppleVideoUrl(URL.createObjectURL(draft.appleVideoBlob)); }
         setBananaCues(draft.bananaCues);
         setAppleCues(draft.appleCues);
+        setGlowGrowPicks(draftPicks(draft, displayedCues));
         setBananaPoseFrames(draft.bananaPoseFrames);
         setApplePoseFrames(draft.applePoseFrames);
         setStep(resumeStep(draft));
@@ -189,13 +190,13 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     // A short wait, so a run of ticks is one save and not one per tap
     const timer = setTimeout(() => {
       const save = draftHasWork(work)
-        ? putPeerDraft({ id: draftId, lessonId, pairNumber, skillName: cueSkill, step, ...work, bananaPoseFrames, applePoseFrames, savedUrls: { banana: bananaSavedUrl, apple: appleSavedUrl }, savedAt: new Date().toISOString() })
+        ? putPeerDraft({ id: draftId, lessonId, pairNumber, skillName: cueSkill, step, ...work, bananaPicks: glowGrowPicks.Banana, applePicks: glowGrowPicks.Apple, bananaPoseFrames, applePoseFrames, savedUrls: { banana: bananaSavedUrl, apple: appleSavedUrl }, savedAt: new Date().toISOString() })
         : deletePeerDraft(draftId);
       save.catch(e => console.warn('[PeerDraft] Could not save the draft:', e));
     }, 400);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftLoaded, step, bananaVideoBlob, appleVideoBlob, bananaCues, appleCues, bananaPoseFrames, applePoseFrames, bananaSavedUrl, appleSavedUrl]);
+  }, [draftLoaded, step, bananaVideoBlob, appleVideoBlob, bananaCues, appleCues, glowGrowPicks, bananaPoseFrames, applePoseFrames, bananaSavedUrl, appleSavedUrl]);
 
   // ── Auto-save: each clip goes to the teacher the moment it exists ──
   // The "Save Video" button stays as a backup. A failed save is retried a few
