@@ -35,8 +35,8 @@ import { LessonStepScreen } from './components/steps/LessonStepScreen';
 import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
-import { focusCriteria, getAllCuesForSkill, getLessonCues } from './data/peerSyllabusCues';
-import { normaliseLevel } from './utils/gradingReview';
+import { focusCriteria, getAllCuesForSkill, getLessonCues, lessonGradingCues } from './data/peerSyllabusCues';
+import { lessonCuesLine, normaliseLevel } from './utils/gradingReview';
 import { LOCKED_MESSAGE, REDO_MESSAGE, performerLock, isSameSingaporeDay } from './utils/submissionLock';
 import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey, performerStage, performerWork, redoChecklistText, redoFilmCount } from './utils/pairWork';
 
@@ -481,7 +481,8 @@ const App: React.FC = () => {
         data.appleCues,
         updateLoadingMsg,
         { lessonId: data.lessonId, pairNumber: data.pairNumber },
-        focusCriteria(data.assessSkillName || data.skillName, cuePlanFor(lessonSteps, data.assessSkillName || data.skillName))
+        focusCriteria(data.assessSkillName || data.skillName, cuePlanFor(lessonSteps, data.assessSkillName || data.skillName)),
+        lessonGradingCues(data.assessSkillName || data.skillName, cuePlanFor(lessonSteps, data.assessSkillName || data.skillName))?.map(c => c.text)
       );
 
       const discrepancyNote = result.teacherReport.discrepancies.length > 0
@@ -640,11 +641,16 @@ const App: React.FC = () => {
     // Peer flow has no individual student context — don't let a stale ref mis-save the analysis
     activeStudentContextRef.current = null;
 
-    // The AI grades the whole skill; its feedback starts with what this lesson was about (#136)
-    const focus = focusCriteria(skillName, cuePlanFor(lessonSteps, skillName));
+    // Gymnastics with the teacher's cues set: the AI grades those (#150). Otherwise
+    // it grades the whole skill, its feedback starting with the lesson's focus (#136)
+    const plan = cuePlanFor(lessonSteps, skillName);
+    const lessonCues = lessonGradingCues(skillName, plan);
+    const focus = focusCriteria(skillName, plan);
     const focusNote = focus.length ? ` This lesson's focus was: ${focus.join('; ')}. Begin your feedback to the pupil with these.` : '';
-    const text = `Coach, grade ${performer}'s ${skillName} against the full 2024 MOE PE Syllabus checklist. Assess every performance criterion with frame evidence, then state the proficiency level.${focusNote}`;
-    await handleSendMessage(text, files, { skillName, isVerified: true, performer });
+    const text = lessonCues
+      ? `Coach, grade ${performer}'s ${skillName} against the ${lessonCues.length} cues the teacher set for this lesson. Assess each cue with frame evidence, then state the proficiency level.`
+      : `Coach, grade ${performer}'s ${skillName} against the full 2024 MOE PE Syllabus checklist. Assess every performance criterion with frame evidence, then state the proficiency level.${focusNote}`;
+    await handleSendMessage(text, files, { skillName, isVerified: true, performer, lessonChecklist: lessonCues?.map(c => c.text) });
   };
 
   // The pair the Practice Station is working for: the active pair session, or
@@ -731,8 +737,10 @@ const App: React.FC = () => {
     if (!ctx) return;
     const record = (await getSubmission(canonicalSubmissionId(ctx.lessonId, ctx.pairNumber, ctx.skillName))) as PairSubmissionRecord | undefined;
     if (!record) return;
+    // Graded on the lesson's own cues (#150): say which, so the review shows those
+    const lessonCues = lessonGradingCues(assessSkillName, cuePlanFor(lessonSteps, assessSkillName));
     const entry: AiChatAnalysisEntry = {
-      analysisText: message.text,
+      analysisText: lessonCues ? `${lessonCuesLine(lessonCues.map(c => c.name))}\n\n${message.text}` : message.text,
       skillName: assessSkillName,
       studentLabel: performer,
       modelUsed: message.modelId ?? effectiveModel,
@@ -1781,6 +1789,7 @@ const App: React.FC = () => {
       studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean;
       performer?: 'Apple' | 'Banana'; // Practice Station "Analyse": whose performance is graded
       webSearch?: boolean; // The teacher tapped "Search the web": Gemini with Google Search, no syllabus
+      lessonChecklist?: string[]; // A gymnastics lesson's own cues (#150): what the AI grades
       guideCard?: { messageId: string; step: GuideStep; picks: string[] }; // The question card is done (#131)
     }
   ) => {
@@ -2100,7 +2109,8 @@ const App: React.FC = () => {
         user?.id,  // Tier 3: pass authenticated teacher's Supabase UUID for memory injection
         skillMode,
         syllabusRequest,
-        webSearch
+        webSearch,
+        metadata?.lessonChecklist
       );
       } finally {
         setPupilAiRequest(null);

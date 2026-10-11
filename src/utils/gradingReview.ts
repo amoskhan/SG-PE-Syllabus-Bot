@@ -88,9 +88,21 @@ export const checklistResults = (text: string, names: string[]): { name: string;
   }));
 };
 
+/**
+ * An analysis graded on the teacher's cues for a gymnastics lesson (#150)
+ * starts with this line, so the review shows those cues and no others.
+ */
+const LESSON_CUES = 'Lesson cues: ';
+export const lessonCuesLine = (names: string[]) => `${LESSON_CUES}${names.join(' · ')}`;
+export const lessonCueNames = (text: string): string[] | undefined => {
+  const line = text.split('\n').find(l => l.startsWith(LESSON_CUES));
+  const names = line?.slice(LESSON_CUES.length).split(' · ').map(n => n.trim()).filter(Boolean);
+  return names?.length ? names : undefined;
+};
+
 /** The checklist as it stands: the AI's marks, overridden by the teacher's. */
 export const effectiveCriteria = (a: SkillAnalysis): Criterion[] =>
-  checklistResults(a.analysisText, checklistNames(a.skillName)).map(c => {
+  checklistResults(a.analysisText, lessonCueNames(a.analysisText) ?? checklistNames(a.skillName)).map(c => {
     // A review saved before #149 keyed a criterion by the AI's longer wording
     const key = a.teacherCriteria && (c.name in a.teacherCriteria
       ? c.name

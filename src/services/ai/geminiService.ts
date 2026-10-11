@@ -1,5 +1,6 @@
 
 import type { Content, Part } from "@google/genai";
+import { lessonChecklistText } from './lessonChecklist';
 import { GroundingChunk } from '../../types';
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
 import {
@@ -163,7 +164,9 @@ export const sendMessageToGemini = async (
   // A question the syllabus guide placed: send this section, not the whole syllabus
   syllabusRequest?: SyllabusRequest,
   // The teacher asked to search the web: Google Search on, no syllabus sent
-  webSearch = false
+  webSearch = false,
+  // A gymnastics lesson's own cues (#150): graded in place of the skill's checklist
+  lessonChecklist?: string[]
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
   try {
     let enhancedMessage = currentMessage;
@@ -551,7 +554,9 @@ ${isVerified ? (
         : getSkillChecklist(activeSkillName);
       const customRubric = teacherProfile?.customRubrics?.[activeSkillName];
 
-      if (customRubric) {
+      if (lessonChecklist?.length) {
+        specificChecklistText = lessonChecklistText(activeSkillName, lessonChecklist);
+      } else if (customRubric) {
         specificChecklistText = `*** TEACHER'S CUSTOM RUBRIC FOR ${activeSkillName} ***
 The teacher has provided a custom rubric with specific labels and groupings for this class.
 When grading "Beginning", "Developing", "Competent", or "Accomplished", you MUST use these groupings and criteria below:

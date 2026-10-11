@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_PEER_CUES, OFFICIAL_FMS_PEER_CUES, focusCriteria, getAllCuesForSkill, getLessonCues, getSkillCues } from './peerSyllabusCues';
+import { DEFAULT_PEER_CUES, OFFICIAL_FMS_PEER_CUES, focusCriteria, getAllCuesForSkill, getLessonCues, getSkillCues, lessonGradingCues } from './peerSyllabusCues';
 import { ALL_FMS_SKILLS, getSkillChecklist } from './fundamentalMovementSkillsData';
 import { ALL_GYMNASTICS_SKILLS, getGymnasticsChecklist } from './gymnasticsSkillsData';
 
@@ -106,5 +106,26 @@ describe('focusCriteria', () => {
         expect(focusCriteria('Shoulder Stand')).toEqual([]);
         expect(focusCriteria('Shoulder Stand', { focusCues: [1, 2, 3, 4] })).toEqual([]);
         expect(focusCriteria('Shoulder Stand', { extraCues: ['Chin tucked'] })).toEqual([]);
+    });
+});
+
+describe('lessonGradingCues', () => {
+    it('gives the picked criteria in their own wording, then the extra cues (#150)', () => {
+        const cues = lessonGradingCues('Shoulder Stand', { focusCues: [1, 3, 4], cueText: { 4: 'Freeze like a statue' }, extraCues: ['Chin tucked to the chest', ' '] });
+        expect(cues?.map(c => c.name)).toEqual(['Base of Support', 'Body Shape', 'Control', 'Chin tucked to the chest']);
+        expect(cues?.[2].text).toMatch(/^Control: .*3 seconds/);
+    });
+
+    it('grades every criterion plus the extras when only extras were added', () => {
+        expect(lessonGradingCues('Shoulder Stand', { extraCues: ['Chin tucked'] })).toHaveLength(5);
+    });
+
+    it('leaves the full checklist when the teacher set nothing', () => {
+        expect(lessonGradingCues('Shoulder Stand')).toBeUndefined();
+        expect(lessonGradingCues('Shoulder Stand', { focusCues: [1, 2, 3, 4], cueText: { 1: 'Hands on back' } })).toBeUndefined();
+    });
+
+    it('never changes what an FMS skill is graded on', () => {
+        expect(lessonGradingCues('Overhand Throw', { focusCues: [1, 2], extraCues: ['Smile'] })).toBeUndefined();
     });
 });

@@ -3,6 +3,7 @@
 // Key differences: Anthropic content-block format for images, no Google SDK, no grounding.
 
 import { FUNDAMENTAL_MOVEMENT_SKILLS_TEXT, PROFICIENCY_RUBRIC, SKILL_REFERENCE_IMAGES, getSkillChecklist, ALL_FMS_SKILLS } from '../../data/fundamentalMovementSkillsData';
+import { lessonChecklistText } from './lessonChecklist';
 import { GYMNASTICS_SKILLS_TEXT, ALL_GYMNASTICS_SKILLS, GYMNASTICS_REFERENCE_IMAGES, GYMNASTICS_RUBRIC, getGymnasticsChecklist } from '../../data/gymnasticsSkillsData';
 import { recentHistory, sectionContextMessage, SYLLABUS_SYSTEM_INSTRUCTION, type SyllabusRequest } from '../../data/syllabusGuide';
 import { getFewShotExamples } from '../../data/skillExamples';
@@ -164,7 +165,9 @@ export const sendMessageToClaudeAPI = async (
     userId?: string,
     skillMode: import('../../types').SkillMode = 'fms',
     // A question the syllabus guide placed: send this section, not the whole syllabus
-    syllabusRequest?: SyllabusRequest
+    syllabusRequest?: SyllabusRequest,
+    // A gymnastics lesson's own cues (#150): graded in place of the skill's checklist
+    lessonChecklist?: string[]
 ): Promise<ChatResponse & { tokenUsage?: number }> => {
     try {
         let enhancedMessage = currentMessage;
@@ -521,7 +524,9 @@ ${(isSequencing || containsMultipleSkills) && isVerified ? `5. **Sequencing & Tr
                     : getSkillChecklist(activeSkillName);
                 const customRubric = teacherProfile?.customRubrics?.[activeSkillName];
 
-                if (customRubric) {
+                if (lessonChecklist?.length) {
+                    specificChecklistText = lessonChecklistText(activeSkillName, lessonChecklist);
+                } else if (customRubric) {
                     specificChecklistText = `*** TEACHER'S CUSTOM RUBRIC FOR ${activeSkillName} ***
 The teacher has provided a custom rubric with specific labels and groupings for this class.
 When grading "Beginning", "Developing", "Competent", or "Accomplished", you MUST use these groupings and criteria below:

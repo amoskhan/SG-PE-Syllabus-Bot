@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseAiCriteria, normaliseLevel, levelFromCriteria, checklistNames, checklistResults, effectiveCriteria } from './gradingReview';
+import { parseAiCriteria, normaliseLevel, levelFromCriteria, checklistNames, checklistResults, effectiveCriteria, lessonCuesLine, lessonCueNames } from './gradingReview';
+import { lessonChecklistText } from '../services/ai/lessonChecklist';
 import type { SkillAnalysis } from '../types';
 
 describe('parseAiCriteria', () => {
@@ -116,5 +117,38 @@ describe('effectiveCriteria', () => {
     it("still applies a teacher's review saved under the AI's longer wording", () => {
         const reviewed = analysis({ teacherCriteria: { 'Control: Balance held still for 3 seconds': 'met' } });
         expect(effectiveCriteria(reviewed)[3]).toMatchObject({ name: 'Control', result: 'met', teacherSet: true });
+    });
+});
+
+describe("an analysis graded on the lesson's cues (#150)", () => {
+    const reply = [
+        '| # | Cue | Result | Evidence |',
+        '| 1 | Base of Support: Body weight is supported on the upper back | ✅ | Fr.4 |',
+        '| 2 | Body Shape: Legs are together and stretched upward | ❌ | Fr.5 |',
+        '| 3 | Control: held still for at least 3 seconds | ⚠️ | unclear |',
+        '| 4 | Chin tucked to the chest | ✅ | Fr.4 |',
+    ].join('\n');
+    const text = `${lessonCuesLine(['Base of Support', 'Body Shape', 'Control', 'Chin tucked to the chest'])}\n\n${reply}`;
+
+    it('reads back the cue names it was graded on', () => {
+        expect(lessonCueNames(text)).toEqual(['Base of Support', 'Body Shape', 'Control', 'Chin tucked to the chest']);
+        expect(lessonCueNames(reply)).toBeUndefined();
+    });
+
+    it("shows those cues on the review, not the skill's full checklist", () => {
+        const criteria = effectiveCriteria({
+            id: 'a', studentId: 's', skillName: 'Shoulder Stand', analysisText: text,
+            summarised: false, createdAt: new Date(), source: 'practice_station',
+        });
+        expect(criteria.map(c => [c.name, c.result])).toEqual([
+            ['Base of Support', 'met'], ['Body Shape', 'missed'], ['Control', 'unsure'], ['Chin tucked to the chest', 'met'],
+        ]);
+    });
+
+    it('tells the AI to grade only the given cues, with the level judged on them', () => {
+        const prompt = lessonChecklistText('Shoulder Stand', ['Base of Support: ...', 'Chin tucked to the chest']);
+        expect(prompt).toContain('Grade ONLY these 2');
+        expect(prompt).toContain('1. Base of Support: ...\n2. Chin tucked to the chest');
+        expect(prompt).toMatch(/Competent if every cue is ✅/);
     });
 });
