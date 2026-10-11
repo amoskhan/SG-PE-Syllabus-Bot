@@ -120,6 +120,10 @@ Needs a lesson dated today and a second device (or window) joined as a pair.
 - [ ] After the swap, Banana gets a "Tell Apple" card, and "Save our
       videos" waits for both picks
 - [ ] A re-film: "Keep this new video" waits for every tick and both picks
+- [ ] With a glow and an own-idea grow chosen, refresh the page (then try
+      leaving for the home screen and coming back). The pair returns to the
+      same tick screen with the clip, the ticks, both picks and the typed
+      idea as they left them; after the swap, the same for Banana's picks
 
 **Tick screen, Glow and Grow off**
 
@@ -128,10 +132,11 @@ Needs a lesson dated today and a second device (or window) joined as a pair.
       without ticking every cue
 
 Covers: `glowGrow.ts` (rules), `GlowGrowPanel.tsx`, `StepBuilder.tsx`,
-`glowGrowFor()` in `lessonFlow.ts`.
+`glowGrowFor()` in `lessonFlow.ts`, `draftPicks()` in `peerDraft.ts`.
 
-> Known limitation, not a bug: the glow and grow are not yet kept if the
-> page is refreshed (the ticks are), and they are not saved for the teacher.
+> Known limitation, not a bug: the glow and grow are kept on the pupil's
+> device only (in the draft, until the pair's work is saved). They are not
+> saved for the teacher.
 
 ## 6. Cron endpoints — 1 min
 

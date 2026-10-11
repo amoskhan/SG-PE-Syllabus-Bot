@@ -1,6 +1,10 @@
-// A pair's peer assessment, part-way through (the recordings and ticks so
-// far), kept on the device so leaving the page or refreshing doesn't lose it.
-// It is deleted when the pair's work is saved, and ignored after a day.
+import type { PeerSyllabusCue } from '../data/peerSyllabusCues';
+import { GlowGrowPicks, glowGrowCard } from './glowGrow';
+
+// A pair's peer assessment, part-way through (the recordings, ticks and Glow
+// and Grow picks so far), kept on the device so leaving the page or refreshing
+// doesn't lose it. It is deleted when the pair's work is saved, and ignored
+// after a day.
 
 export interface PeerDraft {
   id: string;
@@ -10,9 +14,11 @@ export interface PeerDraft {
   step: string;              // the screen the pair was on
   bananaVideoBlob?: Blob;    // Banana performing (filmed in Apple's turn)
   bananaCues: Record<string, boolean>;
+  bananaPicks?: GlowGrowPicks; // the glow and grow Apple chose for Banana (absent in a draft saved before #154)
   bananaPoseFrames: string[];
   appleVideoBlob?: Blob;     // Apple performing (filmed in Banana's turn)
   appleCues: Record<string, boolean>;
+  applePicks?: GlowGrowPicks;  // the glow and grow Banana chose for Apple
   applePoseFrames: string[];
   // Where each clip already is in the teacher's storage, so it isn't sent twice
   savedUrls?: { banana?: string; apple?: string };
@@ -27,6 +33,19 @@ export const peerDraftId = (lessonId: string, pairNumber: number, skillName: str
 /** Whether there is anything worth keeping: a clip or a tick. */
 export const draftHasWork = (d: Pick<PeerDraft, 'bananaVideoBlob' | 'appleVideoBlob' | 'bananaCues' | 'appleCues'>) =>
   !!d.bananaVideoBlob || !!d.appleVideoBlob || Object.keys(d.bananaCues).length > 0 || Object.keys(d.appleCues).length > 0;
+
+/**
+ * Each performer's Glow and Grow picks to put back, given the cues the lesson
+ * shows now. A pick that no longer fits the draft's ticks is dropped, by the
+ * same rule as a changed tick (glowGrowCard).
+ */
+export const draftPicks = (
+  d: Pick<PeerDraft, 'bananaCues' | 'appleCues' | 'bananaPicks' | 'applePicks'>,
+  cues: PeerSyllabusCue[],
+): Record<'Apple' | 'Banana', GlowGrowPicks> => ({
+  Apple: glowGrowCard({ cues, ticks: d.appleCues, performer: 'Apple', picks: d.applePicks }).picks,
+  Banana: glowGrowCard({ cues, ticks: d.bananaCues, performer: 'Banana', picks: d.bananaPicks }).picks,
+});
 
 export const draftIsFresh = (d: Pick<PeerDraft, 'savedAt'>, now = Date.now()) =>
   now - new Date(d.savedAt).getTime() < DRAFT_MAX_AGE_MS;
