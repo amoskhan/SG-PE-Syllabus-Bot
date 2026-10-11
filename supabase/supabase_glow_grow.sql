@@ -153,14 +153,12 @@ begin
          (v_apple is not null and v_apple is distinct from v_row.apple_video_url)
       or (v_apple_cues is not null and v_apple_cues is distinct from v_row.apple_cues)
       or (v_ai_chat ? 'apple' and v_ai_chat->'apple' is distinct from v_row.ai_chat_analysis->'apple')
-      or (v_first ? 'apple' and v_first->'apple' is distinct from v_row.first_attempts->'apple')
-      or (v_glow_grow ? 'apple' and v_glow_grow->'apple' is distinct from v_row.glow_grow->'apple');
+      or (v_first ? 'apple' and v_first->'apple' is distinct from v_row.first_attempts->'apple');
     v_banana_new :=
          (v_banana is not null and v_banana is distinct from v_row.banana_video_url)
       or (v_banana_cues is not null and v_banana_cues is distinct from v_row.banana_cues)
       or (v_ai_chat ? 'banana' and v_ai_chat->'banana' is distinct from v_row.ai_chat_analysis->'banana')
-      or (v_first ? 'banana' and v_first->'banana' is distinct from v_row.first_attempts->'banana')
-      or (v_glow_grow ? 'banana' and v_glow_grow->'banana' is distinct from v_row.glow_grow->'banana');
+      or (v_first ? 'banana' and v_first->'banana' is distinct from v_row.first_attempts->'banana');
     if v_pupil and ((v_apple_new and public.performer_locked(v_row, 'apple'))
                  or (v_banana_new and public.performer_locked(v_row, 'banana'))) then
       return 'locked';
@@ -170,6 +168,15 @@ begin
     if v_pupil and v_peer_steps is not null then
       if public.performer_locked(v_row, 'apple')  then v_peer_steps := v_peer_steps - 'apple';  end if;
       if public.performer_locked(v_row, 'banana') then v_peer_steps := v_peer_steps - 'banana'; end if;
+    end if;
+    -- A glow and grow (#156) is locked with the performer's work. A locked
+    -- performer's is dropped, not refused: a device re-sends the whole record,
+    -- and one whose entry was never stored (this file run mid-lesson) must
+    -- still be able to save the other performer's work.
+    if v_pupil and v_glow_grow is not null then
+      if public.performer_locked(v_row, 'apple')  then v_glow_grow := v_glow_grow - 'apple';  end if;
+      if public.performer_locked(v_row, 'banana') then v_glow_grow := v_glow_grow - 'banana'; end if;
+      v_glow_grow := nullif(v_glow_grow, '{}'::jsonb);
     end if;
 
     update public.pair_submissions set

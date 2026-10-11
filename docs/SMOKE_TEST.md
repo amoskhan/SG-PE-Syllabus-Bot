@@ -154,8 +154,8 @@ Do these first if `supabase/supabase_glow_grow.sql` has not been run yet.
 
 **Saved for the teacher: the database change**
 
-- [ ] Run `supabase/supabase_glow_grow.sql` in the Supabase SQL editor,
-      outside a lesson. It finishes with no error
+- [ ] Run `supabase/supabase_glow_grow.sql` in the Supabase SQL editor.
+      It finishes with no error
 - [ ] Run it a second time. Still no error, and saved work is unchanged
 
 **Saved for the teacher: Review Tray and Our progress**
@@ -201,12 +201,9 @@ Covers: `glowGrow.ts` (rules, saved form), `GlowGrowPanel.tsx`,
 > a final submission, so this needs a hand-made request. Call
 > `pupil_save_submission` (with the lesson pass and the pair's claim
 > token) with a changed `glow_grow` entry for a performer who has
-> submitted. It must come back `locked`, and the saved entry must stay.
->
-> Run the SQL file outside a lesson. If it is run part-way through one in
-> which a performer has already submitted, that performer's glow and grow
-> (not saved before the file was run) counts as a change, so the pair's
-> later saves come back `locked` until a redo request.
+> submitted. It must come back `ok`, and the saved entry must stay as it
+> was: a locked performer's glow and grow is dropped from the write, not
+> refused, so the rest of the pair's work still saves.
 
 ## 6. Cron endpoints — 1 min
 
