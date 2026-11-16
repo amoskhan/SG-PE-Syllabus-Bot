@@ -16,6 +16,12 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
     const [isLoaded, setIsLoaded] = useState(false);
     const [status, setStatus] = useState('Initializing...');
     const [blobSrc, setBlobSrc] = useState<string>('');
+    // The live skeleton runs pose and ball detection on every frame: on an iPad
+    // that freezes playback (#168), so it's off until someone taps for it
+    const [skeletonOn, setSkeletonOn] = useState(false);
+    const skeletonOnRef = useRef(false);
+    // Width / height of the video, so the whole picture shows, uncropped
+    const [aspect, setAspect] = useState(16 / 9);
 
     // Convert base64 data URL → blob URL so the browser can stream it properly.
     // Large base64 data URLs fed directly to <video src> fail silently in Chrome/Firefox.
@@ -53,10 +59,33 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
     // Ball Trajectory State
     const ballTrajectoryRef = useRef<{ x: number; y: number; frame: number }[]>([]);
 
+    const stopTracking = () => {
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+        requestRef.current = undefined;
+    };
+
     const handlePlay = () => {
         setIsPlaying(true);
-        processVideoFrame();
+        if (skeletonOnRef.current) processVideoFrame();
     };
+
+    const toggleSkeleton = () => {
+        const on = !skeletonOnRef.current;
+        skeletonOnRef.current = on;
+        setSkeletonOn(on);
+        stopTracking();
+        if (on) {
+            setStatus('Initializing...');
+            const video = videoRef.current;
+            if (video && !video.paused && !video.ended) processVideoFrame();
+        } else {
+            const canvas = canvasRef.current;
+            canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+            ballTrajectoryRef.current = [];
+        }
+    };
+
+    useEffect(() => stopTracking, []);
 
     const handlePause = () => {
         setIsPlaying(false);
@@ -73,7 +102,7 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
     };
 
     const processVideoFrame = async () => {
-        if (!videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.ended) {
+        if (!skeletonOnRef.current || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.ended) {
             return;
         }
 
@@ -212,20 +241,29 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
             }
         }
 
-        requestRef.current = requestAnimationFrame(processVideoFrame);
+        if (skeletonOnRef.current) requestRef.current = requestAnimationFrame(processVideoFrame);
     };
 
     return (
-        <div className="relative rounded-lg overflow-hidden bg-black w-full group">
+        // Sized to the video's own shape, no taller than 60% of the screen, so
+        // the whole picture shows and the skeleton lines up with it
+        <div
+            className="relative rounded-lg overflow-hidden bg-black mx-auto max-w-full group"
+            style={{ aspectRatio: aspect, width: `min(100%, calc(60vh * ${aspect}))` }}
+        >
             <video
                 ref={videoRef}
                 src={blobSrc}
-                className="w-full h-auto block"
+                className="absolute inset-0 w-full h-full object-contain block"
                 controls
                 playsInline
                 onPlay={handlePlay}
                 onPause={handlePause}
                 onEnded={handleEnded}
+                onLoadedMetadata={(e) => {
+                    const v = e.currentTarget;
+                    if (v.videoWidth && v.videoHeight) setAspect(v.videoWidth / v.videoHeight);
+                }}
                 onLoadedData={() => setIsLoaded(true)}
             />
             <canvas
@@ -233,9 +271,20 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
                 className="absolute inset-0 w-full h-full pointer-events-none"
             />
 
+            <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                <button
+                    type="button"
+                    onClick={toggleSkeleton}
+                    aria-pressed={skeletonOn}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-full shadow-lg border backdrop-blur-sm ${
+                        skeletonOn ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-black/60 text-white border-white/30'
+                    }`}
+                >
+                    🦴 {skeletonOn ? 'Hide skeleton' : 'Show skeleton'}
+                </button>
             {/* Debug Overlay */}
-            {isPlaying && (
-                <div className="absolute top-2 right-2 flex flex-col items-end gap-1 pointer-events-none">
+            {skeletonOn && isPlaying && (
+                <div className="flex flex-col items-end gap-1 pointer-events-none">
                     <div className={`text-[10px] px-2 py-1 rounded font-mono text-white ${
                         status.includes('Found') || status.includes('Tracking') ? 'bg-green-500/80' : 
                         status.includes('Error') || status.includes('No Pose') ? 'bg-red-500/80' : 
@@ -248,10 +297,11 @@ const VideoAnalysisPlayer: React.FC<VideoAnalysisPlayerProps> = ({ src, label })
                     </div>
                 </div>
             )}
+            </div>
 
-            {/* Predicted Skill Label */}
+            {/* Predicted Skill Label (top left, clear of the video controls) */}
             {label && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg border border-white/20 backdrop-blur-sm transition-opacity duration-300">
+                <div className="absolute top-2 left-2 pointer-events-none bg-black/70 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border border-white/20 backdrop-blur-sm transition-opacity duration-300">
                     {label}
                 </div>
             )}
