@@ -3,6 +3,24 @@ import { PairSubmissionRecord, getSubmission, putSubmission, getLessonPass } fro
 import type { LessonStep } from "../utils/lessonFlow";
 import type { PairGlowGrowToSend } from "../utils/glowGrow";
 import { firstAttemptsToSend, mapRowToSubmission, recordGlowGrowToSend } from "../utils/pairWork";
+import { CLIP_TIME_LIMIT_MS, SAVE_TIME_LIMIT_MS, withinTimeLimit } from "../utils/timeLimit";
+
+/**
+ * Upload one pupil clip to the student-videos bucket, within its time limit
+ * (#163). A stalled upload comes back as an error, like a failed one.
+ */
+export async function uploadClipWithinLimit(
+  path: string,
+  blob: Blob,
+  options: { cacheControl?: string; upsert?: boolean; contentType?: string },
+): Promise<{ error: { message: string } | null }> {
+  try {
+    const { error } = await withinTimeLimit("clip upload", CLIP_TIME_LIMIT_MS, supabase.storage.from("student-videos").upload(path, blob, options));
+    return { error };
+  } catch (e) {
+    return { error: { message: e instanceof Error ? e.message : String(e) } };
+  }
+}
 
 export async function backupSubmissionToSupabase(
   submission: PairSubmissionRecord,
@@ -13,6 +31,7 @@ export async function backupSubmissionToSupabase(
   appleVideoUrl?: string;
   blocked?: boolean;
   locked?: boolean;
+  failed?: boolean; // the teacher hasn't got it: offline, stalled or refused
 }> {
   let bananaVideoUrl: string | undefined = submission.appleRole.videoUrl;
   let appleVideoUrl: string | undefined = submission.bananaRole.videoUrl;
@@ -30,9 +49,7 @@ export async function backupSubmissionToSupabase(
   if (submission.appleRole.videoBlob && !submission.appleRole.videoUrl) {
     try {
       const path = `${folder}/banana_performer.mp4`;
-      const { error } = await supabase.storage
-        .from("student-videos")
-        .upload(path, submission.appleRole.videoBlob, { cacheControl: "3600", upsert: false });
+      const { error } = await uploadClipWithinLimit(path, submission.appleRole.videoBlob, { cacheControl: "3600", upsert: false });
 
       if (!error) {
         const { data } = supabase.storage.from("student-videos").getPublicUrl(path);
@@ -46,9 +63,7 @@ export async function backupSubmissionToSupabase(
   if (submission.bananaRole.videoBlob && !submission.bananaRole.videoUrl) {
     try {
       const path = `${folder}/apple_performer.mp4`;
-      const { error } = await supabase.storage
-        .from("student-videos")
-        .upload(path, submission.bananaRole.videoBlob, { cacheControl: "3600", upsert: false });
+      const { error } = await uploadClipWithinLimit(path, submission.bananaRole.videoBlob, { cacheControl: "3600", upsert: false });
 
       if (!error) {
         const { data } = supabase.storage.from("student-videos").getPublicUrl(path);
@@ -107,6 +122,7 @@ export async function backupSubmissionToSupabase(
     console.warn(`[CloudBackup] submission ${submission.id} refused — already sent, no redo requested`);
     return { bananaVideoUrl, appleVideoUrl, locked: true };
   }
+  if (result === "error") return { bananaVideoUrl, appleVideoUrl, failed: true };
 
   return { bananaVideoUrl, appleVideoUrl };
 }
@@ -124,9 +140,7 @@ export async function uploadPupilClip(
   label: string,
 ): Promise<string | undefined> {
   const path = `${teacherId}/pair_submissions/lesson_${lessonId}/pair_${pairNumber}_${Date.now()}/${label}.mp4`;
-  const { error } = await supabase.storage
-    .from("student-videos")
-    .upload(path, blob, { cacheControl: "3600", upsert: false, contentType: "video/mp4" });
+  const { error } = await uploadClipWithinLimit(path, blob, { cacheControl: "3600", upsert: false, contentType: "video/mp4" });
   if (error) {
     console.warn("[CloudSync] uploadPupilClip failed:", error.message);
     return undefined;
@@ -189,9 +203,15 @@ export async function savePupilSubmission(fields: {
   glow_grow?: PairGlowGrowToSend;
   created_at?: string;
 }): Promise<PupilWriteResult> {
-  const { data, error } = await supabase.rpc("pupil_save_submission", {
-    p: { ...fields, pass: getLessonPass(fields.lesson_id) },
-  });
+  let data: unknown;
+  let error: unknown;
+  try {
+    ({ data, error } = await withinTimeLimit("save", SAVE_TIME_LIMIT_MS, supabase.rpc("pupil_save_submission", {
+      p: { ...fields, pass: getLessonPass(fields.lesson_id) },
+    })));
+  } catch (e) {
+    error = e; // stalled or offline (#163): the work is still on the device
+  }
   if (error) {
     console.error("[CloudSync] pupil_save_submission error:", error);
     return "error";
@@ -238,7 +258,13 @@ export async function fetchPupilLessonSteps(
 
 /** A pair's own submission, proven by its claim token. Null if none or not theirs. */
 export async function fetchPupilSubmission(id: string, claimToken: string): Promise<PairSubmissionRecord | null> {
-  const { data, error } = await supabase.rpc("pupil_get_submission", { p_id: id, p_claim_token: claimToken });
+  let data: any;
+  let error: unknown;
+  try {
+    ({ data, error } = await withinTimeLimit("read", SAVE_TIME_LIMIT_MS, supabase.rpc("pupil_get_submission", { p_id: id, p_claim_token: claimToken })));
+  } catch (e) {
+    error = e;
+  }
   if (error) {
     console.warn("[CloudSync] pupil_get_submission error:", error);
     return null;
