@@ -1,4 +1,4 @@
-import type { PairSubmissionRecord, PeerCueResult, StepRef } from '../services/offline/offlineStorage';
+import type { EarlierWork, PairSubmissionRecord, PeerCueResult, StepRef } from '../services/offline/offlineStorage';
 import { PairGlowGrow, SavedGlowGrow, glowGrowToSend, readGlowGrow, readPairGlowGrow } from './glowGrow';
 import { PerformerLock } from './submissionLock';
 
@@ -125,8 +125,41 @@ export function mapRowToSubmission(row: any): PairSubmissionRecord {
     appleSentAt: row.apple_sent_at || undefined,
     bananaSentAt: row.banana_sent_at || undefined,
     redoRequestedAt: row.redo_requested_at || undefined,
+    // supabase_restart_pair.sql (#173): absent until the pair restarts, or before it is run
+    restartedAt: row.restarted_at || undefined,
+    earlierWork: Array.isArray(row.earlier_work)
+      ? row.earlier_work
+          .filter((e: any) => e && typeof e === 'object' && typeof e.restartedAt === 'string')
+          .map((e: any): EarlierWork => ({
+            restartedAt: e.restartedAt,
+            gradingIds: Array.isArray(e.gradingIds) ? e.gradingIds.map(String) : [],
+            // An earlier go is the submission's own columns as they were
+            work: mapRowToSubmission({ ...e, id: row.id, lesson_id: row.lesson_id, pair_number: row.pair_number, skill_name: row.skill_name }),
+          }))
+      : undefined,
   };
 }
+
+/**
+ * Whether something this device kept (saved or created at `when`) is from
+ * before the pair's restart: a pair starts clean after one (#173).
+ */
+export const fromBeforeRestart = (when: string | undefined, restartedAt: string | null | undefined): boolean => {
+  const before = timeOfIso(when);
+  const restart = timeOfIso(restartedAt);
+  return before !== null && restart !== null && before < restart;
+};
+
+/**
+ * Milliseconds of an ISO time, or null. The database sends microseconds
+ * ("…04:00:00.123456+00:00"), which not every browser reads, so the fraction
+ * is cut to milliseconds first.
+ */
+const timeOfIso = (iso: string | null | undefined): number | null => {
+  if (!iso) return null;
+  const t = new Date(iso.replace(/(\.\d{3})\d+/, '$1')).getTime();
+  return Number.isNaN(t) ? null : t;
+};
 
 /**
  * What the Practice Station takes up of a pair's saved work: who the pair is

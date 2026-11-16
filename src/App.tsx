@@ -27,12 +27,12 @@ import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
-import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef, getPeerDraft, clearPeerDrafts } from './services/offline/offlineStorage';
+import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef, getPeerDraft, clearPeerDrafts, clearPairWorkFromBefore } from './services/offline/offlineStorage';
 import { draftSummary, peerDraftId } from './utils/peerDraft';
 import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, glowGrowFor, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
-import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep } from './services/cloudSyncService';
+import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep, fetchPairRestartedAt } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
 import { focusCriteria, getAllCuesForSkill, getLessonCues, lessonGradingCues } from './data/peerSyllabusCues';
@@ -1138,6 +1138,16 @@ const App: React.FC = () => {
       setClaimedPairNumbers(nums);
       setCheckInModalKey((k) => k + 1); // remount the modal → back to SELECT_PAIR
       return;
+    }
+
+    // The teacher restarted this pair (#173): anything this iPad kept from
+    // before starts clean. The teacher still has all of it, as earlier work.
+    const restartedAt = await fetchPairRestartedAt(merged.lessonId, merged.pairNumber);
+    if (restartedAt) {
+      await clearPairWorkFromBefore(merged.lessonId, merged.pairNumber, restartedAt)
+        .catch(e => console.warn('[Pair] could not clear work from before the restart:', e));
+      setPairRecord(null);
+      setActivePairSubmission(null);
     }
 
     setActivePairSession(merged);
