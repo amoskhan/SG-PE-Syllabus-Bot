@@ -478,10 +478,16 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     }
   };
 
-  /** A new clip for this performer hasn't been saved yet, whatever the last one was. */
+  /**
+   * A new clip for this performer hasn't been saved or assessed yet, whatever the
+   * last one was: its ticks and glow and grow start empty, so the assessor
+   * assesses the clip that is kept (#160). The draft saves the cleared state.
+   */
   const newClip = (performer: 'Banana' | 'Apple') => {
-    if (performer === 'Banana') { setBananaSaveState('idle'); setBananaSavedUrl(undefined); saveTriesRef.current.banana = 0; }
-    else { setAppleSaveState('idle'); setAppleSavedUrl(undefined); saveTriesRef.current.apple = 0; }
+    if (performer === 'Banana') { setBananaSaveState('idle'); setBananaSavedUrl(undefined); saveTriesRef.current.banana = 0; setBananaCues({}); }
+    else { setAppleSaveState('idle'); setAppleSavedUrl(undefined); saveTriesRef.current.apple = 0; setAppleCues({}); }
+    setGlowGrowPicks((prev) => ({ ...prev, [performer]: {} }));
+    setCuesOpen(false);
   };
 
   const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>, performer: 'Banana' | 'Apple') => {
