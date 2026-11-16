@@ -17,9 +17,9 @@ import {
   putSubmission,
   getOrCreatePairClaimToken,
 } from '../../services/offline/offlineStorage';
-import { backupSubmissionToSupabase } from '../../services/cloudSyncService';
+import { backupSubmissionToSupabase, fetchPupilSubmission } from '../../services/cloudSyncService';
 import { uploadGuestVideo, uploadPeerSessionToTeacher } from '../../services/studentService';
-import { LOCKED_MESSAGE } from '../../utils/submissionLock';
+import { LOCKED_MESSAGE, performerLock } from '../../utils/submissionLock';
 import { poseDetectionService } from '../../services/vision/poseDetectionService';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 import { GlowGrowPicks, GlowGrowSetting, SavedGlowGrow, glowGrowAfterSend, glowGrowCard, glowGrowToSend, pairGlowGrow } from '../../utils/glowGrow';
@@ -682,6 +682,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     // has none, so an earlier one never stays under these ticks
     const glowGrowSent = glowGrowToSend(glowGrowToSave, ticksSent);
     const cloudUrls: { apple?: string; banana?: string } = { banana: bananaAlready, apple: appleAlready };
+    const subId = `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+    let teacherCopy: Parameters<typeof glowGrowAfterSend>[2];
     try {
       // ── Cloud upload (teacher always provides teacherId via QR scan) ────────
       if (teacherId) {
@@ -716,6 +718,17 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           console.log('[Submit] Cloud upload complete ✓ banana:', result.bananaVideoUrl, 'apple:', result.appleVideoUrl);
           cloudUrls.banana = result.bananaVideoUrl ?? bananaAlready;
           cloudUrls.apple = result.appleVideoUrl ?? appleAlready;
+          // What the teacher now has: a locked performer's glow and grow wasn't changed (#161)
+          const copy = await fetchPupilSubmission(subId, getOrCreatePairClaimToken(lessonId)).catch(() => null);
+          if (copy) {
+            teacherCopy = {
+              glowGrow: copy.glowGrow,
+              locked: {
+                apple: performerLock(copy.appleSentAt, copy.redoRequestedAt) === 'locked',
+                banana: performerLock(copy.bananaSentAt, copy.redoRequestedAt) === 'locked',
+              },
+            };
+          }
         }
       } else {
         console.warn('[Submit] No teacherId — QR was not scanned. Saving locally only.');
@@ -725,7 +738,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       // Keeps anything already on this device for the pair (Practice Station
       // analyses, a first attempt) and the cloud links, so a clip is never
       // uploaded twice (see backupSubmissionToSupabase).
-      const id = `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+      const id = subId;
       const previous = (await getSubmission(id)) as PairSubmissionRecord | undefined;
       const submission: PairSubmissionRecord = {
         ...previous,
@@ -750,7 +763,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         },
         // Per performer, as the teacher's copy merges it: one given now replaces
         // the one before, and one cleared is removed here too
-        glowGrow: glowGrowAfterSend(previous?.glowGrow, glowGrowSent),
+        glowGrow: glowGrowAfterSend(previous?.glowGrow, glowGrowSent, teacherCopy),
         status: previous?.status ?? 'pending_sync',
         createdAt: previous?.createdAt ?? new Date().toISOString(),
       };
