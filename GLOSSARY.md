@@ -76,8 +76,12 @@ _Avoid_: Seesaw tray
 The pupil-facing name for an assess step that uses AI analysis: where each pupil gets one analysis of their clip per lesson and may ask the AI up to five questions about it.
 
 **PE AI Buddy**:
-The name pupils see for the AI that analyses their clips and answers their questions.
+The name pupils see for the AI that analyses their clips and answers their questions. Pupils only: teachers know the same AI as the SG PE Syllabus Bot.
 _Avoid_: Coach Bot, AI teacher, coach
+
+**SG PE Syllabus Bot**:
+The name teachers see for the AI that answers their syllabus questions and analyses movement videos.
+_Avoid_: PE AI Buddy (when speaking to a teacher), chatbot
 
 **Practice Station Conversation**:
 Everything a pupil asked the AI in the Practice Station and every answer it gave; the teacher can read all of it, the pupil is always told so, and it is filed under that student's record.

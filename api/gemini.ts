@@ -14,17 +14,37 @@ const MAX_OUTPUT_TOKENS = 2000;
 const MAX_HISTORY = 60;
 
 // Flash first; Flash-Lite has its own free quota, so it answers when Flash's
-// is used up (429), Flash stays busy (503) or Google has retired it (404).
-// The "-latest" names follow Google's current models, so a retired version
-// (as gemini-2.5-flash-lite was for new keys) doesn't stop the bot.
+// is used up (429), Flash stays busy (503), doesn't answer in time (504) or
+// Google has retired it (404).
+// Pinned versions, not the "-latest" aliases: Google moved gemini-flash-latest
+// to a model that hung without answering (#164). gemini-3.5-flash took 23-27s
+// per answer that day, so the Gemini 3 preview goes first. When Google retires
+// a pinned version (404), Flash-Lite answers until the name here is updated.
 // Flash thinks first unless told not to; Flash-Lite doesn't think, and refuses
 // the setting (400), so only Flash is sent it.
 const MODELS = [
-    { name: 'gemini-flash-latest', thinks: true },
-    { name: 'gemini-flash-lite-latest', thinks: false },
+    { name: 'gemini-3-flash-preview', thinks: true },
+    { name: 'gemini-3.5-flash-lite', thinks: false },
 ];
-// Worth trying the next model: quota used up, busy, or the model is gone
-const TRY_NEXT = [429, 503, 404];
+// Worth trying the next model: quota used up, busy, too slow, or the model is gone
+const TRY_NEXT = [429, 503, 504, 404];
+
+// A model that hasn't answered in 20 seconds is treated as unavailable, so
+// both models together (40s) still answer inside the browser's 60s limit
+const MODEL_TIMEOUT_MS = 20_000;
+const TOO_SLOW = 'The AI took too long to answer. Please try again in a moment.';
+/** The model's answer, or a 504 error if it hasn't come in time. */
+const withinTimeLimit = <T>(request: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+            controller.abort();
+            reject(Object.assign(new Error(TOO_SLOW), { status: 504 }));
+        }, MODEL_TIMEOUT_MS);
+    });
+    return Promise.race([request(controller.signal), timedOut]).finally(() => clearTimeout(timer));
+};
 
 // Google's servers have moments of "high demand" (503) that pass within a
 // second or two, so a 503 is tried again before giving up.
@@ -94,9 +114,10 @@ export default async function handler(req: any, res: any) {
         // Text questions don't need it; motion analysis (video frames) keeps it.
         const hasImages = Array.isArray(message) && message.some((part: any) => part?.inlineData);
 
-        const send = ({ name, thinks }: (typeof MODELS)[number]) => ai.chats.create({
+        const send = ({ name, thinks }: (typeof MODELS)[number]) => withinTimeLimit((abortSignal) => ai.chats.create({
             model: name,
             config: {
+                abortSignal,
                 systemInstruction: systemInstruction,
                 tools: onlySearchTool(tools),
                 temperature: 0.3,
@@ -107,7 +128,7 @@ export default async function handler(req: any, res: any) {
         maxOutputTokens: typeof maxOutputTokens === 'number' ? Math.min(Math.max(maxOutputTokens, 1), MAX_OUTPUT_TOKENS) : 1200,
             },
             history: history || []
-        }).sendMessage({ message }); // text, or multipart for images
+        }).sendMessage({ message })); // text, or multipart for images
 
         const sendWithRetry = async (model: (typeof MODELS)[number]) => {
             for (let attempt = 0; ; attempt++) {
@@ -172,6 +193,9 @@ export default async function handler(req: any, res: any) {
                 error: `PE AI Buddy is busy right now. Try again in ${seconds ? `about ${seconds} seconds` : 'a minute'}.`,
                 retryAfterSeconds: seconds,
             });
+        }
+        if (geminiStatus === 504) {
+            return res.status(504).json({ error: TOO_SLOW });
         }
         const httpStatus = geminiStatus === 429 ? 429
             : geminiStatus === 401 || geminiStatus === 403 ? 401
