@@ -187,10 +187,12 @@ export default async function handler(req: any, res: any) {
 
         // Forward the real HTTP status from Gemini if available (e.g. 429, 401)
         const geminiStatus = statusOf(error);
+        // Pupils never reach Gemini (they use /api/claude), so this names the
+        // teachers' bot, not PE AI Buddy (#165)
         if (geminiStatus === 429) {
             const seconds = retryAfterSeconds(error);
             return res.status(429).json({
-                error: `PE AI Buddy is busy right now. Try again in ${seconds ? `about ${seconds} seconds` : 'a minute'}.`,
+                error: `SG PE Syllabus Bot is busy right now. Try again in ${seconds ? `about ${seconds} seconds` : 'a minute'}.`,
                 retryAfterSeconds: seconds,
             });
         }
