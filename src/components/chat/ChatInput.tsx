@@ -174,10 +174,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isListening ? 'Listening…' : 'Ask your coach…'}
+          placeholder={isListening ? 'Listening…' : 'Ask PE AI Buddy…'}
           disabled={isLoading}
           enterKeyHint="send"
-          aria-label="Ask your AI coach a question"
+          aria-label="Ask PE AI Buddy a question"
           // 16px text stops iPhone Safari zooming in when the box is tapped
           className="flex-1 min-w-0 py-2.5 bg-transparent text-slate-900 dark:text-white resize-none focus:outline-none disabled:opacity-50 text-[16px] leading-snug placeholder-slate-400 [&::-webkit-scrollbar]:hidden"
           rows={1}

@@ -2,8 +2,11 @@ import { getSkillCues } from "../../data/peerSyllabusCues";
 import { claudeAccessHeaders, PupilAiRequest } from "./aiAccess";
 import { Level, normaliseLevel } from "../../utils/gradingReview";
 
-// Matches claudeService.ts. Haiku is enough here: four short, tightly
-// formatted calls over 4 frames each, not a full rubric grading.
+// The AI Peer Check (GLOSSARY.md, #177): an automatic look at a pair's clips
+// when they finish a peer assessment, for the teacher only. Pupils get their
+// feedback from PE AI Buddy's analysis, never from this.
+// Matches claudeService.ts. Haiku is enough here: one short, tightly
+// formatted call per performer over 4 frames, not a full rubric grading.
 const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 
 type ClaudeBlock =
@@ -11,15 +14,12 @@ type ClaudeBlock =
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
 
 export interface PeerCoachingAIResult {
-  studentFeedback: {
-    bananaFeedback: string;
-    appleFeedback: string;
-  };
   teacherReport: {
     bananaAnalysis: string;
     appleAnalysis: string;
-    bananaProficiency: Level;
-    appleProficiency: Level;
+    // Only where the AI named a level: never filled in for it
+    bananaProficiency?: Level;
+    appleProficiency?: Level;
     teacherRecommendations: string;
     discrepancies: Array<{
       criterion: string;
@@ -114,7 +114,6 @@ async function callClaude(blocks: ClaudeBlock[], access?: PupilAiRequest): Promi
   return data.text || "";
 }
 
-const cleanProficiency = (p: string): Level => normaliseLevel(p) ?? "Developing";
 
 const parseTeacherReport = (rawText: string) => {
   try {
@@ -122,11 +121,12 @@ const parseTeacherReport = (rawText: string) => {
     const parsed = JSON.parse(cleaned);
     return {
       criteriaScores: Array.isArray(parsed.criteriaScores) ? parsed.criteriaScores : [],
-      proficiency: parsed.proficiency || "Developing",
+      proficiency: normaliseLevel(String(parsed.proficiency ?? "")) ?? undefined,
       teacherNotes: parsed.teacherNotes || rawText,
     };
   } catch {
-    return { criteriaScores: [], proficiency: "Developing", teacherNotes: rawText || "Analysis not available." };
+    // Not the JSON asked for: its words are still the AI's, but it named no level
+    return { criteriaScores: [], proficiency: undefined, teacherNotes: rawText };
   }
 };
 
@@ -147,7 +147,7 @@ export async function runPeerCoachingAnalysis(
   focus: string[] = [],
   // A gymnastics lesson's own cues (#150): graded in place of the skill's checklist
   gradeOn?: string[]
-): Promise<PeerCoachingAIResult> {
+): Promise<PeerCoachingAIResult | null> {
   const access: PupilAiRequest | undefined = pair && { ...pair, performer: "pair", purpose: "peer_feedback" };
   const cues = getSkillCues(skillName);
   const criteriaList = gradeOn?.length
@@ -163,18 +163,6 @@ export async function runPeerCoachingAnalysis(
   // The AI judges from the video alone and never sees the pupils' ticks
   // (docs/adr/0001-ai-never-sees-peer-ticks.md). The ticks are compared with
   // its verdict afterwards, below, to show the teacher where they disagree.
-  const buildStudentParts = (performer: "Apple" | "Banana", frames: string[]): ClaudeBlock[] => [
-    ...frames.map(frameToClaudeBlock).filter((b): b is ClaudeBlock => b !== null),
-    {
-      type: "text",
-      text: `You are a super encouraging PE coach for Singapore primary school students (age 8-12).
-Skill: ${skillName}. You can see ${performer}'s movement frames above.
-${focus.length ? `This lesson's focus: ${focus.join("; ")}. Make the praise or the tip about one of these if you can.\n` : ""}
-Give ${performer} exactly 1 PRAISE and 1 TIP. Max 2 sentences. Simple words. End with 1 emoji. No rubrics or jargon.
-Format: [praise]. [tip] [emoji]`
-    }
-  ];
-
   const buildTeacherParts = (performer: "Apple" | "Banana", frames: string[]): ClaudeBlock[] => [
     ...frames.map(frameToClaudeBlock).filter((b): b is ClaudeBlock => b !== null),
     {
@@ -198,20 +186,19 @@ Proficiency: Beginning(0-30%), Developing(31-60%), Competent(61-85%), Accomplish
   const ask = (frames: string[], parts: ClaudeBlock[]) =>
     frames.length > 0 ? callClaude(parts, access) : Promise.resolve("");
 
-  const [bananaStudentResult, appleStudentResult, bananaTeacherResult, appleTeacherResult] =
+  const [bananaTeacherResult, appleTeacherResult] =
     await Promise.allSettled([
-      ask(bananaFrames, buildStudentParts("Banana", bananaFrames)),
-      ask(appleFrames, buildStudentParts("Apple", appleFrames)),
       ask(bananaFrames, buildTeacherParts("Banana", bananaFrames)),
       ask(appleFrames, buildTeacherParts("Apple", appleFrames)),
     ]);
 
   onProgress?.("Building your coaching report...");
 
-  const bananaStudentText = extractText(bananaStudentResult) || `Great effort Banana! Keep practising your ${skillName}! ??`;
-  const appleStudentText = extractText(appleStudentResult) || `Awesome work Apple! You are improving with every try! ??`;
-  const bananaTeacherRaw = extractText(bananaTeacherResult);
-  const appleTeacherRaw = extractText(appleTeacherResult);
+  const bananaTeacherRaw = extractText(bananaTeacherResult).trim();
+  const appleTeacherRaw = extractText(appleTeacherResult).trim();
+  // The AI gave nothing (unavailable, or no frames): nothing is saved, so the
+  // teacher sees no result rather than an invented one
+  if (!bananaTeacherRaw && !appleTeacherRaw) return null;
   const bananaReport = parseTeacherReport(bananaTeacherRaw);
   const appleReport = parseTeacherReport(appleTeacherRaw);
 
@@ -231,17 +218,16 @@ Proficiency: Beginning(0-30%), Developing(31-60%), Competent(61-85%), Accomplish
   });
 
   const teacherRecommendations = [
-    bananaReport.teacherNotes ? `?? Banana: ${bananaReport.teacherNotes}` : null,
-    appleReport.teacherNotes ? `?? Apple: ${appleReport.teacherNotes}` : null,
-  ].filter(Boolean).join("\n\n") || "Continue practising with guided peer feedback.";
+    bananaReport.teacherNotes ? `🍌 Banana: ${bananaReport.teacherNotes}` : null,
+    appleReport.teacherNotes ? `🍎 Apple: ${appleReport.teacherNotes}` : null,
+  ].filter(Boolean).join("\n\n");
 
   return {
-    studentFeedback: { bananaFeedback: bananaStudentText, appleFeedback: appleStudentText },
     teacherReport: {
       bananaAnalysis: bananaTeacherRaw,
       appleAnalysis: appleTeacherRaw,
-      bananaProficiency: cleanProficiency(bananaReport.proficiency),
-      appleProficiency: cleanProficiency(appleReport.proficiency),
+      bananaProficiency: bananaReport.proficiency,
+      appleProficiency: appleReport.proficiency,
       teacherRecommendations,
       discrepancies,
     },

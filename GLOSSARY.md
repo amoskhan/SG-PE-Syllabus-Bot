@@ -79,6 +79,10 @@ The pupil-facing name for an assess step that uses AI analysis: where each pupil
 The name pupils see for the AI that analyses their clips and answers their questions. Pupils only: teachers know the same AI as the SG PE Syllabus Bot.
 _Avoid_: Coach Bot, AI teacher, coach
 
+**AI Peer Check**:
+An automatic AI look at a pair's clips when they finish a peer assessment, shown to the teacher only, next to the pair's peer ticks, so the teacher can spot where the AI and the assessor disagree. It never gives pupils feedback or a level.
+_Avoid_: AI Coach Feedback, AI analysis (that is PE AI Buddy's)
+
 **SG PE Syllabus Bot**:
 The name teachers see for the AI that answers their syllabus questions and analyses movement videos.
 _Avoid_: PE AI Buddy (when speaking to a teacher), chatbot
