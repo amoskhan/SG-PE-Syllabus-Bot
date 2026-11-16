@@ -123,6 +123,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const [applePoseFrames, setApplePoseFrames] = useState<string[]>([]);
 
   const [isSaving, setIsSaving] = useState(false);
+  // The last "Save our videos" didn't reach the teacher (offline or too slow, #163)
+  const [sendFailed, setSendFailed] = useState(false);
   const [isOfflineSaved, setIsOfflineSaved] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Per-video cloud save state — tracks "Save to Teacher" button independent of full peer-assessment flow
@@ -662,6 +664,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const handleSubmitSession = async () => {
     setIsSaving(true);
     setSubmitError(null);
+    setSendFailed(false);
 
     const mapCues = (rated: Record<string, boolean>): PeerCueResult[] =>
       displayedCues.map((c) => ({
@@ -710,7 +713,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           setSubmitError(`Pair ${pairNumber} is already in use by another group. Ask your teacher to clear it, or check in again with a different pair number.`);
           console.warn('[Submit] uploadPeerSessionToTeacher blocked — pair claimed by another group');
         } else if (!result.success) {
-          setSubmitError('Video uploaded but could not reach teacher dashboard. Please check your connection and try again.');
+          setSubmitError("Your work is saved on this iPad, but your teacher hasn't got it yet. Check the Wi-Fi, then tap 🔄 Send again.");
+          setSendFailed(true);
           console.warn('[Submit] uploadPeerSessionToTeacher returned success=false');
         } else {
           console.log('[Submit] Cloud upload complete ✓ banana:', result.bananaVideoUrl, 'apple:', result.appleVideoUrl);
@@ -1388,6 +1392,17 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 <span className="text-base shrink-0">⚠️</span>
                 <span>{submitError}</span>
               </div>
+            )}
+
+            {sendFailed && teacherId && (
+              <button
+                type="button"
+                onClick={handleSubmitSession}
+                disabled={isSaving}
+                className="mb-2 w-full py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-black rounded-2xl text-sm shadow-lg cursor-pointer"
+              >
+                {isSaving ? '🔄 Sending…' : '🔄 Send again'}
+              </button>
             )}
 
             {isOfflineSaved && (

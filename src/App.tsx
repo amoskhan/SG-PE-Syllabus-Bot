@@ -859,6 +859,12 @@ const App: React.FC = () => {
       setTeacherFeedbackBanner(LOCKED_MESSAGE);
       return;
     }
+    if (sent.failed) {
+      // Offline or too slow (#163): kept on the iPad, and the button stays to send it again
+      await loadPairRecord();
+      addPracticeMessage(`⚠️ ${performer}'s final recording is saved on this iPad, but your teacher hasn't got it yet. Check the Wi-Fi, then tap **📤 Submit final** again.`, true);
+      return;
+    }
     await loadPairRecord();
     const fresh = await fetchPupilSubmission(record.id, getOrCreatePairClaimToken(ctx.lessonId));
     if (fresh) setActivePairSubmission(fresh);
