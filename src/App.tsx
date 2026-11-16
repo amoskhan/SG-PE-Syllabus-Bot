@@ -2200,8 +2200,9 @@ const App: React.FC = () => {
       // The server's own words to pupils (Practice Station limits, lesson pass) read best as they are
       if (/^You've |ask your teacher/i.test(rawError)) {
         errorText = `⚠️ ${rawError}`;
-      } else if (/PE AI Buddy is busy/.test(rawError)) {
-        // Every Gemini model's free quota is used up: the server says when to try again
+      } else if (/SG PE Syllabus Bot is busy/.test(rawError)) {
+        // Every Gemini model's free quota is used up: the server says when to try again.
+        // Only teachers use Gemini (pupils go through Claude), so it names the teachers' bot (#165)
         errorText = `⚠️ ${rawError.replace(/^\d+:\s*/, '')}`;
       } else if (failedPerformer) {
         errorText = `⚠️ PE AI Buddy can't analyse ${failedPerformer} right now. You can still tap 📤 Submit final, and your teacher will grade it.`;
