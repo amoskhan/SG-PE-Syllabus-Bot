@@ -296,4 +296,16 @@ describe("what is sent with a performer's peer ticks", () => {
     expect(glowGrowAfterSend(undefined, { banana: other })).toEqual({ banana: other });
     expect(glowGrowAfterSend(undefined, undefined)).toBeUndefined();
   });
+
+  it("keeps a locked performer's glow and grow as the teacher has it, since the database ignores changes to it (#161)", () => {
+    // Apple's work is locked: the teacher still has `said`, whatever this device sent
+    const teacher = { glowGrow: { apple: said }, locked: { apple: true, banana: false } };
+    expect(glowGrowAfterSend({ apple: said }, { apple: other, banana: other }, teacher)).toEqual({ apple: said, banana: other });
+    // Cleared on this device (Glow and Grow now off): the teacher's stays
+    expect(glowGrowAfterSend({ apple: said }, { apple: null }, teacher)).toEqual({ apple: said });
+    // The teacher has none for a locked performer: none here either
+    expect(glowGrowAfterSend({ apple: said }, { apple: other }, { glowGrow: undefined, locked: { apple: true, banana: false } })).toBeUndefined();
+    // Nobody locked: as before
+    expect(glowGrowAfterSend({ apple: said }, { apple: other }, { glowGrow: { apple: said }, locked: { apple: false, banana: false } })).toEqual({ apple: other });
+  });
 });
