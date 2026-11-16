@@ -446,6 +446,46 @@ export async function upsertPairCheckIn(params: {
  * Removes only the pair_sessions row; any practice submission is deleted separately
  * from the Review Tray.
  */
+/**
+ * The teacher restarts a pair (#173, ADR 0003): their work so far is set aside
+ * as earlier work, the pair number is freed and their check-in cleared.
+ * 'unavailable' until supabase_restart_pair.sql is run (or offline): the
+ * caller then clears only the check-in, as before.
+ */
+export async function restartPair(lessonId: string, pairNumber: number): Promise<"ok" | "not_yours" | "unavailable"> {
+  try {
+    const { data, error } = await supabase.rpc("teacher_restart_pair", { p_lesson_id: lessonId, p_pair_number: pairNumber });
+    if (error) {
+      console.warn("[CloudSync] teacher_restart_pair unavailable:", error);
+      return "unavailable";
+    }
+    return data === "not_yours" ? "not_yours" : "ok";
+  } catch (e) {
+    console.warn("[CloudSync] teacher_restart_pair failed:", e);
+    return "unavailable";
+  }
+}
+
+/** The teacher removes one earlier go; its gradings stay on the students' records. */
+export async function removeEarlierWork(submissionId: string, restartedAt: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("teacher_remove_earlier_work", { p_id: submissionId, p_restarted_at: restartedAt });
+  if (error) console.error("[CloudSync] teacher_remove_earlier_work error:", error);
+  return !error && data === "ok";
+}
+
+/** When this pair last restarted (null if never, or before supabase_restart_pair.sql is run). */
+export async function fetchPairRestartedAt(lessonId: string, pairNumber: number): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.rpc("pupil_pair_restarted_at", {
+      p_lesson_id: lessonId, p_pass: getLessonPass(lessonId), p_pair_number: pairNumber,
+    });
+    if (error) return null;
+    return typeof data === "string" ? data : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function deletePairCheckIn(lessonId: string, pairNumber: number): Promise<void> {
   try {
     const { error } = await supabase
