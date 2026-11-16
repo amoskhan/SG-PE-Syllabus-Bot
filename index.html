@@ -16,6 +16,10 @@
       darkMode: 'class',
       theme: {
         extend: {
+          // Source Sans 3 is Source Sans Pro's current name (#175)
+          fontFamily: {
+            sans: ['"Source Sans 3"', '"Source Sans Pro"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          },
           boxShadow: {
             soft: '0 10px 30px rgba(2, 6, 23, 0.08)',
           }
@@ -23,7 +27,10 @@
       }
     }
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- 300–900: the app uses font-extrabold (800) and font-black (900) -->
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
   <style>
     :root{
       color-scheme: light;
@@ -32,7 +39,7 @@
       color-scheme: dark;
     }
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Source Sans 3', 'Source Sans Pro', ui-sans-serif, system-ui, sans-serif;
     }
 
     /* Custom scrollbar for cleaner look */
