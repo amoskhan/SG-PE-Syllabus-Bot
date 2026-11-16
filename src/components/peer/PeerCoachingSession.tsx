@@ -17,9 +17,9 @@ import {
   putSubmission,
   getOrCreatePairClaimToken,
 } from '../../services/offline/offlineStorage';
-import { backupSubmissionToSupabase } from '../../services/cloudSyncService';
+import { backupSubmissionToSupabase, fetchPupilSubmission } from '../../services/cloudSyncService';
 import { uploadGuestVideo, uploadPeerSessionToTeacher } from '../../services/studentService';
-import { LOCKED_MESSAGE } from '../../utils/submissionLock';
+import { LOCKED_MESSAGE, performerLock } from '../../utils/submissionLock';
 import { poseDetectionService } from '../../services/vision/poseDetectionService';
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 import { GlowGrowPicks, GlowGrowSetting, SavedGlowGrow, glowGrowAfterSend, glowGrowCard, glowGrowToSend, pairGlowGrow } from '../../utils/glowGrow';
@@ -123,6 +123,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const [applePoseFrames, setApplePoseFrames] = useState<string[]>([]);
 
   const [isSaving, setIsSaving] = useState(false);
+  // The last "Save our videos" didn't reach the teacher (offline or too slow, #163)
+  const [sendFailed, setSendFailed] = useState(false);
   const [isOfflineSaved, setIsOfflineSaved] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Per-video cloud save state — tracks "Save to Teacher" button independent of full peer-assessment flow
@@ -478,10 +480,16 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     }
   };
 
-  /** A new clip for this performer hasn't been saved yet, whatever the last one was. */
+  /**
+   * A new clip for this performer hasn't been saved or assessed yet, whatever the
+   * last one was: its ticks and glow and grow start empty, so the assessor
+   * assesses the clip that is kept (#160). The draft saves the cleared state.
+   */
   const newClip = (performer: 'Banana' | 'Apple') => {
-    if (performer === 'Banana') { setBananaSaveState('idle'); setBananaSavedUrl(undefined); saveTriesRef.current.banana = 0; }
-    else { setAppleSaveState('idle'); setAppleSavedUrl(undefined); saveTriesRef.current.apple = 0; }
+    if (performer === 'Banana') { setBananaSaveState('idle'); setBananaSavedUrl(undefined); saveTriesRef.current.banana = 0; setBananaCues({}); }
+    else { setAppleSaveState('idle'); setAppleSavedUrl(undefined); saveTriesRef.current.apple = 0; setAppleCues({}); }
+    setGlowGrowPicks((prev) => ({ ...prev, [performer]: {} }));
+    setCuesOpen(false);
   };
 
   const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>, performer: 'Banana' | 'Apple') => {
@@ -662,6 +670,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   const handleSubmitSession = async () => {
     setIsSaving(true);
     setSubmitError(null);
+    setSendFailed(false);
 
     const mapCues = (rated: Record<string, boolean>): PeerCueResult[] =>
       displayedCues.map((c) => ({
@@ -682,6 +691,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
     // has none, so an earlier one never stays under these ticks
     const glowGrowSent = glowGrowToSend(glowGrowToSave, ticksSent);
     const cloudUrls: { apple?: string; banana?: string } = { banana: bananaAlready, apple: appleAlready };
+    const subId = `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+    let teacherCopy: Parameters<typeof glowGrowAfterSend>[2];
     try {
       // ── Cloud upload (teacher always provides teacherId via QR scan) ────────
       if (teacherId) {
@@ -710,12 +721,24 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           setSubmitError(`Pair ${pairNumber} is already in use by another group. Ask your teacher to clear it, or check in again with a different pair number.`);
           console.warn('[Submit] uploadPeerSessionToTeacher blocked — pair claimed by another group');
         } else if (!result.success) {
-          setSubmitError('Video uploaded but could not reach teacher dashboard. Please check your connection and try again.');
+          setSubmitError("Your work is saved on this iPad, but your teacher hasn't got it yet. Check the Wi-Fi, then tap 🔄 Send again.");
+          setSendFailed(true);
           console.warn('[Submit] uploadPeerSessionToTeacher returned success=false');
         } else {
           console.log('[Submit] Cloud upload complete ✓ banana:', result.bananaVideoUrl, 'apple:', result.appleVideoUrl);
           cloudUrls.banana = result.bananaVideoUrl ?? bananaAlready;
           cloudUrls.apple = result.appleVideoUrl ?? appleAlready;
+          // What the teacher now has: a locked performer's glow and grow wasn't changed (#161)
+          const copy = await fetchPupilSubmission(subId, getOrCreatePairClaimToken(lessonId)).catch(() => null);
+          if (copy) {
+            teacherCopy = {
+              glowGrow: copy.glowGrow,
+              locked: {
+                apple: performerLock(copy.appleSentAt, copy.redoRequestedAt) === 'locked',
+                banana: performerLock(copy.bananaSentAt, copy.redoRequestedAt) === 'locked',
+              },
+            };
+          }
         }
       } else {
         console.warn('[Submit] No teacherId — QR was not scanned. Saving locally only.');
@@ -725,7 +748,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
       // Keeps anything already on this device for the pair (Practice Station
       // analyses, a first attempt) and the cloud links, so a clip is never
       // uploaded twice (see backupSubmissionToSupabase).
-      const id = `sub-${lessonId}-p${pairNumber}-${skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+      const id = subId;
       const previous = (await getSubmission(id)) as PairSubmissionRecord | undefined;
       const submission: PairSubmissionRecord = {
         ...previous,
@@ -750,7 +773,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         },
         // Per performer, as the teacher's copy merges it: one given now replaces
         // the one before, and one cleared is removed here too
-        glowGrow: glowGrowAfterSend(previous?.glowGrow, glowGrowSent),
+        glowGrow: glowGrowAfterSend(previous?.glowGrow, glowGrowSent, teacherCopy),
         status: previous?.status ?? 'pending_sync',
         createdAt: previous?.createdAt ?? new Date().toISOString(),
       };
@@ -1388,6 +1411,17 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 <span className="text-base shrink-0">⚠️</span>
                 <span>{submitError}</span>
               </div>
+            )}
+
+            {sendFailed && teacherId && (
+              <button
+                type="button"
+                onClick={handleSubmitSession}
+                disabled={isSaving}
+                className="mb-2 w-full py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-black rounded-2xl text-sm shadow-lg cursor-pointer"
+              >
+                {isSaving ? '🔄 Sending…' : '🔄 Send again'}
+              </button>
             )}
 
             {isOfflineSaved && (

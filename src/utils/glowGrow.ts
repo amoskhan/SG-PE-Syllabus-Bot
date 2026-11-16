@@ -125,10 +125,24 @@ export const glowGrowToSend = (
  * This device's record once `sent` has gone to the teacher, merged as the
  * teacher's copy merges it: a performer's entry replaces the one before, a
  * clear removes it, and a performer who wasn't sent keeps theirs.
+ *
+ * The database ignores a change to a locked performer's glow and grow (the
+ * rest still saves), so with the teacher's copy at hand a locked performer's
+ * entry is taken from it, and Our progress matches the Review Tray (#161).
  */
-export const glowGrowAfterSend = (previous: unknown, sent: PairGlowGrowToSend | undefined): PairGlowGrow | undefined => {
+export const glowGrowAfterSend = (
+  previous: unknown,
+  sent: PairGlowGrowToSend | undefined,
+  teacher?: { glowGrow: unknown; locked: Record<'apple' | 'banana', boolean> },
+): PairGlowGrow | undefined => {
   const kept = { ...readPairGlowGrow(previous) };
+  const teachers = readPairGlowGrow(teacher?.glowGrow);
   for (const k of ['apple', 'banana'] as const) {
+    if (teacher?.locked[k]) {
+      if (teachers?.[k]) kept[k] = teachers[k];
+      else delete kept[k];
+      continue;
+    }
     const entry = sent?.[k];
     if (entry) kept[k] = entry;
     else if (entry === null) delete kept[k];
