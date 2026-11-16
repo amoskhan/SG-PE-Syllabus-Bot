@@ -1,6 +1,6 @@
 import { supabase } from './db/supabaseClient';
 import { Student, SkillAnalysis } from '../types';
-import { savePupilSubmission } from './cloudSyncService';
+import { savePupilSubmission, uploadClipWithinLimit } from './cloudSyncService';
 import type { PairGlowGrowToSend } from '../utils/glowGrow';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -159,9 +159,7 @@ export const uploadGuestVideo = async (
 ): Promise<string | null> => {
     const safeName = skillName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const path = `${teacherId}/pair_submissions/${lessonId}/pair_${pairNumber}/${performer}_${safeName}_${Date.now()}.mp4`;
-    const { error } = await supabase.storage
-        .from('student-videos')
-        .upload(path, blob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
+    const { error } = await uploadClipWithinLimit(path, blob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
     if (error) { console.error('[GuestUpload] error:', error); return null; }
     // The bucket is private: this URL just records where the file is. The teacher's
     // board turns it into a short-lived signed link to play it.
@@ -225,9 +223,7 @@ export const uploadPeerSessionToTeacher = async (params: {
   if (bananaBlob && bananaBlob.size > 0) {
     const path = `${teacherId}/pair_submissions/${lessonId}/pair_${pairNumber}/banana_${safeName}_${ts}.mp4`;
     console.log('[Upload] Uploading banana video to:', path, 'size:', bananaBlob.size);
-    const { error } = await supabase.storage
-      .from('student-videos')
-      .upload(path, bananaBlob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
+    const { error } = await uploadClipWithinLimit(path, bananaBlob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
     if (error) {
       console.error('[Upload] Banana video upload FAILED:', error.message, error);
     } else {
@@ -241,9 +237,7 @@ export const uploadPeerSessionToTeacher = async (params: {
   if (appleBlob && appleBlob.size > 0) {
     const path = `${teacherId}/pair_submissions/${lessonId}/pair_${pairNumber}/apple_${safeName}_${ts}.mp4`;
     console.log('[Upload] Uploading apple video to:', path, 'size:', appleBlob.size);
-    const { error } = await supabase.storage
-      .from('student-videos')
-      .upload(path, appleBlob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
+    const { error } = await uploadClipWithinLimit(path, appleBlob, { cacheControl: '3600', upsert: false, contentType: 'video/mp4' });
     if (error) {
       console.error('[Upload] Apple video upload FAILED:', error.message, error);
     } else {

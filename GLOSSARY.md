@@ -61,7 +61,7 @@ The pupil watching the performer and ticking cues; the two pupils in a pair take
 _Avoid_: Coach, partner
 
 **Check-in**:
-A pair announcing it is present and ready (with a pair photo) before practice begins.
+A pair announcing it is present and ready (with a pair photo) before practice begins. The teacher can clear it, which frees the pair number for the same pair on any device and leads to a restart; it never removes work.
 _Avoid_: Pair session
 
 **Classroom Board**:
@@ -96,6 +96,10 @@ The single piece of work a pair hands to the teacher in a lesson, holding both p
 **Final Submission**:
 A performer's last send to the teacher: their chosen clip, the peer checklist for it and, in a lesson that uses AI analysis, the analysis of their first attempt. Before it, each performer may film again once; the teacher sees every attempt.
 _Avoid_: Send to teacher (for any earlier save)
+
+**Restart**:
+A pair starting a lesson's work again after the teacher clears their check-in; everything from before is kept for the teacher, with its locks and grades, until the teacher removes it.
+_Avoid_: Redo (that is a redo request), reset
 
 **Redo Request**:
 The teacher's green light for a pair to try again; each performer sees their earlier attempt and chooses to keep it or film again, and a new attempt replaces the old one.

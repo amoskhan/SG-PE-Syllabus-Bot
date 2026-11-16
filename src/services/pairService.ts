@@ -87,6 +87,20 @@ export const copyPairs = async (fromLessonId: string, toLessonId: string, pairCo
  * oldest first: the first attempt, then one per re-do (#93). The last is the
  * one to review; the earlier ones are the pupil's progress.
  */
+/** The gradings of a pair's earlier work (#173), oldest first, by performer. */
+export const fetchGradingsByIds = async (ids: string[]): Promise<Partial<Record<Performer, SkillAnalysis[]>>> => {
+  if (!ids.length) return {};
+  const { data, error } = await supabase.from('skill_analyses').select('*').in('id', ids).order('created_at', { ascending: true });
+  if (error) { console.error('fetchGradingsByIds error:', error); return {}; }
+  const out: Partial<Record<Performer, SkillAnalysis[]>> = {};
+  for (const row of data ?? []) {
+    if (row.performer === 'apple' || row.performer === 'banana') {
+      (out[row.performer as Performer] ??= []).push(mapAnalysis(row));
+    }
+  }
+  return out;
+};
+
 export const fetchSubmissionGradings = async (submissionId: string): Promise<Partial<Record<Performer, SkillAnalysis[]>>> => {
   const { data, error } = await supabase.from('skill_analyses').select('*')
     .eq('submission_id', submissionId).order('created_at', { ascending: true });

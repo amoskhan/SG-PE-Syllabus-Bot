@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { firstAttemptsToSend, mapRowToSubmission, noAnalysisChecklistText, performerStage, performerWork, PerformerWork, recordGlowGrowToSend, redoChecklistText, withRefilm } from './pairWork';
+import { firstAttemptsToSend, fromBeforeRestart, mapRowToSubmission, noAnalysisChecklistText, performerStage, performerWork, PerformerWork, recordGlowGrowToSend, redoChecklistText, withRefilm } from './pairWork';
 import { parseAiCriteria } from './gradingReview';
 import type { PairSubmissionRecord } from '../services/offline/offlineStorage';
 
@@ -246,5 +246,49 @@ describe('redoChecklistText', () => {
 
     it('reads the same way when PE AI Buddy could not analyse', () => {
         expect(parseAiCriteria(noAnalysisChecklistText(['Face the target']))).toEqual([{ name: 'Face the target', result: 'unsure' }]);
+    });
+});
+
+describe('a restart (#173)', () => {
+    const row = (over: Record<string, unknown> = {}) => ({ id: 'sub-l-p5-kick', lesson_id: 'l', pair_number: 5, skill_name: 'Kick', ...over });
+
+    it("reads each earlier go as that pair's work, newest first, with when it was set aside", () => {
+        const sub = mapRowToSubmission(row({
+            restarted_at: '2026-11-16T04:00:00Z',
+            earlier_work: [
+                { restartedAt: '2026-11-16T04:00:00Z', gradingIds: ['g2'], apple_video_url: 'https://x/student-videos/t/pair_submissions/a2.mp4', apple_cues: [{ cueIndex: 1, isObserved: true }], apple_sent_at: '2026-11-16T03:50:00Z' },
+                { restartedAt: '2026-11-16T03:00:00Z', banana_video_url: 'https://x/student-videos/t/pair_submissions/b1.mp4' },
+            ],
+        }));
+        expect(sub.restartedAt).toBe('2026-11-16T04:00:00Z');
+        expect(sub.earlierWork?.map(e => e.restartedAt)).toEqual(['2026-11-16T04:00:00Z', '2026-11-16T03:00:00Z']);
+        const [latest, first] = sub.earlierWork!;
+        expect(latest.gradingIds).toEqual(['g2']);
+        expect(latest.work).toMatchObject({ id: 'sub-l-p5-kick', pairNumber: 5, skillName: 'Kick', appleSentAt: '2026-11-16T03:50:00Z' });
+        // The Banana role holds the clip of Apple performing
+        expect(latest.work.bananaRole.videoUrl).toBe('https://x/student-videos/t/pair_submissions/a2.mp4');
+        expect(latest.work.bananaRole.cues).toHaveLength(1);
+        expect(first.gradingIds).toEqual([]);
+        expect(first.work.appleRole.videoUrl).toBe('https://x/student-videos/t/pair_submissions/b1.mp4');
+    });
+
+    it('reads a pair that never restarted (or a database not yet changed) as having no earlier work', () => {
+        expect(mapRowToSubmission(row()).earlierWork).toBeUndefined();
+        expect(mapRowToSubmission(row({ earlier_work: null })).earlierWork).toBeUndefined();
+        expect(mapRowToSubmission(row()).restartedAt).toBeUndefined();
+    });
+
+    it("tells a device's work from before the pair's restart from work since", () => {
+        const restartedAt = '2026-11-16T04:00:00Z';
+        expect(fromBeforeRestart('2026-11-16T03:59:00Z', restartedAt)).toBe(true);
+        expect(fromBeforeRestart('2026-11-16T04:01:00Z', restartedAt)).toBe(false);
+        expect(fromBeforeRestart('2026-11-16T03:59:00Z', null)).toBe(false);
+        expect(fromBeforeRestart(undefined, restartedAt)).toBe(false);
+    });
+
+    it('reads the times the database sends, with microseconds', () => {
+        expect(fromBeforeRestart('2026-11-16T03:59:59.999Z', '2026-11-16T04:00:00.123456+00:00')).toBe(true);
+        expect(fromBeforeRestart('2026-11-16T04:00:00.200Z', '2026-11-16T04:00:00.123456+00:00')).toBe(false);
+        expect(fromBeforeRestart('not a time', '2026-11-16T04:00:00.123456+00:00')).toBe(false);
     });
 });

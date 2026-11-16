@@ -14,6 +14,8 @@ import {
   backupSubmissionToSupabase,
   fetchPairCheckIns,
   deletePairCheckIn,
+  restartPair,
+  removeEarlierWork,
   PairCheckInRow,
   getPlayableVideoUrl,
 } from '../services/cloudSyncService';
@@ -48,6 +50,7 @@ import {
   Performer,
   fetchPairSlots,
   fetchSubmissionGradings,
+  fetchGradingsByIds,
   sameClass,
   setPairSlot,
   slotKey,
@@ -155,6 +158,109 @@ const StepTag: React.FC<{ step?: StepRef; mainSkill: string }> = ({ step, mainSk
     </span>
   ) : null;
 
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+/**
+ * A pair's work from before each restart (#173, ADR 0003), newest first: kept
+ * as it was, with its locks and grades, until the teacher removes it.
+ */
+const EarlierWorkList: React.FC<{
+  sub: PairSubmissionRecord;
+  nameFor: (who: Performer) => string | undefined;
+  onRemove: (restartedAt: string) => void;
+}> = ({ sub, nameFor, onRemove }) => {
+  const entries = sub.earlierWork ?? [];
+  const ids = entries.flatMap((e) => e.gradingIds);
+  const [gradings, setGradings] = useState<Record<string, SkillAnalysis>>({});
+  const idsKey = ids.join(',');
+  useEffect(() => {
+    let cancelled = false;
+    fetchGradingsByIds(ids).then((byPerformer) => {
+      if (cancelled) return;
+      const byId: Record<string, SkillAnalysis> = {};
+      for (const g of [...(byPerformer.apple ?? []), ...(byPerformer.banana ?? [])]) byId[g.id] = g;
+      setGradings(byId);
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey]);
+
+  if (!entries.length) return null;
+  return (
+    <div className="mt-4 space-y-2">
+      <p className="text-xs font-black text-slate-600 dark:text-slate-300">🕘 Earlier work (before restart)</p>
+      {entries.map((entry) => {
+        const w = entry.work;
+        return (
+          <details key={entry.restartedAt} className="rounded-2xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-900/60">
+            <summary className="px-4 py-2.5 cursor-pointer flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span>Before the restart at {timeOf(entry.restartedAt)}</span>
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); onRemove(entry.restartedAt); }}
+                className="ml-auto px-2 py-1 rounded-lg text-[11px] font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                title="Remove this earlier work"
+              >
+                🗑️ Remove
+              </button>
+            </summary>
+            <div className="px-4 pb-4 space-y-4">
+              {(['banana', 'apple'] as const).map((who) => {
+                // The Apple role holds the clip of Banana performing, and the other way round
+                const role = who === 'banana' ? w.appleRole : w.bananaRole;
+                const analysis = w.aiChatAnalysis?.[who];
+                const sentAt = who === 'apple' ? w.appleSentAt : w.bananaSentAt;
+                const graded = entry.gradingIds.map((id) => gradings[id]).filter((g) => g && g.performer === who);
+                const label = who === 'apple' ? 'Apple' : 'Banana';
+                if (!role.videoUrl && !role.cues.length && !analysis) return null;
+                return (
+                  <div key={who} className="space-y-1.5">
+                    <p className="text-[11px] font-black text-slate-700 dark:text-slate-200">
+                      {who === 'apple' ? '🍎' : '🍌'} {nameFor(who) ?? label}
+                      {sentAt && <span className="ml-2 font-bold text-slate-500">🔒 sent {timeOf(sentAt)}</span>}
+                    </p>
+                    {role.videoUrl && <VideoBlobPlayer videoUrl={role.videoUrl} performer={label} />}
+                    {role.cues.length > 0 && (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                        Peer ticks: {role.cues.filter((c) => c.isObserved).length}/{role.cues.length}
+                      </p>
+                    )}
+                    <GlowGrowSaid said={w.glowGrow?.[who]} />
+                    {w.firstAttempt?.[who]?.videoUrl && (
+                      <details>
+                        <summary className="text-[11px] font-bold text-slate-500 cursor-pointer">🎬 First attempt (before filming again)</summary>
+                        <VideoBlobPlayer videoUrl={w.firstAttempt[who]!.videoUrl} performer={label} />
+                      </details>
+                    )}
+                    {graded.length > 0 && (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                        Grade: {graded.map((g) => effectiveLevel(g) ?? 'not graded').join(' → ')}
+                      </p>
+                    )}
+                    {analysis?.analysisText && (
+                      <details>
+                        <summary className="text-[11px] font-bold text-slate-500 cursor-pointer">AI analysis</summary>
+                        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-48 overflow-y-auto">
+                          {analysis.analysisText}
+                        </p>
+                      </details>
+                    )}
+                  </div>
+                );
+              })}
+              {(w.teacherFeedback || w.teacherStar) && (
+                <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                  {w.teacherStar && '⭐ '}{w.teacherFeedback}
+                </p>
+              )}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
+};
+
 /** Compares what the tray shows of a submission, so a refresh that changed nothing doesn't reset its videos. */
 const reviewSignature = (s: PairSubmissionRecord) => JSON.stringify([
   s.appleRole.videoUrl, s.bananaRole.videoUrl, s.appleRole.cues, s.bananaRole.cues,
@@ -162,6 +268,8 @@ const reviewSignature = (s: PairSubmissionRecord) => JSON.stringify([
   // Each performer's glow and grow (#156), so one that arrives shows on an open pair
   s.glowGrow, s.firstAttempt && { apple: s.firstAttempt.apple?.glowGrow, banana: s.firstAttempt.banana?.glowGrow },
   s.aiTeacherReport?.generatedAt, s.appleSentAt, s.bananaSentAt, s.redoRequestedAt, s.status, s.teacherFeedback, s.teacherStar,
+  // A restart (#173) sets work aside; removing an earlier go takes one away
+  s.restartedAt, s.earlierWork?.map((e) => e.restartedAt),
 ]);
 
 export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
@@ -365,11 +473,24 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     setCheckIns(visibleRows);
   };
 
+  // Clearing a check-in restarts the pair (#173, ADR 0003): their work so far
+  // stays in the Review Tray as earlier work, and they start again from Step 1
+  // on any iPad. Before supabase_restart_pair.sql is run, only the check-in goes.
   const handleClearCheckIn = async (row: PairCheckInRow) => {
-    if (!confirm(`Clear Pair #${row.pair_number}'s check-in? They can check in again if needed.`)) return;
+    if (!confirm(`Restart Pair ${row.pair_number}? Their work so far stays in the Review Tray under "Earlier work". They start again from Step 1, on any iPad.`)) return;
     dismissedCheckInsRef.current.set(row.pair_number, row.checked_in_at);
     setCheckIns((prev) => prev.filter((c) => c.pair_number !== row.pair_number));
-    await deletePairCheckIn(row.lesson_id || lessonId, row.pair_number);
+    const result = await restartPair(row.lesson_id || lessonId, row.pair_number);
+    if (result !== 'ok') await deletePairCheckIn(row.lesson_id || lessonId, row.pair_number);
+    await loadSubmissions();
+  };
+
+  const handleRemoveEarlierWork = async (sub: PairSubmissionRecord, restartedAt: string) => {
+    if (!confirm(`Remove this earlier work of Pair ${sub.pairNumber}? Its grades stay on the students' records.`)) return;
+    if (!(await removeEarlierWork(sub.id, restartedAt))) return;
+    const earlierWork = sub.earlierWork?.filter((e) => e.restartedAt !== restartedAt);
+    setActiveReviewSub((prev) => (prev && prev.id === sub.id ? { ...prev, earlierWork } : prev));
+    await loadSubmissions();
   };
 
 
@@ -1404,6 +1525,12 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 })}
               </div>
             )}
+
+            <EarlierWorkList
+              sub={activeReviewSub}
+              nameFor={(who) => slotStudent(activeReviewSub.lessonId, activeReviewSub.pairNumber, who)?.name}
+              onRemove={(restartedAt) => handleRemoveEarlierWork(activeReviewSub, restartedAt)}
+            />
 
             {/* Teacher Feedback Note */}
             <div className="my-4">

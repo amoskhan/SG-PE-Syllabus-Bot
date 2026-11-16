@@ -2,6 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import type { PairProgress } from '../../utils/lessonFlow';
 import { decodeBlobs, encodeBlobs, stripBlobs } from './storedBlobs';
 import { PeerDraft, draftIsFresh } from '../../utils/peerDraft';
+import { fromBeforeRestart } from '../../utils/pairWork';
 import type { PairGlowGrow, SavedGlowGrow } from '../../utils/glowGrow';
 
 export interface PeerCueResult {
@@ -161,6 +162,18 @@ export interface PairSubmissionRecord {
   appleSentAt?: string;
   bananaSentAt?: string;
   redoRequestedAt?: string;
+  // supabase_restart_pair.sql (#173): when the pair last restarted, and the
+  // work they had sent before each restart, newest first (teacher's copy only)
+  restartedAt?: string;
+  earlierWork?: EarlierWork[];
+}
+
+/** A pair's work from before one restart (GLOSSARY.md: Restart; ADR 0003). */
+export interface EarlierWork {
+  restartedAt: string;
+  // The students' gradings of that work, kept on their records
+  gradingIds: string[];
+  work: PairSubmissionRecord;
 }
 
 export interface PairSessionData {
@@ -462,6 +475,26 @@ export const updateSubmissionStatus = async (
 };
 
 // ─── Lesson Cache ─────────────────────────────────────────────────────────────
+
+/**
+ * After a restart (#173) the pair starts clean on this device: its saved work
+ * and drafts from before the restart are removed. The teacher keeps everything
+ * the pair had sent, as earlier work.
+ */
+export const clearPairWorkFromBefore = async (lessonId: string, pairNumber: number, restartedAt: string): Promise<void> => {
+  const db = await getDB();
+  for (const r of await db.getAll('submissions')) {
+    if (r.lessonId === lessonId && r.pairNumber === pairNumber && fromBeforeRestart(r.createdAt, restartedAt)) {
+      await db.delete('submissions', r.id);
+    }
+  }
+  const drafts = await getDraftDB();
+  for (const d of await drafts.getAll('peer_drafts')) {
+    if (d.lessonId === lessonId && d.pairNumber === pairNumber && fromBeforeRestart(d.savedAt, restartedAt)) {
+      await drafts.delete('peer_drafts', d.id);
+    }
+  }
+};
 
 export const deleteSubmission = async (id: string): Promise<void> => {
   const db = await getDB();
