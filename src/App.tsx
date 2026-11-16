@@ -43,11 +43,11 @@ import { Performer, Stage, currentAttempt, noAnalysisChecklistText, performerKey
 type ModelId = 'gemini' | 'claude';
 
 const MODEL_OPTIONS: { id: ModelId; name: string; icon: string; desc: string }[] = [
-  { id: 'gemini', name: 'Gemini 3 Flash', icon: 'gemini.png', desc: 'Recommended · best for video' },
+  { id: 'gemini', name: 'Gemini Flash', icon: 'gemini.png', desc: 'Recommended · best for video' },
   { id: 'claude', name: 'Claude Sonnet', icon: 'claude.png', desc: 'Most detailed skill feedback' },
 ];
 const MODEL_LABEL: Record<ModelId, string> = {
-  gemini: 'Gemini 3 Flash', claude: 'Claude Sonnet',
+  gemini: 'Gemini Flash', claude: 'Claude Sonnet',
 };
 const modelIconFile = (m: ModelId) => m;
 
@@ -2205,6 +2205,9 @@ const App: React.FC = () => {
         errorText = `⚠️ ${rawError.replace(/^\d+:\s*/, '')}`;
       } else if (failedPerformer) {
         errorText = `⚠️ PE AI Buddy can't analyse ${failedPerformer} right now. You can still tap 📤 Submit final, and your teacher will grade it.`;
+      } else if (/took too long/.test(rawError) || (error instanceof Error && error.name === 'AbortError')) {
+        // No model answered in time: the server's 20s per model, or the browser's 60s (#164)
+        errorText = "⚠️ The AI took too long to answer. Please try again in a moment.";
       } else if (lower.includes('429') || lower.includes('rate') && lower.includes('limit')) {
         errorText = "⚠️ You're sending messages too fast. Please wait a moment and try again.";
       } else if (lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('402')) {
