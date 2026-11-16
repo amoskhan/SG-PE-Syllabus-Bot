@@ -80,8 +80,9 @@ describe('what the AI is sent about a pair with a glow and grow', () => {
             lessonGradingCues(SKILL, plan)?.map(c => c.text),
         );
 
-        // Two requests per performer, each with their frames and the criteria
-        expect(sent).toHaveLength(4);
+        // One request per performer (the AI Peer Check is for the teacher only, #177),
+        // each with their frames and the criteria
+        expect(sent).toHaveLength(2);
         expect(sent.join('\n')).toContain('Chin tucked to the chest');
         for (const body of sent) {
             for (const text of SAID) expect(body).not.toContain(text);
@@ -93,5 +94,43 @@ describe('what the AI is sent about a pair with a glow and grow', () => {
         const inputs = JSON.stringify([focusCriteria(SKILL, plan), lessonGradingCues(SKILL, plan)]);
         expect(inputs).toContain('Chin tucked to the chest');
         for (const text of SAID) expect(inputs).not.toContain(text);
+    });
+});
+
+describe('the AI Peer Check (#177)', () => {
+    let reply: (body: string) => { ok: boolean; text?: string };
+
+    beforeEach(() => {
+        vi.stubGlobal('document', { createElement: (tag: string) => (tag === 'video' ? fakeVideo() : fakeCanvas()) });
+        vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
+            const r = reply(init.body);
+            return { ok: r.ok, json: async () => (r.ok ? { text: r.text ?? '' } : { error: 'invalid x-api-key' }) };
+        });
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    const check = () => runPeerCoachingAnalysis(SKILL, new Blob(['banana']), new Blob(['apple']), {}, {}, undefined, { lessonId: 'l', pairNumber: 1 });
+
+    it('gives nothing, never an invented level, when the AI is unavailable', async () => {
+        reply = () => ({ ok: false });
+        await expect(check()).resolves.toBeNull();
+        reply = () => ({ ok: true, text: '' });
+        await expect(check()).resolves.toBeNull();
+    });
+
+    it("gives a level only where the AI named one", async () => {
+        reply = (body) => body.includes('Performer: Banana')
+            ? { ok: true, text: '{"criteriaScores":[],"proficiency":"Competent","teacherNotes":"Bend the knees more"}' }
+            : { ok: true, text: 'Sorry, I could not see the performer clearly.' };
+        const result = await check();
+        expect(result?.teacherReport.bananaProficiency).toBe('Competent');
+        expect(result?.teacherReport.appleProficiency).toBeUndefined();
+        expect(result?.teacherReport.teacherRecommendations).toContain('🍌 Banana: Bend the knees more');
+        expect(result?.teacherReport.teacherRecommendations).not.toContain('??');
+    });
+
+    it('writes no feedback for pupils', async () => {
+        reply = () => ({ ok: true, text: '{"criteriaScores":[],"proficiency":"Developing","teacherNotes":"Keep going"}' });
+        expect(await check()).not.toHaveProperty('studentFeedback');
     });
 });

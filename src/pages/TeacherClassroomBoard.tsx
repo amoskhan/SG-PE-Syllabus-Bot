@@ -1354,41 +1354,43 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
 
             </div>
 
-            {/* AI Assessment Panel */}
+            {/* AI Peer Check (GLOSSARY.md, #177): teacher only, never shown to pupils */}
             {activeReviewSub.aiTeacherReport ? (
               <div className="mt-4 border border-indigo-500/40 rounded-2xl overflow-hidden">
                 <div className="bg-indigo-950/80 dark:bg-indigo-950 px-4 py-2.5 flex items-center gap-2">
                   <span className="text-lg">🤖</span>
-                  <span className="font-black text-white text-sm">AI Assessment (Gemini 2.5 Flash)</span>
+                  <span className="font-black text-white text-sm">AI Peer Check</span>
+                  <span className="text-[10px] text-indigo-300">· not shown to pupils</span>
                   <span className="ml-auto text-[10px] text-indigo-300">
                     {new Date(activeReviewSub.aiTeacherReport.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
 
-                {/* Proficiency Badges */}
+                {/* Levels, only where the AI named one */}
                 <div className="p-4 bg-slate-800/40 dark:bg-zinc-900/60 grid grid-cols-2 gap-3">
-                  <div className="bg-slate-900/60 rounded-xl p-3">
-                    <p className="text-xs font-bold text-amber-400 mb-2">🍌 Banana — Proficiency</p>
-                    <span className={`px-3 py-1 rounded-full text-xs font-black ${
-                      normaliseLevel(activeReviewSub.aiTeacherReport.bananaProficiency) === 'Accomplished' ? 'bg-emerald-500/30 text-emerald-300' :
-                      activeReviewSub.aiTeacherReport.bananaProficiency === 'Competent' ? 'bg-blue-500/30 text-blue-300' :
-                      activeReviewSub.aiTeacherReport.bananaProficiency === 'Developing' ? 'bg-amber-500/30 text-amber-300' :
-                      'bg-red-500/30 text-red-300'
-                    }`}>
-                      {normaliseLevel(activeReviewSub.aiTeacherReport.bananaProficiency) ?? activeReviewSub.aiTeacherReport.bananaProficiency}
-                    </span>
-                  </div>
-                  <div className="bg-slate-900/60 rounded-xl p-3">
-                    <p className="text-xs font-bold text-red-400 mb-2">🍎 Apple — Proficiency</p>
-                    <span className={`px-3 py-1 rounded-full text-xs font-black ${
-                      normaliseLevel(activeReviewSub.aiTeacherReport.appleProficiency) === 'Accomplished' ? 'bg-emerald-500/30 text-emerald-300' :
-                      activeReviewSub.aiTeacherReport.appleProficiency === 'Competent' ? 'bg-blue-500/30 text-blue-300' :
-                      activeReviewSub.aiTeacherReport.appleProficiency === 'Developing' ? 'bg-amber-500/30 text-amber-300' :
-                      'bg-red-500/30 text-red-300'
-                    }`}>
-                      {normaliseLevel(activeReviewSub.aiTeacherReport.appleProficiency) ?? activeReviewSub.aiTeacherReport.appleProficiency}
-                    </span>
-                  </div>
+                  {([
+                    ['🍌 Banana', 'text-amber-400', activeReviewSub.aiTeacherReport.bananaProficiency],
+                    ['🍎 Apple', 'text-red-400', activeReviewSub.aiTeacherReport.appleProficiency],
+                  ] as const).map(([who, colour, saved]) => {
+                    const level = saved ? normaliseLevel(saved) ?? saved : undefined;
+                    return (
+                      <div key={who} className="bg-slate-900/60 rounded-xl p-3">
+                        <p className={`text-xs font-bold ${colour} mb-2`}>{who} — Proficiency</p>
+                        {level ? (
+                          <span className={`px-3 py-1 rounded-full text-xs font-black ${
+                            level === 'Accomplished' ? 'bg-emerald-500/30 text-emerald-300' :
+                            level === 'Competent' ? 'bg-blue-500/30 text-blue-300' :
+                            level === 'Developing' ? 'bg-amber-500/30 text-amber-300' :
+                            'bg-red-500/30 text-red-300'
+                          }`}>
+                            {level}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] italic text-slate-400">No level: the AI couldn't judge this clip</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Peer vs AI Discrepancies */}
@@ -1416,15 +1418,17 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 )}
 
                 {/* Teacher Recommendations */}
-                <div className="px-4 py-3 bg-slate-900/30 dark:bg-zinc-900/30 border-t border-slate-700/30">
-                  <p className="text-xs font-black text-slate-300 mb-2">📋 Teaching Recommendations</p>
-                  <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-line">{activeReviewSub.aiTeacherReport.teacherRecommendations}</p>
-                </div>
+                {activeReviewSub.aiTeacherReport.teacherRecommendations && (
+                  <div className="px-4 py-3 bg-slate-900/30 dark:bg-zinc-900/30 border-t border-slate-700/30">
+                    <p className="text-xs font-black text-slate-300 mb-2">📋 Teaching Recommendations</p>
+                    <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-line">{activeReviewSub.aiTeacherReport.teacherRecommendations}</p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="mt-4 p-3 bg-slate-800/30 rounded-2xl border border-dashed border-slate-600/40 flex items-center gap-3">
                 <span className="text-lg">🤖</span>
-                <p className="text-xs text-slate-400 italic">AI analysis not yet available. Students need to tap "Ask AI Coach" on their iPad to trigger it.</p>
+                <p className="text-xs text-slate-400 italic">No AI Peer Check for this pair. It runs when they finish their peer assessment, if the AI is available.</p>
               </div>
             )}
 

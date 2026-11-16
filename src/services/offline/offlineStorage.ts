@@ -90,6 +90,7 @@ export interface PairSubmissionRecord {
       kneeAngle?: number;
     };
   };
+  // Pupil praise from the old automatic check; no longer written (#177)
   aiStudentFeedback?: {
     bananaFeedback: string;
     appleFeedback: string;
@@ -99,8 +100,9 @@ export interface PairSubmissionRecord {
   aiTeacherReport?: {
     bananaAnalysis: string;
     appleAnalysis: string;
-    bananaProficiency: 'Beginning' | 'Developing' | 'Competent' | 'Accomplished' | 'Excellent'; // 'Excellent': saved before the rename
-    appleProficiency: 'Beginning' | 'Developing' | 'Competent' | 'Accomplished' | 'Excellent'; // 'Excellent': saved before the rename
+    // Only where the AI named a level (#177). 'Excellent': saved before the rename
+    bananaProficiency?: 'Beginning' | 'Developing' | 'Competent' | 'Accomplished' | 'Excellent';
+    appleProficiency?: 'Beginning' | 'Developing' | 'Competent' | 'Accomplished' | 'Excellent';
     teacherRecommendations: string;
     discrepancies: Array<{
       criterion: string;

@@ -427,51 +427,28 @@ const App: React.FC = () => {
     setActivePeerSessionData(data);
     setAppMode('chat');
 
-    const bananaMet = Object.values(data.bananaCues).filter(Boolean).length;
-    const bananaTotal = Object.keys(data.bananaCues).length;
-    const appleMet = Object.values(data.appleCues).filter(Boolean).length;
-    const appleTotal = Object.keys(data.appleCues).length;
-
+    // The pair goes straight on to the Practice Station: their feedback comes
+    // from PE AI Buddy's analysis when they tap Analyse (#177)
     const newSessionId = `peer-coach-p${data.pairNumber}-${Date.now()}`;
-    const loadingMsgId = `msg-loading-${Date.now()}`;
-
-    // Show loading card immediately
-    const loadingMsg: Message = {
-      id: loadingMsgId,
+    const welcome: Message = {
+      id: `msg-practice-${Date.now()}`,
       sender: Sender.BOT,
       timestamp: new Date(),
-      text: `## 🤖 PE AI Buddy is watching your videos...\n\n**Pair #${data.pairNumber} — ${data.skillName}**\n\n⏳ Extracting video frames...\n\n*This takes about 10–15 seconds. Hold tight!* 🎬`,
+      text: `## 🍎🍌 Practice Station — Pair #${data.pairNumber}\n\nTap **🍌 Analyse Banana** or **🍎 Analyse Apple** below for a full grading from PE AI Buddy. You can **📹 Film again** once, then tap **📤 Submit final** for each of you. Your teacher's feedback shows up here.`,
       hasMedia: false,
     };
-
-    const newSession: ChatSession = {
+    setSessions((prev) => [{
       id: newSessionId,
       title: `🍎🍌 Pair #${data.pairNumber} - ${data.skillName}`,
-      messages: [loadingMsg],
+      messages: [welcome],
       createdAt: new Date(),
       updatedAt: new Date(),
-    };
-
-    setSessions((prev) => [newSession, ...prev]);
+    }, ...prev]);
     setCurrentSessionId(newSessionId);
     currentSessionIdRef.current = newSessionId;
 
-    // Update a specific message's text in the loading session
-    const updateLoadingMsg = (progressText: string) => {
-      setSessions((prev) => prev.map(s =>
-        s.id === newSessionId
-          ? {
-              ...s,
-              messages: s.messages.map(m =>
-                m.id === loadingMsgId
-                  ? { ...m, text: `## 🤖 PE AI Buddy is watching your videos...\n\n**Pair #${data.pairNumber} — ${data.skillName}**\n\n✅ ${progressText}\n\n*Almost done! 🎬*` }
-                  : m
-              )
-            }
-          : s
-      ));
-    };
-
+    // The AI Peer Check (GLOSSARY.md): for the teacher only, in the background.
+    // When the AI gives nothing, nothing is saved: no invented level.
     try {
       const result = await runPeerCoachingAnalysis(
         data.assessSkillName || data.skillName,
@@ -479,78 +456,27 @@ const App: React.FC = () => {
         data.appleVideoBlob || null,
         data.bananaCues,
         data.appleCues,
-        updateLoadingMsg,
+        undefined,
         { lessonId: data.lessonId, pairNumber: data.pairNumber },
         focusCriteria(data.assessSkillName || data.skillName, cuePlanFor(lessonSteps, data.assessSkillName || data.skillName)),
         lessonGradingCues(data.assessSkillName || data.skillName, cuePlanFor(lessonSteps, data.assessSkillName || data.skillName))?.map(c => c.text)
       );
+      if (!result) return;
 
-      const discrepancyNote = result.teacherReport.discrepancies.length > 0
-        ? `\n\n> ⚠️ **${result.teacherReport.discrepancies.length} peer vs AI disagreement${result.teacherReport.discrepancies.length > 1 ? 's' : ''} detected** — check Teacher Review Tray for details`
-        : '';
-
-      const coachingCard: Message = {
-        id: `msg-coaching-${Date.now()}`,
-        sender: Sender.BOT,
-        timestamp: new Date(),
-        text: `## 🏆 AI Coach Feedback — Pair #${data.pairNumber}\n\n**Peer Scores:** 🍌 Banana ${bananaMet}/${bananaTotal} | 🍎 Apple ${appleMet}/${appleTotal}\n\n---\n\n🍌 **Banana:** ${result.studentFeedback.bananaFeedback}\n\n🍎 **Apple:** ${result.studentFeedback.appleFeedback}${discrepancyNote}\n\n---\n*Detailed analysis sent to your teacher's review tray! 🏫*`,
-        hasMedia: true,
-        analysisFrames: [...data.bananaPoseFrames.slice(0, 2), ...data.applePoseFrames.slice(0, 2)],
-      };
-
-      // Swap ONLY the loading card for the coaching card. Pupils often tap Analyse
-      // while this is still running; replacing the whole list wiped their checklist
-      // card and video (with its skeleton) from the chat.
-      setSessions((prev) => prev.map(s =>
-        s.id === newSessionId
-          ? { ...s, messages: s.messages.map(m => m.id === loadingMsgId ? coachingCard : m), updatedAt: new Date() }
-          : s
-      ));
-
-      // Save AI results to IndexedDB on the pair's submission record
       const submissionId = canonicalSubmissionId(data.lessonId, data.pairNumber, data.skillName);
-      try {
-        const existing = await getSubmission(submissionId);
-        if (existing) {
-          existing.aiStudentFeedback = {
-            bananaFeedback: result.studentFeedback.bananaFeedback,
-            appleFeedback: result.studentFeedback.appleFeedback,
-            generatedAt: new Date().toISOString(),
-            modelUsed: 'claude-haiku', // peerCoachingAI runs on Claude Haiku
-          };
-          existing.aiTeacherReport = {
-            bananaAnalysis: result.teacherReport.bananaAnalysis,
-            appleAnalysis: result.teacherReport.appleAnalysis,
-            bananaProficiency: result.teacherReport.bananaProficiency,
-            appleProficiency: result.teacherReport.appleProficiency,
-            teacherRecommendations: result.teacherReport.teacherRecommendations,
-            discrepancies: result.teacherReport.discrepancies,
-            generatedAt: new Date().toISOString(),
-            modelUsed: 'claude-haiku',
-          };
-          await putSubmission(existing);
-          // Push the enriched record to Supabase so the teacher's board (another device) sees the AI report
-          backupSubmissionToSupabase(existing, activePairSession?.teacherId, getOrCreatePairClaimToken(data.lessonId)).catch(console.warn);
-        }
-      } catch (e) {
-        console.warn('Could not save AI report to submission:', e);
+      const existing = await getSubmission(submissionId);
+      if (existing) {
+        existing.aiTeacherReport = {
+          ...result.teacherReport,
+          generatedAt: new Date().toISOString(),
+          modelUsed: 'claude-haiku', // peerCoachingAI runs on Claude Haiku
+        };
+        await putSubmission(existing);
+        // To Supabase, so the teacher's board (another device) shows it
+        backupSubmissionToSupabase(existing, activePairSession?.teacherId, getOrCreatePairClaimToken(data.lessonId)).catch(console.warn);
       }
-
     } catch (e) {
-      console.warn('AI coaching analysis failed:', e);
-      // Fallback — replace loading with a simple peer-score card (no AI)
-      const fallbackCard: Message = {
-        id: `msg-fallback-${Date.now()}`,
-        sender: Sender.BOT,
-        timestamp: new Date(),
-        text: `## 🏆 Pair #${data.pairNumber} — ${data.skillName}\n\n**Peer Scores:** 🍌 Banana ${bananaMet}/${bananaTotal} | 🍎 Apple ${appleMet}/${appleTotal}\n\nGreat teamwork! Your evaluation has been sent to the teacher. 🏫\n\n*AI analysis was unavailable — ask your teacher for detailed feedback!*`,
-        hasMedia: false,
-      };
-      setSessions((prev) => prev.map(s =>
-        s.id === newSessionId
-          ? { ...s, messages: s.messages.map(m => m.id === loadingMsgId ? fallbackCard : m), updatedAt: new Date() }
-          : s
-      ));
+      console.warn('AI Peer Check failed:', e);
     }
   };
 
@@ -3005,7 +2931,7 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     disabled={isLoading || isProcessing}
-                    onClick={() => handleSendMessage(`Coach, how can we get more distance and power on our ${assessSkillName}?`)}
+                    onClick={() => handleSendMessage(`PE AI Buddy, how can we get more distance and power on our ${assessSkillName}?`)}
                     className="h-9 px-3 shrink-0 bg-white/90 dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                   >
                     ⚡ More power?
