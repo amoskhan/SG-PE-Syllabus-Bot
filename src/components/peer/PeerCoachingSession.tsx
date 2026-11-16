@@ -920,8 +920,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
             {/* Video Replay with VideoAnalysisPlayer */}
             {bananaVideoUrl ? (
-              <div className="w-full aspect-video sm:aspect-auto sm:max-h-52 bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3 flex items-center justify-center">
-                <VideoAnalysisPlayer src={bananaVideoUrl} label="Banana with AI Skeleton" />
+              <div className="w-full bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3">
+                <VideoAnalysisPlayer src={bananaVideoUrl} label="🍌 Banana" />
               </div>
             ) : (
               <div className="w-full bg-slate-800/60 rounded-2xl border-2 border-dashed border-indigo-500/50 p-4 mb-3 flex flex-col items-center justify-center text-center gap-2">
@@ -1202,8 +1202,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
 
             {/* Video Replay with VideoAnalysisPlayer */}
             {appleVideoUrl ? (
-              <div className="w-full aspect-video sm:aspect-auto sm:max-h-52 bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3 flex items-center justify-center">
-                <VideoAnalysisPlayer src={appleVideoUrl} label="Apple with AI Skeleton" />
+              <div className="w-full bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3">
+                <VideoAnalysisPlayer src={appleVideoUrl} label="🍎 Apple" />
               </div>
             ) : (
               <div className="w-full bg-slate-800/60 rounded-2xl border-2 border-dashed border-amber-500/50 p-4 mb-3 flex flex-col items-center justify-center text-center gap-2">
