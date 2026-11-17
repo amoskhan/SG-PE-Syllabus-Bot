@@ -6,6 +6,9 @@ import { saveClassList } from '../../services/studentService';
 const inputClass =
   'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500';
 
+/** How many new or changed students the preview lists before "and N more". */
+const MAX_LISTED = 10;
+
 /**
  * Upload a whole class at once (#181): paste lines from a spreadsheet or pick
  * a CSV, check what will change, then save. The reading rules are in
@@ -27,6 +30,7 @@ const ClassListUploadModal: React.FC<{
     [text, students, defaultClass],
   );
   const toSave = result.toAdd.length + result.toUpdate.length;
+  const byId = useMemo(() => new Map(students.map(s => [s.id, s])), [students]);
 
   const pickFile = async (file: File | undefined) => {
     if (!file) return;
@@ -53,7 +57,7 @@ const ClassListUploadModal: React.FC<{
       <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-1">Upload class list</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          One child per line: <b>index number, full name, Short Name, class</b>. Copy the columns from a spreadsheet and paste them here, or choose a CSV file.
+          One student per line: <b>index number, full name, Short Name, class</b>. Copy the columns from a spreadsheet and paste them here, or choose a CSV file.
         </p>
 
         <div className="space-y-3">
@@ -79,13 +83,33 @@ const ClassListUploadModal: React.FC<{
               <p className="text-slate-700 dark:text-slate-200">
                 <b>{result.toAdd.length}</b> new · <b>{result.toUpdate.length}</b> to update · {result.unchanged} already up to date
               </p>
+              {result.toAdd.length > 0 && (
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="font-medium">New</p>
+                  <ul className="list-disc pl-5">
+                    {result.toAdd.slice(0, MAX_LISTED).map(r => (
+                      <li key={`${r.studentClass}#${r.indexNumber}`}>{r.studentClass} #{r.indexNumber} {r.name}{r.shortName ? ` (${r.shortName})` : ''}</li>
+                    ))}
+                    {result.toAdd.length > MAX_LISTED && <li>and {result.toAdd.length - MAX_LISTED} more</li>}
+                  </ul>
+                </div>
+              )}
               {result.toUpdate.length > 0 && (
-                <ul className="text-xs text-slate-500 dark:text-slate-400 list-disc pl-5">
-                  {result.toUpdate.slice(0, 8).map(r => (
-                    <li key={r.id}>#{r.indexNumber} {r.name}{r.shortName ? ` (${r.shortName})` : ''}, {r.studentClass}</li>
-                  ))}
-                  {result.toUpdate.length > 8 && <li>and {result.toUpdate.length - 8} more</li>}
-                </ul>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="font-medium">To update</p>
+                  <ul className="list-disc pl-5">
+                    {result.toUpdate.slice(0, MAX_LISTED).map(r => {
+                      const before = byId.get(r.id);
+                      const changes = [
+                        before?.name !== r.name && `name ${before?.name} → ${r.name}`,
+                        before?.shortName !== r.shortName && `Short Name ${before?.shortName || '(none)'} → ${r.shortName}`,
+                        (before?.class ?? '') !== r.studentClass && `class ${before?.class || '(none)'} → ${r.studentClass}`,
+                      ].filter(Boolean);
+                      return <li key={r.id}>{r.studentClass} #{r.indexNumber}: {changes.join(', ')}</li>;
+                    })}
+                    {result.toUpdate.length > MAX_LISTED && <li>and {result.toUpdate.length - MAX_LISTED} more</li>}
+                  </ul>
+                </div>
               )}
               {result.problems.length > 0 && (
                 <div className="text-xs text-amber-700 dark:text-amber-400">

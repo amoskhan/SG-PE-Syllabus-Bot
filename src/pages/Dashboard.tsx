@@ -46,6 +46,7 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
       indexNumber: addForm.indexNumber.trim(),
       name: addForm.name.trim(),
       studentClass: addForm.studentClass.trim() || undefined,
+      shortName: addForm.shortName,
     });
     if (s) {
       setStudents(prev => {
@@ -198,7 +199,7 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
                   value={addForm.shortName}
                   onChange={e => setAddForm(f => ({ ...f, shortName: e.target.value }))}
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">What the child is called. Pupil iPads show only this name.</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">What the student is called day to day. Pupil devices show only this name.</p>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Class</label>

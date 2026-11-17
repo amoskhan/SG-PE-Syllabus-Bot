@@ -78,6 +78,9 @@ const tidy = (s: string | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
 
 export const readClassList = (text: string, { existing = [], defaultClass = '' }: ClassListOptions = {}): ClassListResult => {
   const known = new Map(existing.map(s => [studentKey(s.class, s.indexNumber), s]));
+  // Students saved without a class (from a chat grading, say) are found by index number alone,
+  // once each, so the list gives them a class instead of adding them a second time
+  const classless = new Map(existing.filter(s => !s.class?.trim()).map(s => [studentKey('', s.indexNumber), s]));
   const seenOnLine = new Map<string, number>();
   const toAdd: ClassListRow[] = [];
   const toUpdate: ClassListResult['toUpdate'] = [];
@@ -106,12 +109,17 @@ export const readClassList = (text: string, { existing = [], defaultClass = '' }
     seenOnLine.set(key, lineNo);
 
     const row: ClassListRow = { indexNumber, name, shortName: shortName || undefined, studentClass };
-    const same = known.get(key);
-    if (!same) { toAdd.push(row); return; }
-    // A blank Short Name in the list keeps the one the child already has
-    const kept = { ...row, shortName: row.shortName ?? same.shortName };
-    if (kept.name === same.name && kept.shortName === same.shortName && kept.studentClass === (same.class ?? '')) unchanged++;
-    else toUpdate.push({ id: same.id, ...kept });
+    const indexKey = studentKey('', indexNumber);
+    const existingStudent = known.get(key) ?? classless.get(indexKey);
+    if (!existingStudent) { toAdd.push(row); return; }
+    if (!known.has(key)) classless.delete(indexKey);
+    // A blank Short Name in the list keeps the one the student already has
+    const merged = { ...row, shortName: row.shortName ?? existingStudent.shortName };
+    const same = merged.name === existingStudent.name
+      && merged.shortName === existingStudent.shortName
+      && merged.studentClass === (existingStudent.class ?? '');
+    if (same) unchanged++;
+    else toUpdate.push({ id: existingStudent.id, ...merged });
   });
   return { toAdd, toUpdate, unchanged, problems };
 };

@@ -118,26 +118,29 @@ export const saveClassList = async (
     teacherId: string,
     { toAdd, toUpdate }: Pick<ClassListResult, 'toAdd' | 'toUpdate'>
 ): Promise<{ added: number; updated: number; failed: number }> => {
+    const rowOf = (r: ClassListResult['toAdd'][number]) => ({
+        teacher_id: teacherId,
+        index_number: r.indexNumber,
+        name: r.name,
+        short_name: r.shortName ?? null,
+        class: r.studentClass,
+    });
     let added = 0;
-    let failed = 0;
     if (toAdd.length) {
-        const { data, error } = await supabase
-            .from('students')
-            .insert(toAdd.map(r => ({
-                teacher_id: teacherId,
-                index_number: r.indexNumber,
-                name: r.name,
-                short_name: r.shortName ?? null,
-                class: r.studentClass,
-            })))
-            .select('id');
-        if (error) { console.error('saveClassList insert error:', error); failed += toAdd.length; }
-        else added = data?.length ?? 0;
+        const { data, error } = await supabase.from('students').insert(toAdd.map(rowOf)).select('id');
+        if (!error) added = data?.length ?? 0;
+        else {
+            // One clashing row (added in another tab since the preview, say) fails the whole
+            // batch: save the rest one at a time so only that one is left out
+            console.warn('saveClassList: batch insert failed, saving one at a time:', error);
+            const one = await Promise.all(toAdd.map(r => supabase.from('students').insert(rowOf(r))));
+            added = one.filter(r => !r.error).length;
+        }
     }
     const results = await Promise.all(toUpdate.map(r =>
         updateStudent(r.id, { indexNumber: r.indexNumber, name: r.name, studentClass: r.studentClass, shortName: r.shortName ?? '' })));
     const updated = results.filter(r => r && r !== 'duplicate').length;
-    return { added, updated, failed: failed + (toUpdate.length - updated) };
+    return { added, updated, failed: toAdd.length - added + toUpdate.length - updated };
 };
 
 /**

@@ -81,6 +81,16 @@ describe('readClassList', () => {
       expect(result.unchanged).toBe(1);
     });
 
+    it('gives a class to a student saved without one, instead of adding them again', () => {
+      const result = readClassList('20,Farah Lee,Farah,4A', {
+        existing: [...existing, { id: 'noclass20', indexNumber: '20', name: 'Farah Lee' }],
+      });
+      expect(result.toAdd).toEqual([]);
+      expect(result.toUpdate).toEqual([
+        { id: 'noclass20', indexNumber: '20', name: 'Farah Lee', shortName: 'Farah', studentClass: '4A' },
+      ]);
+    });
+
     it("keeps a child's Short Name when the list leaves it blank", () => {
       const result = readClassList('13,Bala Krishnan,,4A', { existing });
       expect(result.toUpdate).toEqual([]);

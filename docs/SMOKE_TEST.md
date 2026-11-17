@@ -237,6 +237,7 @@ Index,Name,Short Name,Class
 - [ ] Change line 2's Short Name to `Ash` and paste again: 1 to update; after saving, the Dashboard shows "Ash"
 - [ ] Edit Bala and give him the Short Name `Bala`: it saves and shows on the Dashboard
 - [ ] Edit Daniel and change his index number to 1: refused ("Another student in this class already has index number 1")
+- [ ] Add a student with index 30 and **no class**, then upload `30,Same Child,,4A`: the preview shows 1 to update (class (none) → 4A), not 1 new
 
 Rules: `readClassList()`, `shortNameOf()` in `src/utils/classList.ts`
 (unit-tested); one student per teacher, class and index number in
