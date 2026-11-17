@@ -1027,6 +1027,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             }}
             onStudentAdded={(s) => setStudents((prev) => (prev.some((p) => p.id === s.id) ? prev : [...prev, s]))}
             onBack={() => setViewMode('LESSONS')}
+            pairsWithWork={new Set(submissions.filter((s) => s.lessonId === pairsLesson.id).map((s) => s.pairNumber))}
           />
         </div>
       )}

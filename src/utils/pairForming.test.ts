@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextPairNumber, pairCountFor, pairsOf } from './pairForming';
+import { nextPairNumber, pairChangeWarning, pairCountFor, pairsOf } from './pairForming';
 
 const slot = (pairNumber: number, performer: 'apple' | 'banana', studentId: string, lessonId = 'L') =>
   ({ lessonId, pairNumber, performer, studentId });
@@ -28,5 +28,34 @@ describe('pairCountFor', () => {
   it('is the highest pair number in use, and at least 1', () => {
     expect(pairCountFor([])).toBe(1);
     expect(pairCountFor([{ pairNumber: 1 }, { pairNumber: 4 }])).toBe(4);
+  });
+});
+
+describe('pairChangeWarning', () => {
+  const pair = { pairNumber: 5, apple: 'Amos', banana: 'Joseph' };
+
+  it('says nothing when the pair has sent no work', () => {
+    expect(pairChangeWarning(pair, false, { kind: 'split' })).toBeNull();
+    expect(pairChangeWarning(pair, false, { kind: 'swap' })).toBeNull();
+  });
+
+  it('warns that splitting takes the work off both records', () => {
+    expect(pairChangeWarning(pair, true, { kind: 'split' })).toBe(
+      'Pair 5 has already sent work. Splitting them takes it off Amos’s and Joseph’s records until you name Pair 5 again.');
+  });
+
+  it('warns that swapping files each video under the other pupil', () => {
+    expect(pairChangeWarning(pair, true, { kind: 'swap' })).toBe(
+      'Pair 5 has already sent work. Swapping files Amos’s work under Joseph, and Joseph’s under Amos.');
+  });
+
+  it('warns whose records the work goes to when a place is filled', () => {
+    expect(pairChangeWarning({ pairNumber: 5, apple: 'Amos' }, true, { kind: 'fill', performer: 'banana', name: 'Dev' })).toBe(
+      'Pair 5 has already sent work. Banana’s work will be filed under Dev.');
+  });
+
+  it('warns when a new pair takes the number of a pair that sent work', () => {
+    expect(pairChangeWarning({ pairNumber: 2 }, true, { kind: 'new', apple: 'Chen', banana: 'Dev' })).toBe(
+      'Pair 2 has already sent work. It will be filed under Chen and Dev.');
   });
 });

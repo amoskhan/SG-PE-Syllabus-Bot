@@ -275,8 +275,10 @@ Classroom Board → Your lessons. Needs a class with students.
 - [ ] Back in Your lessons, the row says "3 pairs" and the projector's check-in grid shows 3.
 - [ ] **Copy pairs from …** an earlier lesson with 5 pairs: all 5 copy and the row says "5 pairs".
 - [ ] "Students from other classes" lists the rest; tapping them pairs them the same way.
+- [ ] **Mid-lesson (#185):** once a pair has sent work, ⇄ / ✕ / "＋ add" on it asks first ("Pair 1 has already sent work. Swapping files Amos’s work under Joseph…"). **Cancel** changes nothing. Swap, then **OK**: on the Student Dashboard each pupil's Practice Station analysis is now under the other.
+- [ ] A pair with no work changes without asking.
 
-Rules: `pairsOf()`, `nextPairNumber()`, `pairCountFor()` in `src/utils/pairForming.ts` (unit-tested).
+Rules: `pairsOf()`, `nextPairNumber()`, `pairCountFor()`, `pairChangeWarning()` in `src/utils/pairForming.ts` (unit-tested).
 
 ## 6. Cron endpoints — 1 min
 

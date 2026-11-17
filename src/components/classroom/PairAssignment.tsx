@@ -3,7 +3,7 @@ import { Student } from '../../types';
 import { Lesson, MAX_PAIR_COUNT, lessonTitle } from '../../services/lessonService';
 import { getOrCreateStudent } from '../../services/studentService';
 import { PairSlot, Performer, copyPairs, sameClass, setPairSlot } from '../../services/pairService';
-import { nextPairNumber, pairCountFor, pairsOf } from '../../utils/pairForming';
+import { PairChange, nextPairNumber, pairChangeWarning, pairCountFor, pairsOf } from '../../utils/pairForming';
 import { shortNameOf } from '../../utils/classList';
 
 const inputClass =
@@ -24,6 +24,8 @@ interface Props {
   onPairCount: (pairCount: number) => Promise<void>;
   onStudentAdded: (s: Student) => void;
   onBack: () => void;
+  /** Pair numbers of this lesson that have already sent work (#185): changing them asks first. */
+  pairsWithWork?: Set<number>;
 }
 
 /** Where the next tapped name goes: a new pair, or the empty place of a pair with one name. */
@@ -35,7 +37,7 @@ type Target = { pairNumber: number; performer: Performer } | null;
  * ✕ splits a pair. Each pupil's Practice Station work goes to their own record.
  */
 export const PairAssignment: React.FC<Props> = ({
-  lesson, lessons, students, slots, teacherId, onSlotsChanged, onPairCount, onStudentAdded, onBack,
+  lesson, lessons, students, slots, teacherId, onSlotsChanged, onPairCount, onStudentAdded, onBack, pairsWithWork,
 }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,10 +78,24 @@ export const PairAssignment: React.FC<Props> = ({
     if (count !== lesson.pairCount) await onPairCount(count);
   };
 
+  /** Changing a pair that has sent work moves the work: say so, and let the teacher go ahead (#185). */
+  const okToChange = (pairNumber: number, change: PairChange) => {
+    const p = pairs.find(x => x.pairNumber === pairNumber);
+    const warning = pairChangeWarning(
+      { pairNumber, apple: p?.apple && nameOf(p.apple), banana: p?.banana && nameOf(p.banana) },
+      !!pairsWithWork?.has(pairNumber),
+      change,
+    );
+    return !warning || window.confirm(`${warning}
+
+Go ahead?`);
+  };
+
   const tapName = (id: string) => {
     if (busy) return;
     if (target) {
       setTarget(null);
+      if (!okToChange(target.pairNumber, { kind: 'fill', performer: target.performer, name: nameOf(id) })) return;
       return run([[target.pairNumber, target.performer, id]]);
     }
     if (!first) return setFirst(id);
@@ -87,12 +103,13 @@ export const PairAssignment: React.FC<Props> = ({
     const n = nextPairNumber(pairs);
     if (n > MAX_PAIR_COUNT) return setError(`A lesson can have up to ${MAX_PAIR_COUNT} pairs.`);
     setFirst(null);
+    if (!okToChange(n, { kind: 'new', apple: nameOf(first), banana: nameOf(id) })) return;
     return run([[n, 'apple', first], [n, 'banana', id]]);
   };
 
   const swap = (n: number, apple?: string, banana?: string) =>
-    run([[n, 'apple', banana ?? null], [n, 'banana', apple ?? null]]);
-  const split = (n: number) => run([[n, 'apple', null], [n, 'banana', null]]);
+    okToChange(n, { kind: 'swap' }) && run([[n, 'apple', banana ?? null], [n, 'banana', apple ?? null]]);
+  const split = (n: number) => okToChange(n, { kind: 'split' }) && run([[n, 'apple', null], [n, 'banana', null]]);
 
   const copy = async () => {
     if (!copySource) return;
