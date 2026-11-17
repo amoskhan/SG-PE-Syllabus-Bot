@@ -230,7 +230,7 @@ Needs `supabase_class_lists.sql` run. Student Dashboard.
 - [ ] Paste a row with index 1 and a different full name: it shows "already in 4A: name … → …", not "new". **Save** opens "Change saved students?" listing the change; Back changes nothing.
 - [ ] Give two new rows the same index number: the second says "Index number … is already in this list". Type `abc` as an index: "Index numbers are numbers". **Save** skips those rows.
 - [ ] An existing student without a Short Name shows a grey guess with "?"; **Use suggested Short Names (n)** opens a popup listing `name → guess`; **Yes, set them** saves them.
-- [ ] Saved rows are locked: clicking the index or Short Name does nothing, and the name opens the profile.
+- [ ] Saved rows are locked: nothing can be typed into them, and clicking anywhere on a row (it highlights on hover) opens that student's analysis history.
 - [ ] With unsaved rows, **Back to Chat** asks "Leave without saving them?"; Cancel stays.
 - [ ] A student made by chat grading with index 30 and no class shows under "No class yet". Add index 30 in 4A: the row shows "already in 4A: class (none) → 4A"; after saving, they move to 4A with their gradings.
 - [ ] 4B can also have an index 1 (index numbers restart in every class).

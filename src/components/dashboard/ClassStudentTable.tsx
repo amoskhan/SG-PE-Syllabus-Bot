@@ -278,10 +278,19 @@ const ClassStudentTable: React.FC<{
               );
             }
             return (
-              <tr key={s.id} className="border-t border-slate-100 dark:border-zinc-800">
+              // The whole row opens the student's analysis history
+              <tr
+                key={s.id}
+                onClick={() => onOpenStudent(s)}
+                title={`Open ${s.name}’s analysis history`}
+                className="group border-t border-slate-100 dark:border-zinc-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-800/60 transition-colors"
+              >
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{s.indexNumber}</td>
                 <td className="px-3 py-2">
-                  <button onClick={() => onOpenStudent(s)} className="font-medium text-slate-800 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 text-left">
+                  <button
+                    onClick={e => { e.stopPropagation(); onOpenStudent(s); }}
+                    className="font-medium text-slate-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 text-left"
+                  >
                     {s.name}
                   </button>
                 </td>
