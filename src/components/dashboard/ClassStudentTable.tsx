@@ -4,7 +4,8 @@ import {
   checkRows, describeClassEdit, nextIndexNumber, readPaste, suggestShortName,
   type ClassEditRow, type ColumnRole, type DraftRow, type RowCheck,
 } from '../../utils/classList';
-import { renumberStudents, saveClassList, updateStudent } from '../../services/studentService';
+import { deleteStudent, renumberStudents, saveClassList, updateStudent } from '../../services/studentService';
+import { classKey } from '../../utils/classGroups';
 import { Modal } from './StudentManageDialogs';
 
 // One class on the Student Dashboard as a table (#181). Saved students are
@@ -65,6 +66,9 @@ const ClassStudentTable: React.FC<{
   const [pasteBox, setPasteBox] = useState(false);
   const [editRows, setEditRows] = useState<ClassEditRow[] | null>(null);
   const [confirmingEdit, setConfirmingEdit] = useState(false);
+  // Deleting the whole class (#191): only from edit mode, and the class name is typed to confirm
+  const [deletingClass, setDeletingClass] = useState(false);
+  const [typedClass, setTypedClass] = useState('');
   const [suggesting, setSuggesting] = useState(false);
   const [confirmingSave, setConfirmingSave] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -206,6 +210,19 @@ const ClassStudentTable: React.FC<{
   };
   const changeSaved = (id: string, patch: Partial<ClassEditRow>) =>
     setEditRows(rows => rows && rows.map(r => (r.id === id ? { ...r, ...patch } : r)));
+
+  // Each student goes as they do one at a time (gradings, graded videos). Any
+  // that fail stay, so the class stays with them and the teacher can try again.
+  const deleteClass = async () => {
+    setSaving(true);
+    let failed = 0;
+    for (const st of students) if (!(await deleteStudent(st.id))) failed++;
+    setSaving(false);
+    setDeletingClass(false);
+    if (failed) setMessage(`${failed} student${failed !== 1 ? 's' : ''} couldn’t be deleted. Try again.`);
+    else setEditRows(null);
+    onSaved();
+  };
 
   const saveEdit = async () => {
     if (!edit || !editRows) return;
@@ -378,6 +395,12 @@ const ClassStudentTable: React.FC<{
       {editRows ? (
         <div className="border-t border-amber-200 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-900/10 px-3 py-2 flex flex-wrap items-center gap-3 text-sm">
           <span className="text-amber-800 dark:text-amber-300 font-medium">Editing {className}</span>
+          <button
+            onClick={() => { setTypedClass(''); setDeletingClass(true); }}
+            className="text-xs text-red-600 dark:text-red-400 hover:underline"
+          >
+            🗑 Delete class
+          </button>
           <div className="ml-auto flex items-center gap-3">
             {message && <span className="text-xs text-red-500">{message}</span>}
             {editProblems > 0 && <span className="text-xs text-red-500">{editProblems} row{editProblems !== 1 ? 's' : ''} to fix</span>}
@@ -431,6 +454,35 @@ const ClassStudentTable: React.FC<{
           <div className="flex gap-2 mt-5">
             <button onClick={() => setConfirmingEdit(false)} className={secondaryButton}>Back</button>
             <button onClick={saveEdit} disabled={saving} className={primaryButton}>{saving ? 'Saving…' : 'Yes, change it'}</button>
+          </div>
+        </Modal>
+      )}
+
+      {deletingClass && (
+        <Modal onClose={() => !saving && setDeletingClass(false)}>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-2">Delete {className}?</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
+            This deletes all <b>{students.length} student{students.length !== 1 ? 's' : ''}</b> in {className}, with their
+            gradings and graded videos. Pairs’ work in the Review Tray stays. This can’t be undone.
+          </p>
+          <label className="block text-sm text-slate-600 dark:text-slate-300 mt-3">
+            Type <b>{className}</b> to confirm
+            <input
+              value={typedClass}
+              onChange={e => setTypedClass(e.target.value)}
+              autoFocus
+              className={`${editCell} mt-1`}
+            />
+          </label>
+          <div className="flex gap-2 mt-5">
+            <button onClick={() => setDeletingClass(false)} disabled={saving} className={secondaryButton}>Back</button>
+            <button
+              onClick={deleteClass}
+              disabled={saving || classKey(typedClass) !== classKey(className)}
+              className="flex-1 px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors font-medium"
+            >
+              {saving ? 'Deleting…' : `Delete ${students.length} student${students.length !== 1 ? 's' : ''}`}
+            </button>
           </div>
         </Modal>
       )}
