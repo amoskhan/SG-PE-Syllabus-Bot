@@ -243,6 +243,22 @@ Rules: `checkRows()`, `describeClassEdit()`, `readPaste()`, `suggestShortName()`
 in `src/utils/classList.ts` (unit-tested); one student per teacher, class
 and index number in `supabase_class_lists.sql`.
 
+## 5c. Check-in by name — 6 min
+
+Needs `supabase_check_in_by_name.sql` run, a lesson for **today** with Pairs named (e.g. Pair 1 = Aisha 🍎 + Bala 🍌, Pair 2 = Chen 🍎 + Dev 🍌), and two iPads (or one iPad and a private browser window).
+
+- [ ] Scan the class QR: "Tap your name" lists only the planned students, by Short Name — no full names, no one from outside the pairs. A student with no Short Name shows the first word of their name.
+- [ ] Tap **Bala** first: "Pair 1 · Aisha 🍎 and Bala 🍌 — Aisha, tap your name". Tap **Chen**: "Wrong partner"; **Try again**, tap **Aisha**: "You're a pair! ✓".
+- [ ] **My partner isn't here** and a pupil with no planned partner both show "Ask your teacher".
+- [ ] Take the photo and go: the board shows Pair 1 checked in. On the second iPad, Aisha and Bala are greyed out "Taken" within a few seconds.
+- [ ] On the board, change Pair 2's Banana while the second iPad shows "Chen, then partner": the partner it waits for changes to match.
+- [ ] A lesson with no pairs: "Ask your teacher — your teacher hasn't put you in pairs yet"; **Check again** after naming pairs shows the names.
+- [ ] Yesterday's QR (a lesson dated yesterday): no names, "isn't open for today's lesson".
+- [ ] Pair 1 sends an AI analysis: it appears on Aisha's and Bala's Student Dashboard records, under the right one each.
+- [ ] **Restart** Pair 1 on the board: Aisha and Bala can be tapped again.
+
+Rule: `checkInScreen()` in `src/utils/checkIn.ts` (unit-tested). Short Names never go to the AI.
+
 ## 6. Cron endpoints — 1 min
 
 Not triggered by any user action, so they fail silently. Both run at

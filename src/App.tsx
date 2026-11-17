@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Analytics } from "@vercel/analytics/react";
 import SessionSidebar from './components/layout/SessionSidebar';
 import ChatInput from './components/chat/ChatInput';
@@ -32,7 +32,7 @@ import { draftSummary, peerDraftId } from './utils/peerDraft';
 import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, glowGrowFor, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
-import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep, fetchPairRestartedAt } from './services/cloudSyncService';
+import { backupSubmissionToSupabase, upsertPairCheckIn, checkInByName, fetchPlannedStudents, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep, fetchPairRestartedAt } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
 import { focusCriteria, getAllCuesForSkill, getLessonCues, lessonGradingCues } from './data/peerSyllabusCues';
@@ -348,7 +348,6 @@ const App: React.FC = () => {
   // 1 analysis and 5 questions per lesson
   const [pupilUsage, setPupilUsage] = useState<Record<'apple' | 'banana', { questionsLeft?: number; analysisUsed?: boolean }>>({ apple: {}, banana: {} });
   useEffect(() => onPupilUsage(r => setPupilUsage(prev => ({ ...prev, [r.performer]: { ...prev[r.performer], ...r } }))), []);
-  const [claimedPairNumbers, setClaimedPairNumbers] = useState<Set<number>>(new Set());
   const [checkInModalKey, setCheckInModalKey] = useState(0);
   const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
   const lastSeenTeacherFeedbackRef = useRef<string | null>(null);
@@ -949,16 +948,11 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePairSession?.pairNumber, activePairSession?.lessonId, activePeerSessionData, appMode]);
 
-  // When the check-in modal opens, load which pair numbers are already taken so the
-  // student can't pick one another group is using.
-  useEffect(() => {
-    if (!isPairCheckInOpen) return;
-    let cancelled = false;
-    fetchClaimedPairNumbers(scannedLessonData.teacherId, scannedLessonData.lessonId)
-      .then((nums) => { if (!cancelled) setClaimedPairNumbers(nums); })
-      .catch(() => { /* non-fatal — modal just won't grey out taken numbers */ });
-    return () => { cancelled = true; };
-  }, [isPairCheckInOpen, scannedLessonData.teacherId, scannedLessonData.lessonId]);
+  // Today's Pair Assignment for the name buttons at check-in (#183)
+  const loadPlannedStudents = useCallback(
+    () => fetchPlannedStudents(scannedLessonData.lessonId),
+    [scannedLessonData.lessonId],
+  );
 
   // Check whether the active (restored) pair already submitted a recording — so the home
   // screen can offer "back to AI Coach chat" instead of only "record again".
@@ -1039,30 +1033,44 @@ const App: React.FC = () => {
     };
     const claimToken = getOrCreatePairClaimToken(merged.lessonId);
 
-    const { blocked, invalidLesson } = await upsertPairCheckIn({
-      lessonId: merged.lessonId,
-      pairNumber: merged.pairNumber,
-      skillName: merged.skillName,
-      teacherId: merged.teacherId,
-      pairPhoto: merged.pairPhoto,
-      needsHelp: merged.needsHelp,
-      claimToken,
-    }).catch((e) => { console.warn(e); return { blocked: false, invalidLesson: false }; });
+    // By name (#183): the database checks the two names against today's plan
+    // and gives the pair number, so the work files under these students
+    const students = merged.students;
+    const { result, pairNumber } = students
+      ? await checkInByName({
+          lessonId: merged.lessonId,
+          appleId: students.apple.id,
+          bananaId: students.banana.id,
+          skillName: merged.skillName,
+          pairPhoto: merged.pairPhoto,
+          needsHelp: merged.needsHelp,
+          claimToken,
+        }).catch((e) => { console.warn(e); return { result: 'unavailable' as const, pairNumber: undefined }; })
+      : { result: 'not_planned' as const, pairNumber: undefined };
+    if (pairNumber) merged.pairNumber = pairNumber;
 
-    if (invalidLesson) {
+    if (result === 'unavailable') {
+      await clearActivePairSession().catch(() => { /* ignore */ }); // not checked in yet: a reload starts over
+      try { window.alert('Couldn’t check you in. Check the Wi-Fi, then tap “Go to PE Practice Venue” again.'); } catch { /* ignore */ }
+      return;
+    }
+
+    if (result === 'invalid_lesson') {
       await clearActivePairSession().catch(() => { /* ignore */ });
       try { window.alert("This QR code isn't open for today's lesson. Ask your teacher to show today's QR code, then scan again."); } catch { /* ignore */ }
       setIsPairCheckInOpen(false);
       return;
     }
 
-    if (blocked) {
-      // Another group already owns this pair number — bounce back to pick another.
+    if (result === 'taken' || result === 'not_planned') {
+      // Someone checked in with these names, or the teacher changed the pairs: back to the names
       await clearActivePairSession().catch(() => { /* ignore */ });
-      try { window.alert(`Pair ${merged.pairNumber} is already in use by another group. Please choose a different pair number.`); } catch { /* ignore */ }
-      const nums = await fetchClaimedPairNumbers(merged.teacherId, merged.lessonId).catch(() => new Set<number>());
-      setClaimedPairNumbers(nums);
-      setCheckInModalKey((k) => k + 1); // remount the modal → back to SELECT_PAIR
+      try {
+        window.alert(result === 'taken'
+          ? 'One of your names is already checked in. If that’s really you, ask your teacher.'
+          : 'Your teacher has changed the pairs. Tap your names again.');
+      } catch { /* ignore */ }
+      setCheckInModalKey((k) => k + 1); // remount the modal → back to the names
       return;
     }
 
@@ -2486,8 +2494,7 @@ const App: React.FC = () => {
           lessonId={scannedLessonData.lessonId}
           lessonTitle={scannedLessonData.title}
           skillName={scannedLessonData.skillName || 'Overhand Throw'}
-          pairCount={scannedLessonData.pairCount}
-          claimedPairNumbers={claimedPairNumbers}
+          loadPlanned={loadPlannedStudents}
           onCompleteCheckIn={handleCompleteCheckIn}
           onCancel={() => setIsPairCheckInOpen(false)}
         />
@@ -3046,8 +3053,7 @@ const App: React.FC = () => {
         lessonId={scannedLessonData.lessonId}
         lessonTitle={scannedLessonData.title}
         skillName={scannedLessonData.skillName}
-        pairCount={scannedLessonData.pairCount}
-        claimedPairNumbers={claimedPairNumbers}
+        loadPlanned={loadPlannedStudents}
         onCompleteCheckIn={handleCompleteCheckIn}
         onCancel={() => setIsPairCheckInOpen(false)}
       />
