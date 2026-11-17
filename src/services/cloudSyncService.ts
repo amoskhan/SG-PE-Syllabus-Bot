@@ -406,6 +406,9 @@ export interface PairCheckInRow {
   step_id?: string | null;
   step_index?: number | null;
   step_finished?: boolean | null;
+  // Who checked in, by name (#183; supabase_check_in_by_name.sql)
+  apple_student?: string | null;
+  banana_student?: string | null;
 }
 
 /**

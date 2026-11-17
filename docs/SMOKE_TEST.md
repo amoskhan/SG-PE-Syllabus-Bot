@@ -255,7 +255,8 @@ Needs `supabase_check_in_by_name.sql` run, a lesson for **today** with Pairs nam
 - [ ] A lesson with no pairs: "Ask your teacher — your teacher hasn't put you in pairs yet"; **Check again** after naming pairs shows them.
 - [ ] Yesterday's QR (a lesson dated yesterday): no names, "isn't open for today's lesson".
 - [ ] Pair 1 sends an AI analysis: it appears on Aisha's and Bala's Student Dashboard records, under the right one each.
-- [ ] **Restart** Pair 1 on the board: Aisha and Bala can be tapped again.
+- [ ] On the projector's check-in grid, Pair 1's tile shows its photo with 🍎 Aisha and 🍌 Bala; Pair 2 (not yet in) shows 🍎 Chen 🍌 Dev greyed with "Not checked in".
+- [ ] **×** (Restart) on Pair 1: the confirm says their names are freed. On an iPad, **Aisha & Bala** is no longer greyed; they check in again and their earlier work is under "Earlier work" in the Review Tray.
 - [ ] After check-in, the peer assessment reads "🍎 Apple (Aisha), your turn to record", "check how Banana (Bala) moved", "Tell Banana (Bala)". The Practice Station header says "Pair 1 · Aisha & Bala", and the buttons say "Analyse Apple (Aisha)" / "Analyse Banana (Bala)".
 - [ ] **Our progress** says "Pair #1 · Aisha & Bala", with tabs "🍌 Banana (Bala)" and "🍎 Apple (Aisha)".
 - [ ] The chat messages and the AI's replies still say only "Apple" and "Banana" — no names.

@@ -38,6 +38,7 @@ import { ClassPicker } from '../components/classroom/ClassPicker';
 import { ALL, ClassFilter, fitFilter, getClassFilter, isGraded, matchesFilter, saveClassFilter } from '../utils/classGroups';
 import { mediaPaths, removeTeachMedia } from '../services/teachMediaService';
 import { PairAssignment } from '../components/classroom/PairAssignment';
+import { shortNameOf } from '../utils/classList';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
 import { GlowGrowSaid } from '../components/peer/GlowGrowSaid';
 import { analysesSentKey, effectiveLevel, normaliseLevel } from '../utils/gradingReview';
@@ -482,7 +483,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   // stays in the Review Tray as earlier work, and they start again from Step 1
   // on any iPad. Before supabase_restart_pair.sql is run, only the check-in goes.
   const handleClearCheckIn = async (row: PairCheckInRow) => {
-    if (!confirm(`Restart Pair ${row.pair_number}? Their work so far stays in the Review Tray under "Earlier work". They start again from Step 1, on any iPad.`)) return;
+    if (!confirm(`Restart Pair ${row.pair_number}? Their work so far stays in the Review Tray under "Earlier work". Their names are freed: they tap their pair again on any iPad and start from Step 1.`)) return;
     dismissedCheckInsRef.current.set(row.pair_number, row.checked_in_at);
     setCheckIns((prev) => prev.filter((c) => c.pair_number !== row.pair_number));
     const result = await restartPair(row.lesson_id || lessonId, row.pair_number);
@@ -892,6 +893,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   const isChecked = !!ci;
                   const needsHelp = ci?.needs_help;
                   const hasPractised = currentLessonSubmissions.some((s) => s.pairNumber === num);
+                  // Who checked in (#184), or who is planned until they do
+                  const apple = (ci?.apple_student && studentById.get(ci.apple_student)) || slotStudent(lesson.id, num, 'apple');
+                  const banana = (ci?.banana_student && studentById.get(ci.banana_student)) || slotStudent(lesson.id, num, 'banana');
 
                   return (
                     <div
@@ -942,8 +946,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           ? 'text-emerald-700 dark:text-emerald-400'
                           : 'text-slate-400'
                       }`}>
-                        {needsHelp ? 'Needs Help!' : isChecked ? 'Ready! 🚶‍♂️' : 'Waiting…'}
+                        {needsHelp ? 'Needs Help!' : isChecked ? 'Ready! 🚶‍♂️' : apple || banana ? 'Not checked in' : 'Waiting…'}
                       </span>
+                      {(apple || banana) && (
+                        <span className={`mt-1 w-full flex flex-col text-[11px] font-bold leading-tight ${isChecked ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400'}`}>
+                          <span className="truncate" title={apple?.name}>🍎 {apple ? shortNameOf(apple) : '—'}</span>
+                          <span className="truncate" title={banana?.name}>🍌 {banana ? shortNameOf(banana) : '—'}</span>
+                        </span>
+                      )}
                       {/* Where this pair is in the lesson (#91) */}
                       {(() => {
                         const at = pairStepAt(lesson.steps, ci);
