@@ -26,6 +26,7 @@ import {
   fetchLessons,
   createLesson,
   updateLesson,
+  setLessonPairCount,
   deleteLesson,
   lessonTitle,
   getCurrentLessonId,
@@ -305,7 +306,11 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   const [pairsLessonId, setPairsLessonId] = useState<string | null>(null);
   const pairsLesson = lessons.find((l) => l.id === pairsLessonId) ?? null;
 
-  const loadPairSlots = async () => setPairSlots(await fetchPairSlots());
+  const loadPairSlots = async () => {
+    const slots = await fetchPairSlots();
+    setPairSlots(slots);
+    return slots;
+  };
 
   // Sign-in can finish after the board mounts — load that teacher's lessons
   useEffect(() => {
@@ -1007,6 +1012,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             slots={pairSlots}
             teacherId={teacherId}
             onSlotsChanged={loadPairSlots}
+            onPairCount={async (n) => {
+              if (await setLessonPairCount(pairsLesson.id, n)) await loadLessons();
+            }}
             onStudentAdded={(s) => setStudents((prev) => (prev.some((p) => p.id === s.id) ? prev : [...prev, s]))}
             onBack={() => setViewMode('LESSONS')}
           />

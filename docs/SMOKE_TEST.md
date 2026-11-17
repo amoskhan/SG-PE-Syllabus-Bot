@@ -259,6 +259,21 @@ Needs `supabase_check_in_by_name.sql` run, a lesson for **today** with Pairs nam
 
 Rule: `checkInScreen()` in `src/utils/checkIn.ts` (unit-tested). Short Names never go to the AI.
 
+## 5d. Forming pairs — 3 min
+
+Classroom Board → Your lessons. Needs a class with students.
+
+- [ ] **Plan a lesson**: no "Number of pairs" box. The new lesson's row says "no pairs yet".
+- [ ] **👥 Pairs**: the class shows as name chips under "Tap one name, then their partner". Tap **Amos** (turns blue, 🍎), then **Joseph**: "Pair 1 🍎 Amos 🍌 Joseph" appears and both chips go.
+- [ ] Tap a chip twice: it's unselected. **Cancel** clears a half-made pair.
+- [ ] **⇄** swaps Apple and Banana. **✕** on Pair 1 puts both names back as chips.
+- [ ] Make Pairs 1–3, split Pair 2, make a new pair: it becomes Pair 2 (Pair 3 keeps its number).
+- [ ] Back in Your lessons, the row says "3 pairs" and the projector's check-in grid shows 3.
+- [ ] **Copy pairs from …** an earlier lesson with 5 pairs: all 5 copy and the row says "5 pairs".
+- [ ] "Students from other classes" lists the rest; tapping them pairs them the same way.
+
+Rules: `pairsOf()`, `nextPairNumber()`, `pairCountFor()` in `src/utils/pairForming.ts` (unit-tested).
+
 ## 6. Cron endpoints — 1 min
 
 Not triggered by any user action, so they fail silently. Both run at
