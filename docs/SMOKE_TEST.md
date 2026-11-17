@@ -247,12 +247,12 @@ and index number in `supabase_class_lists.sql`.
 
 Needs `supabase_check_in_by_name.sql` run, a lesson for **today** with Pairs named (e.g. Pair 1 = Aisha 🍎 + Bala 🍌, Pair 2 = Chen 🍎 + Dev 🍌), and two iPads (or one iPad and a private browser window).
 
-- [ ] Scan the class QR: "Tap your name" lists only the planned students, by Short Name — no full names, no one from outside the pairs. A student with no Short Name shows the first word of their name.
-- [ ] Tap **Bala** first: "Pair 1 · Aisha 🍎 and Bala 🍌 — Aisha, tap your name". Tap **Chen**: "Wrong partner"; **Try again**, tap **Aisha**: "You're a pair! ✓".
-- [ ] **My partner isn't here** and a pupil with no planned partner both show "Ask your teacher".
-- [ ] Take the photo and go: the board shows Pair 1 checked in. On the second iPad, Aisha and Bala are greyed out "Taken" within a few seconds.
-- [ ] On the board, change Pair 2's Banana while the second iPad shows "Chen, then partner": the partner it waits for changes to match.
-- [ ] A lesson with no pairs: "Ask your teacher — your teacher hasn't put you in pairs yet"; **Check again** after naming pairs shows the names.
+- [ ] Scan the class QR: "Tap your pair" lists the planned pairs as **Aisha & Bala**, **Chen & Dev**, by Short Name — no full names, no one from outside the pairs. A student with no Short Name shows the first word of their name.
+- [ ] Tap **Aisha & Bala**: "Aisha & Bala · Pair 1" with 🍎 Aisha and 🍌 Bala. **Not us** goes back; **That's us!** goes to the photo.
+- [ ] **My partner isn't here**, and a pair with only one name planned, both show "Ask your teacher".
+- [ ] Take the photo and go: the board shows Pair 1 checked in. On the second iPad, **Aisha & Bala** is greyed out "Checked in" within a few seconds.
+- [ ] On the second iPad tap **Chen & Dev**, then on the board change Pair 2's Banana: the iPad goes back to the pairs with "Your teacher changed the pairs".
+- [ ] A lesson with no pairs: "Ask your teacher — your teacher hasn't put you in pairs yet"; **Check again** after naming pairs shows them.
 - [ ] Yesterday's QR (a lesson dated yesterday): no names, "isn't open for today's lesson".
 - [ ] Pair 1 sends an AI analysis: it appears on Aisha's and Bala's Student Dashboard records, under the right one each.
 - [ ] **Restart** Pair 1 on the board: Aisha and Bala can be tapped again.

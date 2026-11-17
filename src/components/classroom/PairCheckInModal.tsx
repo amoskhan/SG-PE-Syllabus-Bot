@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { speechService } from '../../services/speechService';
 import { saveActivePairSession, PairSessionData } from '../../services/offline/offlineStorage';
 import { checkInScreen, nameOf, type PlannedStudent } from '../../utils/checkIn';
-import { NameCheckIn } from './NameCheckIn';
+import { NameCheckIn, type Choice } from './NameCheckIn';
 
 /** How often the names refresh while pupils pick, so taken names grey out on every iPad. */
 const NAMES_REFRESH_MS = 4000;
@@ -28,10 +28,10 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
   onCancel,
 }) => {
   const [step, setStep] = useState<'SELECT_PAIR' | 'TAKE_PHOTO' | 'READY_LINEUP'>('SELECT_PAIR');
-  // Check-in by name (#183): the names tapped so far, and the pair they make
+  // Check-in by name (#183): the pair tapped, and the pair it makes in the plan
   const [planned, setPlanned] = useState<PlannedStudent[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [picks, setPicks] = useState<string[]>([]);
+  const [choice, setChoice] = useState<Choice>(null);
   const [chosen, setChosen] = useState<{ pairNumber: number; apple: PlannedStudent; banana: PlannedStudent } | null>(null);
   const selectedPairNumber = chosen?.pairNumber ?? null;
   const [photoData, setPhotoData] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
     if (!isOpen) return;
 
     if (step === 'SELECT_PAIR') {
-      speechService.speak('Tap your name.');
+      speechService.speak('Tap your pair.');
     } else if (step === 'TAKE_PHOTO') {
       speechService.speak('Apple and Banana, smile together for your pair photo!');
     } else if (step === 'READY_LINEUP') {
@@ -71,7 +71,7 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
     return () => clearInterval(timer);
   }, [isOpen, step, refreshNames]);
 
-  const screen = planned ? checkInScreen(planned, picks) : null;
+  const screen = planned ? checkInScreen(planned, choice) : null;
 
   // Auto-start camera when entering TAKE_PHOTO step
   useEffect(() => {
@@ -265,8 +265,7 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
           <NameCheckIn
             screen={screen}
             loadFailed={loadFailed}
-            picks={picks}
-            onPicks={setPicks}
+            onChoose={setChoice}
             onRetry={refreshNames}
             onContinue={() => {
               if (screen?.kind !== 'ready') return;
