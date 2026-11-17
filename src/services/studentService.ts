@@ -144,6 +144,19 @@ export const saveClassList = async (
 };
 
 /**
+ * Give saved students new index numbers, all at once so a swap (3 ↔ 4)
+ * doesn't clash halfway (renumber_students in supabase_class_lists.sql).
+ */
+export const renumberStudents = async (moves: { id: string; indexNumber: string }[]): Promise<boolean> => {
+    if (!moves.length) return true;
+    const { error } = await supabase.rpc('renumber_students', {
+        p_moves: moves.map(m => ({ id: m.id, index_number: m.indexNumber })),
+    });
+    if (error) { console.error('renumberStudents error:', error); return false; }
+    return true;
+};
+
+/**
  * Delete a student with all their gradings and graded videos. The gradings go
  * with the row (on delete cascade); the video files have to be removed from
  * Storage separately, and that's done first while their paths are still known.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkRows, nextIndexNumber, readPaste, shortNameOf, suggestShortName, type DraftRow, type ExistingStudent } from './classList';
+import { checkIndexEdits, checkRows, nextIndexNumber, readPaste, shortNameOf, suggestShortName, type DraftRow, type ExistingStudent } from './classList';
 
 describe('checkRows', () => {
   const existing: ExistingStudent[] = [
@@ -168,5 +168,39 @@ describe('readPaste', () => {
     expect(readPaste(text, { firstIndex: 1 }).roles).toEqual(['index', 'name', 'ignore']);
     const { rows } = readPaste(text, { firstIndex: 1, roles: ['index', 'name', 'shortName'] });
     expect(rows[0].shortName).toBe('Wei Ming');
+  });
+});
+
+describe('checkIndexEdits', () => {
+  const cls: ExistingStudent[] = [
+    { id: 'a', indexNumber: '3', name: 'Ali', class: '4A' },
+    { id: 'b', indexNumber: '4', name: 'Bala', class: '4A' },
+    { id: 'c', indexNumber: '5', name: 'Chen', class: '4A' },
+  ];
+
+  it('lists the students whose index number changes', () => {
+    expect(checkIndexEdits(cls, { a: '1' })).toEqual({ moves: [{ id: 'a', indexNumber: '1' }], problems: {} });
+  });
+
+  it('allows a swap', () => {
+    expect(checkIndexEdits(cls, { a: '4', b: '3' }).moves).toEqual([
+      { id: 'a', indexNumber: '4' },
+      { id: 'b', indexNumber: '3' },
+    ]);
+  });
+
+  it('flags two students ending up with the same index number, and moves nobody until it is fixed', () => {
+    expect(checkIndexEdits(cls, { a: '5' })).toEqual({ moves: [], problems: { a: 'Index number 5 is taken', c: 'Index number 5 is taken' } });
+  });
+
+  it('flags an index number that is not a number', () => {
+    expect(checkIndexEdits(cls, { a: 'x', b: '' })).toEqual({
+      moves: [],
+      problems: { a: 'Index numbers are numbers', b: 'No index number' },
+    });
+  });
+
+  it('ignores an edit back to the same number', () => {
+    expect(checkIndexEdits(cls, { a: ' 03 ' })).toEqual({ moves: [], problems: {} });
   });
 });

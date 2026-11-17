@@ -139,6 +139,38 @@ export const checkRows = (
   return result;
 };
 
+/**
+ * Index numbers typed over a class's saved students (id → new number). Moves
+ * are only given when every student in the class still has their own number,
+ * so a swap (3 ↔ 4) works and a clash moves nobody until it is fixed.
+ */
+export const checkIndexEdits = (
+  classStudents: ExistingStudent[],
+  edits: Record<string, string>,
+): { moves: { id: string; indexNumber: string }[]; problems: Record<string, string> } => {
+  const problems: Record<string, string> = {};
+  const finalIndex = new Map(classStudents.map(s => [s.id, tidy(edits[s.id] ?? s.indexNumber)]));
+  for (const [id, n] of finalIndex) {
+    if (edits[id] === undefined) continue;
+    if (!n) problems[id] = 'No index number';
+    else if (!/^\d+$/.test(n)) problems[id] = 'Index numbers are numbers';
+  }
+  const holders = new Map<string, string[]>();
+  for (const [id, n] of finalIndex) {
+    if (problems[id]) continue;
+    const key = studentKey('', n);
+    holders.set(key, [...(holders.get(key) ?? []), id]);
+  }
+  for (const ids of holders.values()) {
+    if (ids.length > 1) for (const id of ids) problems[id] = `Index number ${finalIndex.get(id)} is taken`;
+  }
+  if (Object.keys(problems).length) return { moves: [], problems };
+  const moves = classStudents
+    .filter(s => edits[s.id] !== undefined && studentKey('', finalIndex.get(s.id)!) !== studentKey('', s.indexNumber))
+    .map(s => ({ id: s.id, indexNumber: finalIndex.get(s.id)! }));
+  return { moves, problems };
+};
+
 /** The index number a new row starts with: one after the highest already used. */
 export const nextIndexNumber = (indexNumbers: string[]): number =>
   Math.max(0, ...indexNumbers.map(n => Number(tidy(n))).filter(Number.isFinite)) + 1;

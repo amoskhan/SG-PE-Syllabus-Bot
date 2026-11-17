@@ -233,6 +233,8 @@ Needs `supabase_class_lists.sql` run. Student Dashboard.
 - [ ] With unsaved rows, **Back to Chat** asks "Leave without saving them?"; Cancel stays.
 - [ ] A student made by chat grading with index 30 and no class shows under "No class yet". Add index 30 in 4A: the row shows "already in 4A: class (none) → 4A"; after saving, they move to 4A with their gradings.
 - [ ] 4B can also have an index 1 (index numbers restart in every class).
+- [ ] In 4A, change a saved student's index number from 1 to 2 and another's from 2 to 1 (a swap): both rows say "not saved"; **Save** keeps both, and the list re-sorts.
+- [ ] Change one saved student's index number to another's: both rows turn red ("Index number … is taken") and nothing moves until it's fixed.
 
 Rules: `checkRows()`, `readPaste()`, `suggestShortName()`, `shortNameOf()`
 in `src/utils/classList.ts` (unit-tested); one student per teacher, class

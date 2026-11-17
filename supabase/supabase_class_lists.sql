@@ -52,6 +52,35 @@ create unique index if not exists students_teacher_class_index_key
     regexp_replace(btrim(index_number), '^0+(?=[0-9])', '')
   );
 
+-- 3. renumber_students: the teacher changes saved students' index numbers in
+--    a class's table, swaps included (3 ↔ 4). Done one row at a time, a swap
+--    would clash with the rule above halfway through, so every moving
+--    student is first parked on a number nobody uses, then given the real
+--    one, all in one transaction. Runs as the teacher (row-level security
+--    applies) and only touches their own students.
+--    p_moves: [{"id": "<student uuid>", "index_number": "4"}, ...]
+create or replace function public.renumber_students(p_moves jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  update public.students s
+     set index_number = 'moving-' || s.id::text
+    from jsonb_to_recordset(p_moves) as m(id uuid, index_number text)
+   where s.id = m.id and s.teacher_id = auth.uid();
+
+  update public.students s
+     set index_number = btrim(m.index_number)
+    from jsonb_to_recordset(p_moves) as m(id uuid, index_number text)
+   where s.id = m.id and s.teacher_id = auth.uid();
+end;
+$$;
+
+revoke all on function public.renumber_students(jsonb) from public, anon;
+grant execute on function public.renumber_students(jsonb) to authenticated;
+
 commit;
 
 -- No new policy needed: "Teachers manage own students" already limits every

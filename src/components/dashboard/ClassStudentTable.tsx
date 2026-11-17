@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Student } from '../../types';
 import {
-  checkRows, nextIndexNumber, readPaste, suggestShortName,
+  checkIndexEdits, checkRows, nextIndexNumber, readPaste, suggestShortName,
   type ColumnRole, type DraftRow, type RowCheck,
 } from '../../utils/classList';
-import { saveClassList } from '../../services/studentService';
+import { renumberStudents, saveClassList } from '../../services/studentService';
 
 // One class on the Student Dashboard as a table (#181): its students, with
-// their Short Names editable in place, and rows to add more by typing or by
+// their index numbers and Short Names editable in place, and rows to add more by typing or by
 // pasting from Excel. Nothing is written until "Save N students". The rules
 // (matching, the Short Name guess, reading a paste) are in utils/classList.ts.
 
@@ -51,6 +51,7 @@ const ClassStudentTable: React.FC<{
 }> = ({ teacherId, className, students, allStudents, startEmpty, onOpenStudent, onSaved, onUnsavedChange }) => {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [shortEdits, setShortEdits] = useState<Record<string, string>>({});
+  const [indexEdits, setIndexEdits] = useState<Record<string, string>>({});
   const [paste, setPaste] = useState<Paste | null>(null);
   const [pasteBox, setPasteBox] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -62,8 +63,13 @@ const ClassStudentTable: React.FC<{
     () => [...students].sort((a, b) => a.indexNumber.localeCompare(b.indexNumber, undefined, { numeric: true })),
     [students],
   );
+  // Index numbers typed over saved students: moved only when every student keeps their own number
+  const renumber = checkIndexEdits(students, indexEdits);
+  const movedTo = new Map(renumber.moves.map(m => [m.id, m.indexNumber]));
+  const indexOf = (s: Student) => movedTo.get(s.id) ?? s.indexNumber;
+  const isIndexEdited = (s: Student) => indexEdits[s.id] !== undefined && indexEdits[s.id].trim() !== s.indexNumber;
   const firstFreeIndex = (rows: Draft[]) =>
-    nextIndexNumber([...students.map(s => s.indexNumber), ...rows.map(d => d.indexNumber)]);
+    nextIndexNumber([...students.map(indexOf), ...rows.map(d => d.indexNumber)]);
 
   const emptyRow = (rows: Draft[]): Draft =>
     ({ key: nextKey++, indexNumber: String(firstFreeIndex(rows)), name: '', shortName: '', shortNameGuessed: true });
@@ -79,16 +85,19 @@ const ClassStudentTable: React.FC<{
   const isEdited = (s: Student) => !!shortEdits[s.id]?.trim() && shortEdits[s.id].trim() !== (s.shortName ?? '');
   const editedRows: DraftRow[] = sorted
     .filter(isEdited)
-    .map(s => ({ indexNumber: s.indexNumber, name: s.name, shortName: shortEdits[s.id] }));
+    .map(s => ({ indexNumber: indexOf(s), name: s.name, shortName: shortEdits[s.id] }));
   const result = useMemo(
-    () => checkRows([...editedRows, ...filled], { studentClass: className, existing: allStudents }),
+    () => checkRows([...editedRows, ...filled], {
+      studentClass: className,
+      existing: allStudents.map(s => (movedTo.has(s.id) ? { ...s, indexNumber: movedTo.get(s.id)! } : s)),
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(editedRows), JSON.stringify(filled), className, allStudents],
+    [JSON.stringify(editedRows), JSON.stringify(filled), JSON.stringify(renumber.moves), className, allStudents],
   );
   const checkOf = new Map<number, RowCheck>(filled.map((d, i) => [d.key, result.checks[editedRows.length + i]]));
-  const toSave = result.toAdd.length + result.toUpdate.length;
-  const problems = result.checks.filter(c => c.kind === 'problem').length;
-  const unsaved = filled.length > 0 || editedRows.length > 0;
+  const toSave = result.toAdd.length + new Set([...result.toUpdate.map(u => u.id), ...renumber.moves.map(m => m.id)]).size;
+  const problems = result.checks.filter(c => c.kind === 'problem').length + Object.keys(renumber.problems).length;
+  const unsaved = filled.length > 0 || editedRows.length > 0 || students.some(isIndexEdited);
 
   useEffect(() => onUnsavedChange(unsaved), [unsaved, onUnsavedChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -165,6 +174,13 @@ const ClassStudentTable: React.FC<{
   const save = async () => {
     setSaving(true);
     setMessage('');
+    // New numbers first, so rows matched to a moved student save against the number it now has
+    if (!(await renumberStudents(renumber.moves))) {
+      setSaving(false);
+      setMessage('The new index numbers didn’t save. Please try again.');
+      return;
+    }
+    setIndexEdits({});
     const { failed } = await saveClassList(teacherId, result);
     setSaving(false);
     if (failed) setMessage(`${failed} didn’t save. Please try again.`);
@@ -192,10 +208,19 @@ const ClassStudentTable: React.FC<{
         <tbody>
           {sorted.map(s => {
             const skillCount = Object.keys(s.progressSummary ?? {}).length;
-            const edited = isEdited(s);
+            const edited = isEdited(s) || isIndexEdited(s);
+            const indexProblem = renumber.problems[s.id];
             return (
-              <tr key={s.id} className={`border-t border-slate-100 dark:border-zinc-800 ${edited ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
-                <td className="px-3 py-1.5 text-slate-400 dark:text-slate-500">#{s.indexNumber}</td>
+              <tr key={s.id} className={`border-t border-slate-100 dark:border-zinc-800 ${indexProblem ? 'bg-red-50/70 dark:bg-red-900/10' : edited ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
+                <td className="px-1 py-1">
+                  <input
+                    className={`${cell} text-slate-500 dark:text-slate-400`}
+                    aria-label={`Index number for ${s.name}`}
+                    inputMode="numeric"
+                    value={indexEdits[s.id] ?? s.indexNumber}
+                    onChange={e => setIndexEdits(edits => ({ ...edits, [s.id]: e.target.value }))}
+                  />
+                </td>
                 <td className="px-3 py-1.5">
                   <button onClick={() => onOpenStudent(s)} className="font-medium text-slate-800 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 text-left">
                     {s.name}
@@ -211,7 +236,7 @@ const ClassStudentTable: React.FC<{
                   />
                 </td>
                 <td className="px-3 py-1.5 text-right text-xs text-slate-400 dark:text-slate-500">
-                  {edited ? 'not saved' : skillCount > 0 && (
+                  {indexProblem ? <span className="text-red-600 dark:text-red-400">{indexProblem}</span> : edited ? 'not saved' : skillCount > 0 && (
                     <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full">
                       {skillCount} skill{skillCount !== 1 ? 's' : ''}
                     </span>
