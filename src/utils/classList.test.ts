@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkIndexEdits, checkRows, nextIndexNumber, readPaste, shortNameOf, suggestShortName, type DraftRow, type ExistingStudent } from './classList';
+import { checkRows, describeStudentEdit, nextIndexNumber, readPaste, shortNameOf, suggestShortName, type DraftRow, type ExistingStudent } from './classList';
 
 describe('checkRows', () => {
   const existing: ExistingStudent[] = [
@@ -171,36 +171,45 @@ describe('readPaste', () => {
   });
 });
 
-describe('checkIndexEdits', () => {
-  const cls: ExistingStudent[] = [
-    { id: 'a', indexNumber: '3', name: 'Ali', class: '4A' },
-    { id: 'b', indexNumber: '4', name: 'Bala', class: '4A' },
-    { id: 'c', indexNumber: '5', name: 'Chen', class: '4A' },
-  ];
+describe('describeStudentEdit', () => {
+  const amos: ExistingStudent = { id: 'amos', indexNumber: '1', name: 'Khan Jun Ming Amos', shortName: 'Amos', class: '4P' };
+  const joseph: ExistingStudent = { id: 'joseph', indexNumber: '2', name: 'Joseph Lai', shortName: 'Joseph', class: '4P' };
+  const classmates = [amos, joseph];
+  const edit = (patch: Partial<{ indexNumber: string; name: string; shortName: string; studentClass: string }>) =>
+    describeStudentEdit(amos, { indexNumber: '1', name: 'Khan Jun Ming Amos', shortName: 'Amos', studentClass: '4P', ...patch }, classmates);
 
-  it('lists the students whose index number changes', () => {
-    expect(checkIndexEdits(cls, { a: '1' })).toEqual({ moves: [{ id: 'a', indexNumber: '1' }], problems: {} });
+  it('says nothing changes when nothing does', () => {
+    expect(edit({})).toEqual({ changes: [] });
+    expect(edit({ indexNumber: ' 01 ', studentClass: '4p' })).toEqual({ changes: [] });
   });
 
-  it('allows a swap', () => {
-    expect(checkIndexEdits(cls, { a: '4', b: '3' }).moves).toEqual([
-      { id: 'a', indexNumber: '4' },
-      { id: 'b', indexNumber: '3' },
+  it('lists each change in plain words', () => {
+    expect(edit({ name: 'Khan Jun Ming', shortName: 'Jun Ming', indexNumber: '3' }).changes).toEqual([
+      'Index number 1 → 3',
+      'Full name Khan Jun Ming Amos → Khan Jun Ming',
+      'Short Name Amos → Jun Ming',
     ]);
   });
 
-  it('flags two students ending up with the same index number, and moves nobody until it is fixed', () => {
-    expect(checkIndexEdits(cls, { a: '5' })).toEqual({ moves: [], problems: { a: 'Index number 5 is taken', c: 'Index number 5 is taken' } });
-  });
-
-  it('flags an index number that is not a number', () => {
-    expect(checkIndexEdits(cls, { a: 'x', b: '' })).toEqual({
-      moves: [],
-      problems: { a: 'Index numbers are numbers', b: 'No index number' },
+  it('offers to swap with the classmate who has that index number', () => {
+    expect(edit({ indexNumber: '2' })).toEqual({
+      changes: ['Index number 1 → 2 (Joseph Lai becomes 1)'],
+      swapWith: joseph,
     });
   });
 
-  it('ignores an edit back to the same number', () => {
-    expect(checkIndexEdits(cls, { a: ' 03 ' })).toEqual({ moves: [], problems: {} });
+  it('refuses a number taken in another class it moves to', () => {
+    const lim: ExistingStudent = { id: 'lim', indexNumber: '1', name: 'Lim', class: '4Q' };
+    expect(describeStudentEdit(amos, { indexNumber: '1', name: amos.name, shortName: 'Amos', studentClass: '4Q' }, [lim]))
+      .toEqual({ changes: ['Class 4P → 4Q'], problem: 'Index number 1 is already Lim’s in 4Q' });
+  });
+
+  it('refuses a missing name or index number', () => {
+    expect(edit({ name: ' ' }).problem).toBe('The full name is needed');
+    expect(edit({ indexNumber: 'x' }).problem).toBe('Index numbers are numbers');
+  });
+
+  it('can clear a Short Name', () => {
+    expect(edit({ shortName: '' }).changes).toEqual(['Short Name Amos → (none)']);
   });
 });

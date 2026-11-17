@@ -140,35 +140,40 @@ export const checkRows = (
 };
 
 /**
- * Index numbers typed over a class's saved students (id → new number). Moves
- * are only given when every student in the class still has their own number,
- * so a swap (3 ↔ 4) works and a clash moves nobody until it is fixed.
+ * What editing one saved student changes, in plain words for the teacher to
+ * confirm. Choosing the index number a classmate has offers a swap (they get
+ * this student's number); a number taken in a class the student moves to, or a
+ * missing name or index number, is a problem. "4p" is the same class as "4P",
+ * and "01" the same index number as "1".
  */
-export const checkIndexEdits = (
-  classStudents: ExistingStudent[],
-  edits: Record<string, string>,
-): { moves: { id: string; indexNumber: string }[]; problems: Record<string, string> } => {
-  const problems: Record<string, string> = {};
-  const finalIndex = new Map(classStudents.map(s => [s.id, tidy(edits[s.id] ?? s.indexNumber)]));
-  for (const [id, n] of finalIndex) {
-    if (edits[id] === undefined) continue;
-    if (!n) problems[id] = 'No index number';
-    else if (!/^\d+$/.test(n)) problems[id] = 'Index numbers are numbers';
-  }
-  const holders = new Map<string, string[]>();
-  for (const [id, n] of finalIndex) {
-    if (problems[id]) continue;
-    const key = studentKey('', n);
-    holders.set(key, [...(holders.get(key) ?? []), id]);
-  }
-  for (const ids of holders.values()) {
-    if (ids.length > 1) for (const id of ids) problems[id] = `Index number ${finalIndex.get(id)} is taken`;
-  }
-  if (Object.keys(problems).length) return { moves: [], problems };
-  const moves = classStudents
-    .filter(s => edits[s.id] !== undefined && studentKey('', finalIndex.get(s.id)!) !== studentKey('', s.indexNumber))
-    .map(s => ({ id: s.id, indexNumber: finalIndex.get(s.id)! }));
-  return { moves, problems };
+export const describeStudentEdit = (
+  before: ExistingStudent,
+  after: { indexNumber: string; name: string; shortName: string; studentClass: string },
+  classmates: ExistingStudent[],
+): { changes: string[]; swapWith?: ExistingStudent; problem?: string } => {
+  const indexNumber = tidy(after.indexNumber);
+  const name = tidy(after.name);
+  const shortName = tidy(after.shortName);
+  const studentClass = tidy(after.studentClass);
+  const sameClass = classKey(before.class ?? '') === classKey(studentClass);
+  const sameIndex = studentKey('', before.indexNumber) === studentKey('', indexNumber);
+  const holder = classmates.find(s =>
+    s.id !== before.id && studentKey(s.class, s.indexNumber) === studentKey(studentClass, indexNumber));
+  const swapWith = holder && sameClass ? holder : undefined;
+
+  const changes = [
+    !sameIndex && `Index number ${before.indexNumber} → ${indexNumber}${swapWith ? ` (${swapWith.name} becomes ${before.indexNumber})` : ''}`,
+    before.name !== name && `Full name ${before.name} → ${name}`,
+    (before.shortName ?? '') !== shortName && `Short Name ${before.shortName || '(none)'} → ${shortName || '(none)'}`,
+    !sameClass && `Class ${before.class || '(none)'} → ${studentClass || '(none)'}`,
+  ].filter((c): c is string => !!c);
+
+  const problem = !name ? 'The full name is needed'
+    : !indexNumber ? 'The index number is needed'
+    : !/^\d+$/.test(indexNumber) ? 'Index numbers are numbers'
+    : holder && !swapWith ? `Index number ${indexNumber} is already ${holder.name}’s in ${studentClass}`
+    : undefined;
+  return { changes, ...(swapWith && { swapWith }), ...(problem && { problem }) };
 };
 
 /** The index number a new row starts with: one after the highest already used. */

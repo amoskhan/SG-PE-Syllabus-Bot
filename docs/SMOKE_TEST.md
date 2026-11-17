@@ -227,16 +227,18 @@ Needs `supabase_class_lists.sql` run. Student Dashboard.
 - [ ] In Excel, copy three rows of `Name | Index No. | Gender` (with the heading row), e.g. `Tan Wei Ming | 3 | M`. In 4A, **Paste from Excel** (or paste into a Full name box): three rows appear with the right index numbers; "Pasted columns" shows Full name, Index, Ignore.
 - [ ] Switch a column's dropdown (Gender → Short Name): the rows change to match. Switch it back.
 - [ ] Paste just names (`Naila`, `Joseph`, one per line): they are numbered after the class's highest index.
-- [ ] Paste a row with index 1 and a different full name: it shows "already in 4A: name … → …", not "new".
+- [ ] Paste a row with index 1 and a different full name: it shows "already in 4A: name … → …", not "new". **Save** opens "Change saved students?" listing the change; Back changes nothing.
 - [ ] Give two new rows the same index number: the second says "Index number … is already in this list". Type `abc` as an index: "Index numbers are numbers". **Save** skips those rows.
-- [ ] An existing student without a Short Name shows a grey guess; **Use suggested Short Names (n)** fills them; saving keeps them.
+- [ ] An existing student without a Short Name shows a grey guess with "?"; **Use suggested Short Names (n)** opens a popup listing `name → guess`; **Yes, set them** saves them.
+- [ ] Saved rows are locked: clicking the index or Short Name does nothing, and the name opens the profile.
 - [ ] With unsaved rows, **Back to Chat** asks "Leave without saving them?"; Cancel stays.
 - [ ] A student made by chat grading with index 30 and no class shows under "No class yet". Add index 30 in 4A: the row shows "already in 4A: class (none) → 4A"; after saving, they move to 4A with their gradings.
 - [ ] 4B can also have an index 1 (index numbers restart in every class).
-- [ ] In 4A, change a saved student's index number from 1 to 2 and another's from 2 to 1 (a swap): both rows say "not saved"; **Save** keeps both, and the list re-sorts.
-- [ ] Change one saved student's index number to another's: both rows turn red ("Index number … is taken") and nothing moves until it's fixed.
+- [ ] In 4A, **✎ Edit** the student at index 1 and change the index to 2: **Save…** opens "You're changing: Index number 1 → 2 (… becomes 1)". **Yes, change it** swaps both, and the list re-sorts. Back instead changes nothing.
+- [ ] Edit with nothing changed: the button says "No changes". Clear the full name: "The full name is needed".
+- [ ] Edit a 4A student's class to 4B and index to one 4B already has: "Index number … is already …'s in 4B", and it won't save.
 
-Rules: `checkRows()`, `readPaste()`, `suggestShortName()`, `shortNameOf()`
+Rules: `checkRows()`, `describeStudentEdit()`, `readPaste()`, `suggestShortName()`, `shortNameOf()`
 in `src/utils/classList.ts` (unit-tested); one student per teacher, class
 and index number in `supabase_class_lists.sql`.
 

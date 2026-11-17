@@ -1,14 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Student } from '../../types';
 import {
-  checkIndexEdits, checkRows, nextIndexNumber, readPaste, suggestShortName,
+  checkRows, nextIndexNumber, readPaste, suggestShortName,
   type ColumnRole, type DraftRow, type RowCheck,
 } from '../../utils/classList';
-import { renumberStudents, saveClassList } from '../../services/studentService';
+import { saveClassList } from '../../services/studentService';
+import { EditStudentModal, Modal } from './StudentManageDialogs';
 
-// One class on the Student Dashboard as a table (#181): its students, with
-// their index numbers and Short Names editable in place, and rows to add more by typing or by
-// pasting from Excel. Nothing is written until "Save N students". The rules
+// One class on the Student Dashboard as a table (#181). Saved students are
+// locked, so a stray click changes nothing: Edit opens a popup that lists
+// each change and asks to confirm. New students are added in rows, typed or
+// pasted from Excel, and nothing is written until "Save N students"; if that
+// would also change saved students, a popup lists them first. The rules
 // (matching, the Short Name guess, reading a paste) are in utils/classList.ts.
 
 interface Draft extends DraftRow {
@@ -34,6 +37,11 @@ const ROLE_LABEL: Record<ColumnRole, string> = {
 const cell =
   'w-full px-2 py-1.5 text-sm rounded-md border border-transparent bg-transparent text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-800';
 
+const secondaryButton =
+  'flex-1 px-4 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors';
+const primaryButton =
+  'flex-1 px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium';
+
 let nextKey = 1;
 
 const ClassStudentTable: React.FC<{
@@ -50,10 +58,11 @@ const ClassStudentTable: React.FC<{
   onUnsavedChange: (unsaved: boolean) => void;
 }> = ({ teacherId, className, students, allStudents, startEmpty, onOpenStudent, onSaved, onUnsavedChange }) => {
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [shortEdits, setShortEdits] = useState<Record<string, string>>({});
-  const [indexEdits, setIndexEdits] = useState<Record<string, string>>({});
   const [paste, setPaste] = useState<Paste | null>(null);
   const [pasteBox, setPasteBox] = useState(false);
+  const [editing, setEditing] = useState<Student | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [confirmingSave, setConfirmingSave] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const focusKey = useRef<number | null>(null);
@@ -63,14 +72,8 @@ const ClassStudentTable: React.FC<{
     () => [...students].sort((a, b) => a.indexNumber.localeCompare(b.indexNumber, undefined, { numeric: true })),
     [students],
   );
-  // Index numbers typed over saved students: moved only when every student keeps their own number
-  const renumber = checkIndexEdits(students, indexEdits);
-  const movedTo = new Map(renumber.moves.map(m => [m.id, m.indexNumber]));
-  const indexOf = (s: Student) => movedTo.get(s.id) ?? s.indexNumber;
-  const isIndexEdited = (s: Student) => indexEdits[s.id] !== undefined && indexEdits[s.id].trim() !== s.indexNumber;
   const firstFreeIndex = (rows: Draft[]) =>
-    nextIndexNumber([...students.map(indexOf), ...rows.map(d => d.indexNumber)]);
-
+    nextIndexNumber([...students.map(s => s.indexNumber), ...rows.map(d => d.indexNumber)]);
   const emptyRow = (rows: Draft[]): Draft =>
     ({ key: nextKey++, indexNumber: String(firstFreeIndex(rows)), name: '', shortName: '', shortNameGuessed: true });
 
@@ -79,25 +82,18 @@ const ClassStudentTable: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Typing fills the table; a row with nothing typed but its index number is not a student yet
+  // A row with nothing typed but its index number is not a student yet
   const filled = drafts.filter(d => d.name.trim() || d.shortName.trim());
-  // A Short Name typed over an existing student's (clearing one is done on their profile)
-  const isEdited = (s: Student) => !!shortEdits[s.id]?.trim() && shortEdits[s.id].trim() !== (s.shortName ?? '');
-  const editedRows: DraftRow[] = sorted
-    .filter(isEdited)
-    .map(s => ({ indexNumber: indexOf(s), name: s.name, shortName: shortEdits[s.id] }));
   const result = useMemo(
-    () => checkRows([...editedRows, ...filled], {
-      studentClass: className,
-      existing: allStudents.map(s => (movedTo.has(s.id) ? { ...s, indexNumber: movedTo.get(s.id)! } : s)),
-    }),
+    () => checkRows(filled, { studentClass: className, existing: allStudents }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(editedRows), JSON.stringify(filled), JSON.stringify(renumber.moves), className, allStudents],
+    [JSON.stringify(filled), className, allStudents],
   );
-  const checkOf = new Map<number, RowCheck>(filled.map((d, i) => [d.key, result.checks[editedRows.length + i]]));
-  const toSave = result.toAdd.length + new Set([...result.toUpdate.map(u => u.id), ...renumber.moves.map(m => m.id)]).size;
-  const problems = result.checks.filter(c => c.kind === 'problem').length + Object.keys(renumber.problems).length;
-  const unsaved = filled.length > 0 || editedRows.length > 0 || students.some(isIndexEdited);
+  const checkOf = new Map<number, RowCheck>(filled.map((d, i) => [d.key, result.checks[i]]));
+  const updates = result.checks.flatMap(c => (c.kind === 'update' ? [c] : []));
+  const toSave = result.toAdd.length + result.toUpdate.length;
+  const problems = result.checks.filter(c => c.kind === 'problem').length;
+  const unsaved = filled.length > 0;
 
   useEffect(() => onUnsavedChange(unsaved), [unsaved, onUnsavedChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,35 +160,37 @@ const ClassStudentTable: React.FC<{
     }
   };
 
-  const useSuggested = () =>
-    setShortEdits(edits => {
-      const next = { ...edits };
-      for (const s of sorted) if (!s.shortName && next[s.id] === undefined) next[s.id] = suggestShortName(s.name);
-      return next;
-    });
-
   const save = async () => {
     setSaving(true);
     setMessage('');
-    // New numbers first, so rows matched to a moved student save against the number it now has
-    if (!(await renumberStudents(renumber.moves))) {
-      setSaving(false);
-      setMessage('The new index numbers didn’t save. Please try again.');
-      return;
-    }
-    setIndexEdits({});
     const { failed } = await saveClassList(teacherId, result);
     setSaving(false);
+    setConfirmingSave(false);
     if (failed) setMessage(`${failed} didn’t save. Please try again.`);
     else {
       setDrafts([]);
-      setShortEdits({});
       setPaste(null);
     }
     onSaved();
   };
 
-  const missingShortNames = sorted.filter(s => !s.shortName && shortEdits[s.id] === undefined).length;
+  // Saved students without a Short Name: the guess for each, confirmed in a popup before saving
+  const missing = sorted.filter(s => !s.shortName);
+  const saveSuggested = async () => {
+    setSaving(true);
+    const { failed } = await saveClassList(teacherId, {
+      toAdd: [],
+      toUpdate: missing.map(s => ({
+        id: s.id, indexNumber: s.indexNumber, name: s.name, shortName: suggestShortName(s.name), studentClass: s.class ?? className,
+      })),
+    });
+    setSaving(false);
+    setSuggesting(false);
+    if (failed) setMessage(`${failed} Short Name${failed !== 1 ? 's' : ''} didn’t save. Please try again.`);
+    onSaved();
+  };
+
+  const nameOf = (id: string) => allStudents.find(s => s.id === id)?.name ?? '';
 
   return (
     <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden">
@@ -208,39 +206,36 @@ const ClassStudentTable: React.FC<{
         <tbody>
           {sorted.map(s => {
             const skillCount = Object.keys(s.progressSummary ?? {}).length;
-            const edited = isEdited(s) || isIndexEdited(s);
-            const indexProblem = renumber.problems[s.id];
             return (
-              <tr key={s.id} className={`border-t border-slate-100 dark:border-zinc-800 ${indexProblem ? 'bg-red-50/70 dark:bg-red-900/10' : edited ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
-                <td className="px-1 py-1">
-                  <input
-                    className={`${cell} text-slate-500 dark:text-slate-400`}
-                    aria-label={`Index number for ${s.name}`}
-                    inputMode="numeric"
-                    value={indexEdits[s.id] ?? s.indexNumber}
-                    onChange={e => setIndexEdits(edits => ({ ...edits, [s.id]: e.target.value }))}
-                  />
-                </td>
-                <td className="px-3 py-1.5">
+              <tr key={s.id} className="group border-t border-slate-100 dark:border-zinc-800">
+                <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{s.indexNumber}</td>
+                <td className="px-3 py-2">
                   <button onClick={() => onOpenStudent(s)} className="font-medium text-slate-800 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 text-left">
                     {s.name}
                   </button>
                 </td>
-                <td className="px-1 py-1">
-                  <input
-                    className={cell}
-                    aria-label={`Short Name for ${s.name}`}
-                    value={shortEdits[s.id] ?? s.shortName ?? ''}
-                    placeholder={suggestShortName(s.name)}
-                    onChange={e => setShortEdits(edits => ({ ...edits, [s.id]: e.target.value }))}
-                  />
-                </td>
-                <td className="px-3 py-1.5 text-right text-xs text-slate-400 dark:text-slate-500">
-                  {indexProblem ? <span className="text-red-600 dark:text-red-400">{indexProblem}</span> : edited ? 'not saved' : skillCount > 0 && (
-                    <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full">
-                      {skillCount} skill{skillCount !== 1 ? 's' : ''}
+                <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                  {s.shortName || (
+                    <span className="text-slate-400 dark:text-slate-500 italic" title="Not set yet: pupil devices show this guess">
+                      {suggestShortName(s.name)}?
                     </span>
                   )}
+                </td>
+                <td className="px-3 py-2 text-right text-xs text-slate-400 dark:text-slate-500">
+                  <div className="flex items-center justify-end gap-3">
+                    {skillCount > 0 && (
+                      <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full">
+                        {skillCount} skill{skillCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setEditing(s)}
+                      aria-label={`Edit ${s.name}`}
+                      className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 opacity-60 group-hover:opacity-100"
+                    >
+                      ✎ Edit
+                    </button>
+                  </div>
                 </td>
               </tr>
             );
@@ -312,9 +307,9 @@ const ClassStudentTable: React.FC<{
       <div className="border-t border-slate-100 dark:border-zinc-800 px-3 py-2 flex flex-wrap items-center gap-3 text-sm">
         <button onClick={addRow} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">+ Add students</button>
         <button onClick={pasteFromExcel} className="text-blue-600 dark:text-blue-400 hover:underline">Paste from Excel</button>
-        {missingShortNames > 0 && (
-          <button onClick={useSuggested} className="text-slate-500 dark:text-slate-400 hover:underline">
-            Use suggested Short Names ({missingShortNames})
+        {missing.length > 0 && (
+          <button onClick={() => setSuggesting(true)} className="text-slate-500 dark:text-slate-400 hover:underline">
+            Use suggested Short Names ({missing.length})
           </button>
         )}
         <div className="ml-auto flex items-center gap-3">
@@ -322,7 +317,7 @@ const ClassStudentTable: React.FC<{
           {problems > 0 && <span className="text-xs text-red-500">{problems} row{problems !== 1 ? 's' : ''} to fix</span>}
           {toSave > 0 && (
             <button
-              onClick={save}
+              onClick={() => (updates.length ? setConfirmingSave(true) : save())}
               disabled={saving}
               className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
             >
@@ -331,6 +326,49 @@ const ClassStudentTable: React.FC<{
           )}
         </div>
       </div>
+
+      {editing && (
+        <EditStudentModal
+          student={editing}
+          classmates={students}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); onSaved(); }}
+        />
+      )}
+
+      {confirmingSave && (
+        <Modal onClose={() => setConfirmingSave(false)}>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-2">Change saved students?</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
+            {result.toAdd.length > 0 && <>Adding {result.toAdd.length} new student{result.toAdd.length !== 1 ? 's' : ''}, and </>}
+            changing {updates.length} already saved:
+          </p>
+          <ul className="list-disc pl-5 text-sm text-slate-800 dark:text-slate-100 space-y-1 max-h-60 overflow-y-auto">
+            {updates.map(u => <li key={u.id}><b>{nameOf(u.id)}</b>: {u.changes.join(', ')}</li>)}
+          </ul>
+          <div className="flex gap-2 mt-5">
+            <button onClick={() => setConfirmingSave(false)} className={secondaryButton}>Back</button>
+            <button onClick={save} disabled={saving} className={primaryButton}>{saving ? 'Saving…' : 'Yes, save'}</button>
+          </div>
+        </Modal>
+      )}
+
+      {suggesting && (
+        <Modal onClose={() => setSuggesting(false)}>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-2">
+            Set {missing.length} Short Name{missing.length !== 1 ? 's' : ''}?
+          </h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">You’re setting:</p>
+          <ul className="list-disc pl-5 text-sm text-slate-800 dark:text-slate-100 space-y-1 max-h-60 overflow-y-auto">
+            {missing.map(s => <li key={s.id}>{s.name} → <b>{suggestShortName(s.name)}</b></li>)}
+          </ul>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">You can change any of them afterwards with Edit.</p>
+          <div className="flex gap-2 mt-5">
+            <button onClick={() => setSuggesting(false)} className={secondaryButton}>Cancel</button>
+            <button onClick={saveSuggested} disabled={saving} className={primaryButton}>{saving ? 'Saving…' : 'Yes, set them'}</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
