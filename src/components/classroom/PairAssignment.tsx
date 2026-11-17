@@ -1,16 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { Student } from '../../types';
-import { Lesson, lessonTitle } from '../../services/lessonService';
+import { Lesson, MAX_PAIR_COUNT, lessonTitle } from '../../services/lessonService';
 import { getOrCreateStudent } from '../../services/studentService';
-import { PairSlot, Performer, copyPairs, sameClass, setPairSlot, slotKey } from '../../services/pairService';
+import { PairSlot, Performer, copyPairs, sameClass, setPairSlot } from '../../services/pairService';
+import { PairChange, nextPairNumber, pairChangeWarning, pairCountFor, pairsOf } from '../../utils/pairForming';
+import { shortNameOf } from '../../utils/classList';
 
 const inputClass =
   'w-full px-3 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500';
-
-const PERFORMERS: { key: Performer; label: string; icon: string }[] = [
-  { key: 'apple', label: 'Apple', icon: '🍎' },
-  { key: 'banana', label: 'Banana', icon: '🍌' },
-];
 
 const byIndex = (a: Student, b: Student) =>
   a.indexNumber.localeCompare(b.indexNumber, undefined, { numeric: true }) || a.name.localeCompare(b.name);
@@ -21,55 +18,107 @@ interface Props {
   students: Student[];
   slots: PairSlot[];
   teacherId?: string;
-  onSlotsChanged: () => Promise<void>;
+  /** Reload every pair slot; resolves to the fresh list. */
+  onSlotsChanged: () => Promise<PairSlot[]>;
+  /** The lesson's pair count follows the pairs formed (#187). */
+  onPairCount: (pairCount: number) => Promise<void>;
   onStudentAdded: (s: Student) => void;
   onBack: () => void;
+  /** Pair numbers of this lesson that have already sent work (#185): changing them asks first. */
+  pairsWithWork?: Set<number>;
 }
 
+/** Where the next tapped name goes: a new pair, or the empty place of a pair with one name. */
+type Target = { pairNumber: number; performer: Performer } | null;
+
 /**
- * Name the pupils in each pair before the lesson. Their Practice Station work
- * is then filed under their own student record.
+ * Form the lesson's pairs (#187): tap one name, then their partner, and they
+ * become the next pair (the first tapped is Apple). ⇄ swaps Apple and Banana,
+ * ✕ splits a pair. Each pupil's Practice Station work goes to their own record.
  */
 export const PairAssignment: React.FC<Props> = ({
-  lesson, lessons, students, slots, teacherId, onSlotsChanged, onStudentAdded, onBack,
+  lesson, lessons, students, slots, teacherId, onSlotsChanged, onPairCount, onStudentAdded, onBack, pairsWithWork,
 }) => {
-  const [busy, setBusy] = useState<string | null>(null);   // slot key being saved, or 'copy'
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [first, setFirst] = useState<string | null>(null); // the name tapped first, waiting for a partner
+  const [target, setTarget] = useState<Target>(null);
   const [addForm, setAddForm] = useState({ indexNumber: '', name: '' });
   const [adding, setAdding] = useState(false);
 
+  const pairs = pairsOf(slots, lesson.id);
+  const paired = new Set(pairs.flatMap(p => [p.apple, p.banana]).filter(Boolean));
+  const studentById = new Map<string, Student>(students.map(s => [s.id, s]));
   const classRoster = useMemo(() => students.filter(s => sameClass(s.class, lesson.className)).sort(byIndex), [students, lesson.className]);
   const others = useMemo(() => students.filter(s => !sameClass(s.class, lesson.className)).sort(byIndex), [students, lesson.className]);
-
-  const mine = slots.filter(s => s.lessonId === lesson.id);
-  const bySlot = new Map(mine.map(s => [slotKey(s.lessonId, s.pairNumber, s.performer), s.studentId]));
-  const pairOf = new Map(mine.map(s => [s.studentId, s.pairNumber]));
-  const unpaired = classRoster.filter(s => !pairOf.has(s.id));
+  const unpaired = classRoster.filter(s => !paired.has(s.id));
+  const unpairedOthers = others.filter(s => !paired.has(s.id));
 
   // The most recent other lesson for this class that has pairs set
   const copySource = lessons
     .filter(l => l.id !== lesson.id && sameClass(l.className, lesson.className) && slots.some(s => s.lessonId === l.id))
     .sort((a, b) => b.lessonDate.localeCompare(a.lessonDate))[0];
 
-  const assign = async (pairNumber: number, performer: Performer, studentId: string | null) => {
-    const key = slotKey(lesson.id, pairNumber, performer);
-    setBusy(key);
+  /** Save some slot changes, in order, then make the pair count follow the pairs. */
+  const run = async (changes: [number, Performer, string | null][]) => {
+    setBusy(true);
     setError(null);
-    const ok = await setPairSlot(lesson.id, pairNumber, performer, studentId);
-    if (!ok) setError('Couldn’t save that change. Check your connection and try again.');
-    await onSlotsChanged();
-    setBusy(null);
+    for (const [n, performer, studentId] of changes) {
+      if (!(await setPairSlot(lesson.id, n, performer, studentId))) {
+        setError('Couldn’t save that change. Check your connection and try again.');
+        break;
+      }
+    }
+    await syncCount(await onSlotsChanged());
+    setBusy(false);
   };
+
+  const syncCount = async (fresh: PairSlot[]) => {
+    const count = pairCountFor(pairsOf(fresh, lesson.id));
+    if (count !== lesson.pairCount) await onPairCount(count);
+  };
+
+  /** Changing a pair that has sent work moves the work: say so, and let the teacher go ahead (#185). */
+  const okToChange = (pairNumber: number, change: PairChange) => {
+    const p = pairs.find(x => x.pairNumber === pairNumber);
+    const warning = pairChangeWarning(
+      { pairNumber, apple: p?.apple && nameOf(p.apple), banana: p?.banana && nameOf(p.banana) },
+      !!pairsWithWork?.has(pairNumber),
+      change,
+    );
+    return !warning || window.confirm(`${warning}
+
+Go ahead?`);
+  };
+
+  const tapName = (id: string) => {
+    if (busy) return;
+    if (target) {
+      setTarget(null);
+      if (!okToChange(target.pairNumber, { kind: 'fill', performer: target.performer, name: nameOf(id) })) return;
+      return run([[target.pairNumber, target.performer, id]]);
+    }
+    if (!first) return setFirst(id);
+    if (first === id) return setFirst(null); // tapped again: never mind
+    const n = nextPairNumber(pairs);
+    if (n > MAX_PAIR_COUNT) return setError(`A lesson can have up to ${MAX_PAIR_COUNT} pairs.`);
+    setFirst(null);
+    if (!okToChange(n, { kind: 'new', apple: nameOf(first), banana: nameOf(id) })) return;
+    return run([[n, 'apple', first], [n, 'banana', id]]);
+  };
+
+  const swap = (n: number, apple?: string, banana?: string) =>
+    okToChange(n, { kind: 'swap' }) && run([[n, 'apple', banana ?? null], [n, 'banana', apple ?? null]]);
+  const split = (n: number) => okToChange(n, { kind: 'split' }) && run([[n, 'apple', null], [n, 'banana', null]]);
 
   const copy = async () => {
     if (!copySource) return;
-    if (mine.length && !window.confirm(`Replace this lesson's pairs with the ones from ${lessonTitle(copySource)}?`)) return;
-    setBusy('copy');
+    if (pairs.length && !window.confirm(`Replace this lesson's pairs with the ones from ${lessonTitle(copySource)}?`)) return;
+    setBusy(true);
     setError(null);
-    const ok = await copyPairs(copySource.id, lesson.id, lesson.pairCount);
-    if (!ok) setError('Couldn’t copy the pairs. Please try again.');
-    await onSlotsChanged();
-    setBusy(null);
+    if (!(await copyPairs(copySource.id, lesson.id, MAX_PAIR_COUNT))) setError('Couldn’t copy the pairs. Please try again.');
+    await syncCount(await onSlotsChanged());
+    setBusy(false);
   };
 
   const addPupil = async () => {
@@ -85,14 +134,34 @@ export const PairAssignment: React.FC<Props> = ({
     setAddForm({ indexNumber: '', name: '' });
   };
 
-  const option = (s: Student, thisPair: number) => {
-    const inPair = pairOf.get(s.id);
-    return (
-      <option key={s.id} value={s.id}>
-        #{s.indexNumber} {s.name}{inPair && inPair !== thisPair ? ` (in Pair ${inPair})` : ''}
-      </option>
-    );
+  const nameOf = (id?: string) => {
+    const s = id ? studentById.get(id) : undefined;
+    return s ? shortNameOf(s) : '';
   };
+
+  const chip = (s: Student) => (
+    <button
+      key={s.id}
+      type="button"
+      disabled={busy}
+      onClick={() => tapName(s.id)}
+      title={s.name}
+      className={`px-3.5 py-2 rounded-xl text-sm font-bold border transition-all cursor-pointer disabled:opacity-60 ${
+        first === s.id
+          ? 'bg-indigo-600 border-indigo-600 text-white ring-4 ring-indigo-200 dark:ring-indigo-900'
+          : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-slate-100 hover:border-indigo-400'
+      }`}
+    >
+      {first === s.id && '🍎 '}{shortNameOf(s)}
+      <span className="ml-1.5 text-[10px] font-semibold opacity-60">#{s.indexNumber}</span>
+    </button>
+  );
+
+  const prompt = target
+    ? `Tap a name for Pair ${target.pairNumber}’s ${target.performer === 'apple' ? '🍎 Apple' : '🍌 Banana'}.`
+    : first
+    ? `Now tap ${nameOf(first)}’s partner.`
+    : 'Tap one name, then their partner. The first one is Apple.';
 
   return (
     <div className="flex flex-col gap-5">
@@ -103,62 +172,98 @@ export const PairAssignment: React.FC<Props> = ({
           </button>
           <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">Pairs · {lessonTitle(lesson)}</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {lesson.skillName} · {mine.length} of {lesson.pairCount * 2} places named. Each pupil’s Practice Station work goes to their own record.
+            {lesson.skillName} · {pairs.length} pair{pairs.length === 1 ? '' : 's'} · {classRoster.length - unpaired.length} of {classRoster.length} in {lesson.className} paired
           </p>
         </div>
         {copySource && (
           <button
             type="button"
             onClick={copy}
-            disabled={busy !== null}
+            disabled={busy}
             className="shrink-0 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold cursor-pointer"
           >
-            {busy === 'copy' ? 'Copying…' : `Copy pairs from ${lessonTitle(copySource)}`}
+            Copy pairs from {lessonTitle(copySource)}
           </button>
         )}
       </div>
 
       {error && <p role="alert" className="text-sm font-semibold text-red-600 dark:text-red-400">{error}</p>}
 
-      {classRoster.length === 0 && (
-        <div className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-sm text-amber-800 dark:text-amber-300">
-          No students in class {lesson.className} yet. Add them below, or give existing students the class “{lesson.className}” in the Student Dashboard.
+      <section className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/60">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{prompt}</p>
+          {(first || target) && (
+            <button type="button" onClick={() => { setFirst(null); setTarget(null); }} className="text-xs font-bold text-slate-500 hover:underline cursor-pointer">
+              Cancel
+            </button>
+          )}
         </div>
-      )}
+        {classRoster.length === 0 ? (
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            No students in class {lesson.className} yet. Add them below, or on the Student Dashboard.
+          </p>
+        ) : unpaired.length === 0 ? (
+          <p className="text-sm text-emerald-700 dark:text-emerald-400 font-semibold">Everyone in {lesson.className} is in a pair. ✓</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">{unpaired.map(chip)}</div>
+        )}
+        {unpairedOthers.length > 0 && (
+          <details className="mt-3">
+            <summary className="text-xs font-bold text-slate-500 cursor-pointer select-none">Students from other classes ({unpairedOthers.length})</summary>
+            <div className="flex flex-wrap gap-2 mt-2">{unpairedOthers.map(chip)}</div>
+          </details>
+        )}
+      </section>
 
-      <ul className="flex flex-col gap-2">
-        {Array.from({ length: lesson.pairCount }, (_, i) => i + 1).map(n => (
-          <li key={n} className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col sm:flex-row sm:items-center gap-2">
-            <span className="w-16 shrink-0 font-extrabold text-sm text-slate-800 dark:text-white">Pair {n}</span>
-            {PERFORMERS.map(p => {
-              const key = slotKey(lesson.id, n, p.key);
-              const current = bySlot.get(key) ?? '';
-              return (
-                <label key={p.key} className="flex-1 flex items-center gap-2 min-w-0">
-                  <span className="shrink-0 text-lg" title={p.label} aria-hidden>{p.icon}</span>
-                  <select
-                    aria-label={`Pair ${n} ${p.label}`}
-                    value={current}
-                    disabled={busy !== null}
-                    onChange={e => assign(n, p.key, e.target.value || null)}
-                    className={`${inputClass} ${busy === key ? 'opacity-60' : ''}`}
-                  >
-                    <option value="">{p.label} — not named</option>
-                    {classRoster.length > 0 && <optgroup label={`Class ${lesson.className}`}>{classRoster.map(s => option(s, n))}</optgroup>}
-                    {others.length > 0 && <optgroup label="Other classes">{others.map(s => option(s, n))}</optgroup>}
-                  </select>
-                </label>
-              );
-            })}
-          </li>
-        ))}
-      </ul>
-
-      {unpaired.length > 0 && (
-        <div>
-          <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">Not in a pair yet ({unpaired.length})</p>
-          <p className="text-sm text-slate-600 dark:text-slate-300">{unpaired.map(s => s.name).join(', ')}</p>
-        </div>
+      {pairs.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {pairs.map(p => (
+            <li key={p.pairNumber} className="px-4 py-3 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-3">
+              <span className="w-14 shrink-0 font-extrabold text-sm text-slate-500 dark:text-slate-400">Pair {p.pairNumber}</span>
+              {(['apple', 'banana'] as const).map(performer => (
+                <span key={performer} className="flex-1 min-w-0 flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-white">
+                  <span aria-hidden>{performer === 'apple' ? '🍎' : '🍌'}</span>
+                  {p[performer] ? (
+                    <span className="truncate" title={studentById.get(p[performer]!)?.name}>{nameOf(p[performer])}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => { setFirst(null); setTarget({ pairNumber: p.pairNumber, performer }); }}
+                      className={`px-2 py-0.5 rounded-lg border border-dashed text-xs cursor-pointer ${
+                        target?.pairNumber === p.pairNumber && target.performer === performer
+                          ? 'border-indigo-500 text-indigo-600'
+                          : 'border-slate-300 dark:border-zinc-600 text-slate-400'
+                      }`}
+                    >
+                      ＋ add
+                    </button>
+                  )}
+                </span>
+              ))}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => swap(p.pairNumber, p.apple, p.banana)}
+                title="Swap Apple and Banana"
+                aria-label={`Swap Apple and Banana in Pair ${p.pairNumber}`}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-sm cursor-pointer disabled:opacity-50"
+              >
+                ⇄
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => split(p.pairNumber)}
+                title="Split this pair"
+                aria-label={`Split Pair ${p.pairNumber}`}
+                className="px-2.5 py-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 text-sm cursor-pointer disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
 
       <form

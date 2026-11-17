@@ -65,6 +65,18 @@ in-memory video data on each refresh. See CLAUDE.md.
 > Known limitation, not a bug: uploaded video is held in an in-memory
 > cache, so it is expected to be gone after a hard refresh.
 
+## 4a. Pairs planned before the QR — 2 min
+
+Classroom Board → Your lessons. Needs a class with an earlier lesson that has pairs named.
+
+- [ ] Plan a new lesson for today in that class: its row says "⚠️ No pairs planned yet" with **Copy pairs from …** (the latest earlier lesson) and **Plan pairs**. Past lessons show no warning.
+- [ ] **Show on projector**: the QR still shows, with the same warning under it.
+- [ ] **Copy pairs from …**: the warning goes, and 👥 Pairs shows the copied count.
+- [ ] Clear one place in Pairs: the warning says "1 place still unnamed" with **Name them**, and no Copy button.
+- [ ] A lesson for a class with no earlier paired lesson shows only **Plan pairs**.
+
+Rule: `pairPlanOf()` in `src/utils/pairPlan.ts` (unit-tested).
+
 ## 5. The other three modes — 2 min
 
 Each mode only needs to open and respond; full flows are not covered here.
@@ -215,6 +227,70 @@ in `pairWork.ts`, `supabase_glow_grow.sql`.
 > refused, so the rest of the pair's work still saves. The same goes for
 > `"glow_grow": {"banana": null}` (which removes an unlocked performer's
 > entry): for a performer who has submitted, the entry stays.
+
+## 5b. Adding students to a class — 4 min
+
+Needs `supabase_class_lists.sql` run. Student Dashboard.
+
+- [ ] **+ New class**, name it `4A`. One empty row opens at index 1.
+- [ ] Type `Muhammad Hafiz bin Rahman`: the Short Name fills itself in as `Hafiz` (grey). Enter starts row 2 at index 2.
+- [ ] Type `Nur Aisha binte Ahmad`, then change its Short Name to `Ash`. Change the full name again: `Ash` stays.
+- [ ] Rows are tinted and say "new"; ✕ removes one. **Save 2 students** saves them, and 4A now lists them.
+- [ ] In Excel, copy three rows of `Name | Index No. | Gender` (with the heading row), e.g. `Tan Wei Ming | 3 | M`. In 4A, **Paste from Excel** (or paste into a Full name box): three rows appear with the right index numbers; "Pasted columns" shows Full name, Index, Ignore.
+- [ ] Switch a column's dropdown (Gender → Short Name): the rows change to match. Switch it back.
+- [ ] Paste just names (`Naila`, `Joseph`, one per line): they are numbered after the class's highest index.
+- [ ] Paste a row with index 1 and a different full name: it shows "already in 4A: name … → …", not "new". **Save** opens "Change saved students?" listing the change; Back changes nothing.
+- [ ] Give two new rows the same index number: the second says "Index number … is already in this list". Type `abc` as an index: "Index numbers are numbers". **Save** skips those rows.
+- [ ] An existing student without a Short Name shows a grey guess with "?"; **Use suggested Short Names (n)** opens a popup listing `name → guess`; **Yes, set them** saves them.
+- [ ] Saved rows are locked: nothing can be typed into them, and clicking anywhere on a row (it highlights on hover) opens that student's analysis history.
+- [ ] With unsaved rows, **Back to Chat** asks "Leave without saving them?"; Cancel stays.
+- [ ] A student made by chat grading with index 30 and no class shows under "No class yet". Add index 30 in 4A: the row shows "already in 4A: class (none) → 4A"; after saving, they move to 4A with their gradings.
+- [ ] 4B can also have an index 1 (index numbers restart in every class).
+- [ ] With saved students and no new rows, **✎ Edit 4A** sits at the bottom right. It unlocks every row (boxed inputs) and the footer says "Editing 4A"; **+ Add students** and **Paste from Excel** hide until you finish.
+- [ ] With nothing changed the button says "No changes". Change index 1 to 2 and 2 to 1 (a swap): both rows turn amber, "changed". **Save changes…** opens "Change 4A?" listing "Index number 1 → 2" and "2 → 1"; **Back** changes nothing; **Yes, change it** saves both and the list re-sorts.
+- [ ] Give two students the same index number: both rows say "Index number … is used twice" and it won't save. Clear a full name: "The full name is needed". **Cancel** puts every row back as saved.
+- [ ] A student's class is changed from their profile's Edit, not the table.
+
+Rules: `checkRows()`, `describeClassEdit()`, `readPaste()`, `suggestShortName()`, `shortNameOf()`
+in `src/utils/classList.ts` (unit-tested); one student per teacher, class
+and index number in `supabase_class_lists.sql`.
+
+## 5c. Check-in by name — 6 min
+
+Needs `supabase_check_in_by_name.sql` run, a lesson for **today** with Pairs named (e.g. Pair 1 = Aisha 🍎 + Bala 🍌, Pair 2 = Chen 🍎 + Dev 🍌), and two iPads (or one iPad and a private browser window).
+
+- [ ] Scan the class QR: "Tap your pair" lists the planned pairs as **Aisha & Bala**, **Chen & Dev**, by Short Name — no full names, no one from outside the pairs. A student with no Short Name shows the first word of their name.
+- [ ] Tap **Aisha & Bala**: "Aisha & Bala · Pair 1" with 🍎 Aisha and 🍌 Bala. **Not us** goes back; **That's us!** goes to the photo.
+- [ ] **My partner isn't here**, and a pair with only one name planned, both show "Ask your teacher".
+- [ ] Take the photo and go: the board shows Pair 1 checked in. On the second iPad, **Aisha & Bala** is greyed out "Checked in" within a few seconds.
+- [ ] On the second iPad tap **Chen & Dev**, then on the board change Pair 2's Banana: the iPad goes back to the pairs with "Your teacher changed the pairs".
+- [ ] A lesson with no pairs: "Ask your teacher — your teacher hasn't put you in pairs yet"; **Check again** after naming pairs shows them.
+- [ ] Yesterday's QR (a lesson dated yesterday): no names, "isn't open for today's lesson".
+- [ ] Pair 1 sends an AI analysis: it appears on Aisha's and Bala's Student Dashboard records, under the right one each.
+- [ ] On the projector's check-in grid, Pair 1's tile shows its photo with 🍎 Aisha and 🍌 Bala; Pair 2 (not yet in) shows 🍎 Chen 🍌 Dev greyed with "Not checked in".
+- [ ] **×** (Restart) on Pair 1: the confirm says their names are freed. On an iPad, **Aisha & Bala** is no longer greyed; they check in again and their earlier work is under "Earlier work" in the Review Tray.
+- [ ] After check-in, the peer assessment reads "🍎 Apple (Aisha), your turn to record", "check how Banana (Bala) moved", "Tell Banana (Bala)". The Practice Station header says "Pair 1 · Aisha & Bala", and the buttons say "Analyse Apple (Aisha)" / "Analyse Banana (Bala)".
+- [ ] **Our progress** says "Pair #1 · Aisha & Bala", with tabs "🍌 Banana (Bala)" and "🍎 Apple (Aisha)".
+- [ ] The chat messages and the AI's replies still say only "Apple" and "Banana" — no names.
+
+Rule: `checkInScreen()` in `src/utils/checkIn.ts` (unit-tested). Short Names never go to the AI.
+
+## 5d. Forming pairs — 3 min
+
+Classroom Board → Your lessons. Needs a class with students.
+
+- [ ] **Plan a lesson**: no "Number of pairs" box. The new lesson's row says "no pairs yet".
+- [ ] **👥 Pairs**: the class shows as name chips under "Tap one name, then their partner". Tap **Amos** (turns blue, 🍎), then **Joseph**: "Pair 1 🍎 Amos 🍌 Joseph" appears and both chips go.
+- [ ] Tap a chip twice: it's unselected. **Cancel** clears a half-made pair.
+- [ ] **⇄** swaps Apple and Banana. **✕** on Pair 1 puts both names back as chips.
+- [ ] Make Pairs 1–3, split Pair 2, make a new pair: it becomes Pair 2 (Pair 3 keeps its number).
+- [ ] Back in Your lessons, the row says "3 pairs" and the projector's check-in grid shows 3.
+- [ ] **Copy pairs from …** an earlier lesson with 5 pairs: all 5 copy and the row says "5 pairs".
+- [ ] "Students from other classes" lists the rest; tapping them pairs them the same way.
+- [ ] **Mid-lesson (#185):** once a pair has sent work, ⇄ / ✕ / "＋ add" on it asks first ("Pair 1 has already sent work. Swapping files Amos’s work under Joseph…"). **Cancel** changes nothing. Swap, then **OK**: on the Student Dashboard each pupil's Practice Station analysis is now under the other.
+- [ ] A pair with no work changes without asking.
+
+Rules: `pairsOf()`, `nextPairNumber()`, `pairCountFor()`, `pairChangeWarning()` in `src/utils/pairForming.ts` (unit-tested).
 
 ## 6. Cron endpoints — 1 min
 

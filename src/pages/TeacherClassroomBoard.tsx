@@ -26,6 +26,8 @@ import {
   fetchLessons,
   createLesson,
   updateLesson,
+  setLessonPairCount,
+  MAX_PAIR_COUNT,
   deleteLesson,
   lessonTitle,
   getCurrentLessonId,
@@ -37,6 +39,10 @@ import { ClassPicker } from '../components/classroom/ClassPicker';
 import { ALL, ClassFilter, fitFilter, getClassFilter, isGraded, matchesFilter, saveClassFilter } from '../utils/classGroups';
 import { mediaPaths, removeTeachMedia } from '../services/teachMediaService';
 import { PairAssignment } from '../components/classroom/PairAssignment';
+import { shortNameOf } from '../utils/classList';
+import { PairsWarning } from '../components/classroom/PairsWarning';
+import { pairPlanOf } from '../utils/pairPlan';
+import { pairCountFor, pairsOf } from '../utils/pairForming';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
 import { GlowGrowSaid } from '../components/peer/GlowGrowSaid';
 import { analysesSentKey, effectiveLevel, normaliseLevel } from '../utils/gradingReview';
@@ -48,6 +54,7 @@ import { getStudents } from '../services/studentService';
 import {
   PairSlot,
   Performer,
+  copyPairs,
   fetchPairSlots,
   fetchSubmissionGradings,
   fetchGradingsByIds,
@@ -305,7 +312,11 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   const [pairsLessonId, setPairsLessonId] = useState<string | null>(null);
   const pairsLesson = lessons.find((l) => l.id === pairsLessonId) ?? null;
 
-  const loadPairSlots = async () => setPairSlots(await fetchPairSlots());
+  const loadPairSlots = async () => {
+    const slots = await fetchPairSlots();
+    setPairSlots(slots);
+    return slots;
+  };
 
   // Sign-in can finish after the board mounts — load that teacher's lessons
   useEffect(() => {
@@ -324,6 +335,31 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     );
     return slot ? studentById.get(slot.studentId) : undefined;
   };
+  // "No pairs planned yet" (#182): warned where the lesson is planned and under its QR
+  const [copyingPairsFor, setCopyingPairsFor] = useState<string | null>(null);
+  const [pairsCopyFailed, setPairsCopyFailed] = useState<string | null>(null); // lesson id
+  const openPairs = (l: Lesson) => {
+    setPairsLessonId(l.id);
+    setViewMode('PAIRS');
+  };
+  const pairsWarningFor = (l: Lesson) => {
+    const plan = pairPlanOf(l, lessons, pairSlots);
+    const copy = async () => {
+      if (!plan.copyFrom) return;
+      setCopyingPairsFor(l.id);
+      setPairsCopyFailed(null);
+      // Copy every pair, then the lesson's pair count follows them (#187)
+      const ok = await copyPairs(plan.copyFrom.id, l.id, MAX_PAIR_COUNT);
+      if (!ok) setPairsCopyFailed(l.id);
+      const slots = await loadPairSlots();
+      if (ok && (await setLessonPairCount(l.id, pairCountFor(pairsOf(slots, l.id))))) await loadLessons();
+      setCopyingPairsFor(null);
+    };
+    return (
+      <PairsWarning plan={plan} copying={copyingPairsFor === l.id} failed={pairsCopyFailed === l.id} onCopy={copy} onPlanPairs={() => openPairs(l)} />
+    );
+  };
+
   const namedCounts = pairSlots.reduce<Record<string, number>>((acc, p) => {
     acc[p.lessonId] = (acc[p.lessonId] ?? 0) + 1;
     return acc;
@@ -477,7 +513,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   // stays in the Review Tray as earlier work, and they start again from Step 1
   // on any iPad. Before supabase_restart_pair.sql is run, only the check-in goes.
   const handleClearCheckIn = async (row: PairCheckInRow) => {
-    if (!confirm(`Restart Pair ${row.pair_number}? Their work so far stays in the Review Tray under "Earlier work". They start again from Step 1, on any iPad.`)) return;
+    if (!confirm(`Restart Pair ${row.pair_number}? Their work so far stays in the Review Tray under "Earlier work". Their names are freed: they tap their pair again on any iPad and start from Step 1.`)) return;
     dismissedCheckInsRef.current.set(row.pair_number, row.checked_in_at);
     setCheckIns((prev) => prev.filter((c) => c.pair_number !== row.pair_number));
     const result = await restartPair(row.lesson_id || lessonId, row.pair_number);
@@ -835,6 +871,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 )}
               </div>
 
+              {/* Only a warning: the QR still works while the teacher plans pairs */}
+              <div className="w-full mt-4">{pairsWarningFor(lesson)}</div>
+
             </div>
 
             {/* Right: Live Pair Check-in Monitor */}
@@ -887,6 +926,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                   const isChecked = !!ci;
                   const needsHelp = ci?.needs_help;
                   const hasPractised = currentLessonSubmissions.some((s) => s.pairNumber === num);
+                  // Who checked in (#184), or who is planned until they do
+                  const apple = (ci?.apple_student && studentById.get(ci.apple_student)) || slotStudent(lesson.id, num, 'apple');
+                  const banana = (ci?.banana_student && studentById.get(ci.banana_student)) || slotStudent(lesson.id, num, 'banana');
 
                   return (
                     <div
@@ -937,8 +979,14 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                           ? 'text-emerald-700 dark:text-emerald-400'
                           : 'text-slate-400'
                       }`}>
-                        {needsHelp ? 'Needs Help!' : isChecked ? 'Ready! 🚶‍♂️' : 'Waiting…'}
+                        {needsHelp ? 'Needs Help!' : isChecked ? 'Ready! 🚶‍♂️' : apple || banana ? 'Not checked in' : 'Waiting…'}
                       </span>
+                      {(apple || banana) && (
+                        <span className={`mt-1 w-full flex flex-col text-[11px] font-bold leading-tight ${isChecked ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400'}`}>
+                          <span className="truncate" title={apple?.name}>🍎 {apple ? shortNameOf(apple) : '—'}</span>
+                          <span className="truncate" title={banana?.name}>🍌 {banana ? shortNameOf(banana) : '—'}</span>
+                        </span>
+                      )}
                       {/* Where this pair is in the lesson (#91) */}
                       {(() => {
                         const at = pairStepAt(lesson.steps, ci);
@@ -985,11 +1033,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               onEdit={(l) => { setEditingLesson(l); setViewMode('PLAN_LESSON'); }}
               onShow={(l) => showLessonOnProjector(l.id)}
               onDelete={handleDeleteLesson}
-              onPairs={(l) => {
-                setPairsLessonId(l.id);
-                setViewMode('PAIRS');
-              }}
+              onPairs={openPairs}
               namedCounts={namedCounts}
+              pairsWarning={pairsWarningFor}
             />
           ) : (
             <p className="text-sm text-slate-500">Sign in to plan and save lessons.</p>
@@ -1007,8 +1053,12 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             slots={pairSlots}
             teacherId={teacherId}
             onSlotsChanged={loadPairSlots}
+            onPairCount={async (n) => {
+              if (await setLessonPairCount(pairsLesson.id, n)) await loadLessons();
+            }}
             onStudentAdded={(s) => setStudents((prev) => (prev.some((p) => p.id === s.id) ? prev : [...prev, s]))}
             onBack={() => setViewMode('LESSONS')}
+            pairsWithWork={new Set(submissions.filter((s) => s.lessonId === pairsLesson.id).map((s) => s.pairNumber))}
           />
         </div>
       )}

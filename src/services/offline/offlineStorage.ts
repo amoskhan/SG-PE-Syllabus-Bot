@@ -184,6 +184,12 @@ export interface PairSessionData {
   needsHelp: boolean;
   teacherId?: string; // Embedded from QR so student device can upload without auth
   skillName?: string; // Cached for upload path
+  /**
+   * The two students who checked in by name (#183). Only their ids and Short
+   * Names are kept on the iPad, never the lesson's list of names (ADR 0004),
+   * and they are never sent to the AI.
+   */
+  students?: Record<'apple' | 'banana', { id: string; shortName: string }>;
 }
 
 interface PeCoachDB extends DBSchema {

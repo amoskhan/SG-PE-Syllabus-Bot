@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Analytics } from "@vercel/analytics/react";
 import SessionSidebar from './components/layout/SessionSidebar';
 import ChatInput from './components/chat/ChatInput';
@@ -24,6 +24,7 @@ import Dashboard from './pages/Dashboard';
 import { TeacherClassroomBoard } from './pages/TeacherClassroomBoard';
 import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal';
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
+import { pairNamesOf, roleName } from './utils/pairNames';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
@@ -32,7 +33,7 @@ import { draftSummary, peerDraftId } from './utils/peerDraft';
 import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, glowGrowFor, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
-import { backupSubmissionToSupabase, upsertPairCheckIn, fetchClaimedPairNumbers, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep, fetchPairRestartedAt } from './services/cloudSyncService';
+import { backupSubmissionToSupabase, upsertPairCheckIn, checkInByName, fetchPlannedStudents, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep, fetchPairRestartedAt } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
 import { focusCriteria, getAllCuesForSkill, getLessonCues, lessonGradingCues } from './data/peerSyllabusCues';
@@ -156,7 +157,7 @@ const App: React.FC = () => {
   const activeStudentContextRef = React.useRef<{ studentId: string; student: Student; videoHash?: string; videoFile?: File } | null>(null);
   const pendingGymnasticsRef = React.useRef<{
     files: File[];
-    metadata: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string };
+    metadata: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string; studentClass?: string };
   } | null>(null);
 
   // DEFAULT WELCOME MESSAGE
@@ -348,7 +349,6 @@ const App: React.FC = () => {
   // 1 analysis and 5 questions per lesson
   const [pupilUsage, setPupilUsage] = useState<Record<'apple' | 'banana', { questionsLeft?: number; analysisUsed?: boolean }>>({ apple: {}, banana: {} });
   useEffect(() => onPupilUsage(r => setPupilUsage(prev => ({ ...prev, [r.performer]: { ...prev[r.performer], ...r } }))), []);
-  const [claimedPairNumbers, setClaimedPairNumbers] = useState<Set<number>>(new Set());
   const [checkInModalKey, setCheckInModalKey] = useState(0);
   const [teacherFeedbackBanner, setTeacherFeedbackBanner] = useState<string | null>(null);
   const lastSeenTeacherFeedbackRef = useRef<string | null>(null);
@@ -949,16 +949,16 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePairSession?.pairNumber, activePairSession?.lessonId, activePeerSessionData, appMode]);
 
-  // When the check-in modal opens, load which pair numbers are already taken so the
-  // student can't pick one another group is using.
-  useEffect(() => {
-    if (!isPairCheckInOpen) return;
-    let cancelled = false;
-    fetchClaimedPairNumbers(scannedLessonData.teacherId, scannedLessonData.lessonId)
-      .then((nums) => { if (!cancelled) setClaimedPairNumbers(nums); })
-      .catch(() => { /* non-fatal — modal just won't grey out taken numbers */ });
-    return () => { cancelled = true; };
-  }, [isPairCheckInOpen, scannedLessonData.teacherId, scannedLessonData.lessonId]);
+  // The pupils' Short Names with their roles (#188): on screen only, never in a
+  // chat message or anything sent to the AI (ADR 0004)
+  const pairNames = pairNamesOf(activePairSession);
+  const performerName = (p: 'Apple' | 'Banana') => roleName(p === 'Apple' ? 'apple' : 'banana', pairNames);
+
+  // Today's Pair Assignment for the name buttons at check-in (#183)
+  const loadPlannedStudents = useCallback(
+    () => fetchPlannedStudents(scannedLessonData.lessonId),
+    [scannedLessonData.lessonId],
+  );
 
   // Check whether the active (restored) pair already submitted a recording — so the home
   // screen can offer "back to AI Coach chat" instead of only "record again".
@@ -1039,30 +1039,44 @@ const App: React.FC = () => {
     };
     const claimToken = getOrCreatePairClaimToken(merged.lessonId);
 
-    const { blocked, invalidLesson } = await upsertPairCheckIn({
-      lessonId: merged.lessonId,
-      pairNumber: merged.pairNumber,
-      skillName: merged.skillName,
-      teacherId: merged.teacherId,
-      pairPhoto: merged.pairPhoto,
-      needsHelp: merged.needsHelp,
-      claimToken,
-    }).catch((e) => { console.warn(e); return { blocked: false, invalidLesson: false }; });
+    // By name (#183): the database checks the two names against today's plan
+    // and gives the pair number, so the work files under these students
+    const students = merged.students;
+    const { result, pairNumber } = students
+      ? await checkInByName({
+          lessonId: merged.lessonId,
+          appleId: students.apple.id,
+          bananaId: students.banana.id,
+          skillName: merged.skillName,
+          pairPhoto: merged.pairPhoto,
+          needsHelp: merged.needsHelp,
+          claimToken,
+        }).catch((e) => { console.warn(e); return { result: 'unavailable' as const, pairNumber: undefined }; })
+      : { result: 'not_planned' as const, pairNumber: undefined };
+    if (pairNumber) merged.pairNumber = pairNumber;
 
-    if (invalidLesson) {
+    if (result === 'unavailable') {
+      await clearActivePairSession().catch(() => { /* ignore */ }); // not checked in yet: a reload starts over
+      try { window.alert('Couldn’t check you in. Check the Wi-Fi, then tap “Go to PE Practice Venue” again.'); } catch { /* ignore */ }
+      return;
+    }
+
+    if (result === 'invalid_lesson') {
       await clearActivePairSession().catch(() => { /* ignore */ });
       try { window.alert("This QR code isn't open for today's lesson. Ask your teacher to show today's QR code, then scan again."); } catch { /* ignore */ }
       setIsPairCheckInOpen(false);
       return;
     }
 
-    if (blocked) {
-      // Another group already owns this pair number — bounce back to pick another.
+    if (result === 'taken' || result === 'not_planned') {
+      // Someone checked in with these names, or the teacher changed the pairs: back to the names
       await clearActivePairSession().catch(() => { /* ignore */ });
-      try { window.alert(`Pair ${merged.pairNumber} is already in use by another group. Please choose a different pair number.`); } catch { /* ignore */ }
-      const nums = await fetchClaimedPairNumbers(merged.teacherId, merged.lessonId).catch(() => new Set<number>());
-      setClaimedPairNumbers(nums);
-      setCheckInModalKey((k) => k + 1); // remount the modal → back to SELECT_PAIR
+      try {
+        window.alert(result === 'taken'
+          ? 'One of your names is already checked in. If that’s really you, ask your teacher.'
+          : 'Your teacher has changed the pairs. Tap your names again.');
+      } catch { /* ignore */ }
+      setCheckInModalKey((k) => k + 1); // remount the modal → back to the names
       return;
     }
 
@@ -1695,7 +1709,7 @@ const App: React.FC = () => {
     files?: File[],
     metadata?: {
       startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean;
-      studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean;
+      studentIndexNumber?: string; studentName?: string; studentClass?: string; gymnasticsModeConfirmed?: boolean;
       performer?: 'Apple' | 'Banana'; // Practice Station "Analyse": whose performance is graded
       webSearch?: boolean; // The teacher tapped "Search the web": Gemini with Google Search, no syllabus
       lessonChecklist?: string[]; // A gymnastics lesson's own cues (#150): what the AI grades
@@ -1736,6 +1750,7 @@ const App: React.FC = () => {
           student = await getOrCreateStudent(user.id, {
             indexNumber: metadata.studentIndexNumber,
             name: metadata.studentName,
+            studentClass: metadata.studentClass,
           });
           studentId = student?.id;
           console.log('[Student] Resolved student:', student?.name, studentId);
@@ -2252,6 +2267,7 @@ const App: React.FC = () => {
   if (isPairReviewOpen && activePairSession) {
     return (
       <PairWorkReview
+        names={pairNames}
         pairNumber={activePairSession.pairNumber}
         skillName={activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw'}
         record={pairRecord ?? activePairSubmission}
@@ -2485,8 +2501,7 @@ const App: React.FC = () => {
           lessonId={scannedLessonData.lessonId}
           lessonTitle={scannedLessonData.title}
           skillName={scannedLessonData.skillName || 'Overhand Throw'}
-          pairCount={scannedLessonData.pairCount}
-          claimedPairNumbers={claimedPairNumbers}
+          loadPlanned={loadPlannedStudents}
           onCompleteCheckIn={handleCompleteCheckIn}
           onCancel={() => setIsPairCheckInOpen(false)}
         />
@@ -2539,6 +2554,7 @@ const App: React.FC = () => {
         )}
         <div className="flex-1 min-h-0">
         <PeerCoachingSession
+          names={pairNames}
           pairNumber={activePairSession.pairNumber}
           lessonId={activePairSession.lessonId}
           skillName={activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw'}
@@ -2625,12 +2641,12 @@ const App: React.FC = () => {
               </button>
               <div className="min-w-0 flex-1">
                 <p className="text-sm sm:text-base font-black text-white truncate">
-                  🍎🍌 Pair {activePeerSessionData.pairNumber} · {assessSkillName}
+                  🍎🍌 Pair {activePeerSessionData.pairNumber}{pairNames.apple && pairNames.banana ? ` · ${pairNames.apple} & ${pairNames.banana}` : ''} · {assessSkillName}
                 </p>
                 {(appleTotal > 0 || bananaTotal > 0 || (activePairSession && lessonSteps.length > 1)) && (
                   <p className="text-[11px] sm:text-xs font-bold text-slate-300 truncate">
                     {activePairSession && stepScreen.kind === 'step' && lessonSteps.length > 1 && `Step ${stepScreen.number} of ${stepScreen.total} · `}
-                    {(appleTotal > 0 || bananaTotal > 0) && `Partner ticks: 🍎 ${appleMet}/${appleTotal} · 🍌 ${bananaMet}/${bananaTotal}`}
+                    {(appleTotal > 0 || bananaTotal > 0) && `Partner ticks: 🍎 ${pairNames.apple ?? ''} ${appleMet}/${appleTotal} · 🍌 ${pairNames.banana ?? ''} ${bananaMet}/${bananaTotal}`.replace(/  +/g, ' ')}
                   </p>
                 )}
               </div>
@@ -2877,10 +2893,10 @@ const App: React.FC = () => {
                           className={`h-12 px-3 active:scale-[0.98] rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
                             banana ? 'bg-amber-400 hover:bg-amber-300 text-amber-950' : 'bg-rose-500 hover:bg-rose-400 text-white'}`}
                         >
-                          <span>{banana ? '🍌' : '🍎'}</span><span>{analysisUsed(p) ? `${p} analysed ✓` : `Analyse ${p}`}</span>
+                          <span>{banana ? '🍌' : '🍎'}</span><span>{analysisUsed(p) ? `${performerName(p)} analysed ✓` : `Analyse ${performerName(p)}`}</span>
                         </button>
                         {st.stage === 'submitted' ? (
-                          <p className="h-10 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400">✅ {p} submitted</p>
+                          <p className="h-10 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400">✅ {performerName(p)} submitted</p>
                         ) : st.canKeep ? (
                           <div className="flex gap-1.5">
                             <button
@@ -3045,8 +3061,7 @@ const App: React.FC = () => {
         lessonId={scannedLessonData.lessonId}
         lessonTitle={scannedLessonData.title}
         skillName={scannedLessonData.skillName}
-        pairCount={scannedLessonData.pairCount}
-        claimedPairNumbers={claimedPairNumbers}
+        loadPlanned={loadPlannedStudents}
         onCompleteCheckIn={handleCompleteCheckIn}
         onCancel={() => setIsPairCheckInOpen(false)}
       />

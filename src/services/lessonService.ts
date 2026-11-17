@@ -136,6 +136,13 @@ export async function updateLesson(id: string, draft: LessonDraft): Promise<Less
   return fromRow(data as LessonRow);
 }
 
+/** A lesson's pair count follows the pairs the teacher forms (#187, pairCountFor). */
+export async function setLessonPairCount(id: string, pairCount: number): Promise<boolean> {
+  const { error } = await supabase.from("lessons").update({ pair_count: Math.min(MAX_PAIR_COUNT, Math.max(1, pairCount)) }).eq("id", id);
+  if (error) console.error("setLessonPairCount error:", error);
+  return !error;
+}
+
 export async function deleteLesson(id: string): Promise<void> {
   const { error } = await supabase.from("lessons").delete().eq("id", id);
   if (error) throw new Error(error.message);

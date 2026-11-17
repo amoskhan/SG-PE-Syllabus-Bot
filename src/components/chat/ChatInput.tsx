@@ -7,7 +7,7 @@ import { getStudents } from '../../services/studentService';
 import { Student, SkillMode } from '../../types';
 
 interface ChatInputProps {
-  onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string }) => void;
+  onSendMessage: (message: string, files?: File[], metadata?: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string; studentClass?: string }) => void;
   isLoading: boolean;
   selectedModel?: 'gemini' | 'claude';
   skillMode?: SkillMode;
@@ -97,6 +97,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, selecte
             skillName: skillName.trim() || undefined,
             studentIndexNumber: selectedStudent?.indexNumber || undefined,
             studentName: selectedStudent?.name || undefined,
+            studentClass: selectedStudent?.class || undefined,
           }
         : undefined;
 

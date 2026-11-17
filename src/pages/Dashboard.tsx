@@ -1,21 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Student } from '../types';
-import { getStudents, getOrCreateStudent } from '../services/studentService';
+import { getStudents } from '../services/studentService';
 import { useAuth } from '../hooks/useAuth';
+import ClassStudentTable from '../components/dashboard/ClassStudentTable';
+import { classKey } from '../utils/classGroups';
 
 interface Props {
   onOpenChat: () => void;
 }
+
+const LEAVE_WARNING = 'Some students aren’t saved yet. Leave without saving them?';
 
 const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
   const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState({ indexNumber: '', name: '', studentClass: '' });
-  const [addError, setAddError] = useState('');
-  const [addLoading, setAddLoading] = useState(false);
+  // Classes the teacher has started here, before any student in them is saved
+  const [newClasses, setNewClasses] = useState<{ id: number; name: string }[]>([]);
+  const [unsaved, setUnsaved] = useState<Record<string, boolean>>({});
+
+  const reload = useCallback(() => {
+    if (user) getStudents(user.id).then(setStudents);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -25,37 +32,39 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
     });
   }, [user]);
 
-  const grouped = students.reduce<Record<string, Student[]>>((acc, s) => {
-    const cls = s.class || 'Unassigned';
-    if (!acc[cls]) acc[cls] = [];
-    acc[cls].push(s);
-    return acc;
-  }, {});
+  // One table per class: "4a" and "4A" are the same class, shown as first spelt
+  const classes = useMemo(() => {
+    const byKey = new Map<string, { name: string; students: Student[] }>();
+    for (const s of students) {
+      if (!s.class?.trim()) continue;
+      const key = classKey(s.class);
+      if (!byKey.has(key)) byKey.set(key, { name: s.class.trim(), students: [] });
+      byKey.get(key)!.students.push(s);
+    }
+    return [...byKey].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [students]);
+  const unassigned = students.filter(s => !s.class?.trim());
 
-  const handleAdd = async () => {
-    if (!addForm.indexNumber.trim() || !addForm.name.trim()) {
-      setAddError('Index number and name are required.');
-      return;
-    }
-    if (!user) return;
-    setAddLoading(true);
-    setAddError('');
-    const s = await getOrCreateStudent(user.id, {
-      indexNumber: addForm.indexNumber.trim(),
-      name: addForm.name.trim(),
-      studentClass: addForm.studentClass.trim() || undefined,
-    });
-    if (s) {
-      setStudents(prev => {
-        const exists = prev.find(p => p.id === s.id);
-        return exists ? prev : [s, ...prev];
-      });
-      setShowAddModal(false);
-      setAddForm({ indexNumber: '', name: '', studentClass: '' });
-    } else {
-      setAddError('Failed to create student. Please try again.');
-    }
-    setAddLoading(false);
+  // A started class becomes an ordinary one once it has a saved student
+  useEffect(() => {
+    setNewClasses(list => list.filter(c => !classes.some(([key]) => key === classKey(c.name))));
+  }, [classes]);
+
+  const anyUnsaved = Object.values(unsaved).some(Boolean);
+  const markUnsaved = useCallback((key: string, value: boolean) =>
+    setUnsaved(prev => (!!prev[key] === value ? prev : { ...prev, [key]: value })), []);
+
+  useEffect(() => {
+    if (!anyUnsaved) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = LEAVE_WARNING; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [anyUnsaved]);
+
+  const leave = (go: () => void) => {
+    if (anyUnsaved && !window.confirm(LEAVE_WARNING)) return;
+    setUnsaved({});
+    go();
   };
 
   if (selectedStudent) {
@@ -76,6 +85,20 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
     );
   }
 
+  const table = (key: string, name: string, clsStudents: Student[], startEmpty = false) => user && (
+    <ClassStudentTable
+      key={key}
+      teacherId={user.id}
+      className={name}
+      students={clsStudents}
+      allStudents={students}
+      startEmpty={startEmpty}
+      onOpenStudent={s => leave(() => setSelectedStudent(s))}
+      onSaved={reload}
+      onUnsavedChange={value => markUnsaved(key, value)}
+    />
+  );
+
   return (
     <div className="h-screen overflow-y-auto bg-white dark:bg-slate-950 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
@@ -88,119 +111,87 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={onOpenChat}
+              onClick={() => leave(onOpenChat)}
               className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
             >
               Back to Chat
             </button>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => setNewClasses(list => [...list, { id: Date.now(), name: '' }])}
               className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
             >
-              + Add Student
+              + New class
             </button>
           </div>
         </div>
 
         {loading ? (
           <div className="text-slate-400 dark:text-slate-500 text-sm py-12 text-center">Loading students…</div>
-        ) : students.length === 0 ? (
-          <div className="text-center py-16 text-slate-400 dark:text-slate-500">
-            <p className="text-lg mb-2">No students yet.</p>
-            <p className="text-sm">Add a student or fill in the Student fields during a grading session.</p>
-          </div>
         ) : (
-          (Object.entries(grouped) as [string, Student[]][])
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([cls, clsStudents]) => (
-              <div key={cls} className="mb-8">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-                  {cls}
-                </h2>
+          <>
+            {students.length === 0 && newClasses.length === 0 && (
+              <div className="text-center py-16 text-slate-400 dark:text-slate-500">
+                <p className="text-lg mb-2">No students yet.</p>
+                <p className="text-sm">Start with <b>+ New class</b>, then type your students’ names or paste them from Excel.</p>
+              </div>
+            )}
+
+            {newClasses.map(c => (
+              <div key={c.id} className="mb-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <input
+                    autoFocus
+                    className="text-sm font-semibold uppercase tracking-wider px-2 py-1 rounded-md border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 w-36"
+                    placeholder="Class, e.g. 4A"
+                    value={c.name}
+                    onChange={e => setNewClasses(list => list.map(n => (n.id === c.id ? { ...n, name: e.target.value } : n)))}
+                  />
+                  <button
+                    onClick={() => { markUnsaved(`new-${c.id}`, false); setNewClasses(list => list.filter(n => n.id !== c.id)); }}
+                    className="text-xs text-slate-400 hover:text-red-500"
+                  >
+                    Cancel
+                  </button>
+                  {c.name.trim() && classes.some(([key]) => key === classKey(c.name)) && (
+                    <span className="text-xs text-amber-600">That class is already below: add students there.</span>
+                  )}
+                </div>
+                {c.name.trim()
+                  ? table(`new-${c.id}`, c.name.trim(), [], true)
+                  : <p className="text-xs text-slate-400 dark:text-slate-500">Name the class to start adding students.</p>}
+              </div>
+            ))}
+
+            {classes.map(([key, { name, students: clsStudents }]) => (
+              <div key={key} className="mb-8">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">{name}</h2>
+                {table(key, name, clsStudents)}
+              </div>
+            ))}
+
+            {unassigned.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">No class yet</h2>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                  Add one of these students to their class with the same index number, and they move there with their gradings.
+                </p>
                 <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-                  {clsStudents.map((s, i) => {
-                    const skillCount = Object.keys(s.progressSummary ?? {}).length;
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => setSelectedStudent(s)}
-                        className={`w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors text-left ${i < clsStudents.length - 1 ? 'border-b border-slate-100 dark:border-zinc-800' : ''}`}
-                      >
-                        <div>
-                          <span className="font-medium text-slate-800 dark:text-white text-sm">{s.name}</span>
-                          <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">#{s.indexNumber}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-                          {skillCount > 0 && (
-                            <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full">
-                              {skillCount} skill{skillCount !== 1 ? 's' : ''}
-                            </span>
-                          )}
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </button>
-                    );
-                  })}
+                  {unassigned.map((s, i) => (
+                    <button
+                      key={s.id}
+                      onClick={() => leave(() => setSelectedStudent(s))}
+                      className={`w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors text-left text-sm ${i < unassigned.length - 1 ? 'border-b border-slate-100 dark:border-zinc-800' : ''}`}
+                    >
+                      <span className="font-medium text-slate-800 dark:text-white">{s.name}</span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">#{s.indexNumber}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            ))
+            )}
+          </>
         )}
       </div>
-
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Add Student</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Index Number *</label>
-                <input
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g. 01"
-                  value={addForm.indexNumber}
-                  onChange={e => setAddForm(f => ({ ...f, indexNumber: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Name *</label>
-                <input
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g. Ali bin Ahmad"
-                  value={addForm.name}
-                  onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Class</label>
-                <input
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g. 3A"
-                  value={addForm.studentClass}
-                  onChange={e => setAddForm(f => ({ ...f, studentClass: e.target.value }))}
-                />
-              </div>
-              {addError && <p className="text-xs text-red-500">{addError}</p>}
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button
-                onClick={() => { setShowAddModal(false); setAddError(''); }}
-                className="flex-1 px-4 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={addLoading}
-                className="flex-1 px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
-              >
-                {addLoading ? 'Adding…' : 'Add'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import { supabase } from "./db/supabaseClient";
 import { PairSubmissionRecord, getSubmission, putSubmission, getLessonPass } from "./offline/offlineStorage";
 import type { LessonStep } from "../utils/lessonFlow";
+import type { PlannedStudent } from "../utils/checkIn";
 import type { PairGlowGrowToSend } from "../utils/glowGrow";
 import { firstAttemptsToSend, mapRowToSubmission, recordGlowGrowToSend } from "../utils/pairWork";
 import { CLIP_TIME_LIMIT_MS, SAVE_TIME_LIMIT_MS, withinTimeLimit } from "../utils/timeLimit";
@@ -405,6 +406,9 @@ export interface PairCheckInRow {
   step_id?: string | null;
   step_index?: number | null;
   step_finished?: boolean | null;
+  // Who checked in, by name (#183; supabase_check_in_by_name.sql)
+  apple_student?: string | null;
+  banana_student?: string | null;
 }
 
 /**
@@ -525,23 +529,65 @@ export async function deletePairCheckIn(lessonId: string, pairNumber: number): P
 }
 
 /**
- * Pair numbers already checked in for a lesson — used to grey out taken numbers
- * in the student's PairCheckInModal.
+ * Today's Pair Assignment for the name buttons at check-in (#183, ADR 0004):
+ * Short Names, pair, Apple/Banana and whether each is taken. Kept in memory
+ * while checking in, never stored. null when it couldn't be fetched.
  */
-export async function fetchClaimedPairNumbers(
-  _teacherId?: string,
-  lessonId?: string,
-): Promise<Set<number>> {
-  if (!lessonId) return new Set();
-  const { data, error } = await supabase.rpc("pupil_claimed_pairs", {
+export async function fetchPlannedStudents(lessonId: string): Promise<PlannedStudent[] | null> {
+  const { data, error } = await supabase.rpc("pupil_planned_students", {
     p_lesson_id: lessonId,
     p_pass: getLessonPass(lessonId),
   });
   if (error) {
-    console.warn("[CloudSync] pupil_claimed_pairs error:", error);
-    return new Set();
+    console.warn("[CloudSync] pupil_planned_students error:", error);
+    return null;
   }
-  return new Set((data as number[] | null) ?? []);
+  return ((data as { student_id: string; short_name: string; pair_number: number; performer: string; taken: boolean }[] | null) ?? [])
+    .filter(r => r.performer === "apple" || r.performer === "banana")
+    .map(r => ({
+      studentId: r.student_id,
+      shortName: r.short_name ?? "",
+      pairNumber: r.pair_number,
+      performer: r.performer as "apple" | "banana",
+      taken: !!r.taken,
+    }));
+}
+
+/**
+ * Check a pair in by the two names they tapped. The database checks them
+ * against the plan and gives the pair number. 'unavailable' when it can't be
+ * reached (offline, or supabase_check_in_by_name.sql not run).
+ */
+export async function checkInByName(params: {
+  lessonId: string;
+  appleId: string;
+  bananaId: string;
+  skillName?: string;
+  pairPhoto?: string;
+  needsHelp?: boolean;
+  claimToken: string;
+}): Promise<{ result: "ok" | "not_planned" | "taken" | "invalid_lesson" | "unavailable"; pairNumber?: number }> {
+  const { data, error } = await supabase.rpc("pupil_check_in_by_name", {
+    p_lesson_id: params.lessonId,
+    p_pass: getLessonPass(params.lessonId),
+    p_apple: params.appleId,
+    p_banana: params.bananaId,
+    p_skill_name: params.skillName ?? null,
+    p_pair_photo: params.pairPhoto ?? null,
+    p_needs_help: params.needsHelp ?? false,
+    p_claim_token: params.claimToken,
+  });
+  if (error) {
+    console.error("[CloudSync] pupil_check_in_by_name error:", error);
+    return { result: "unavailable" };
+  }
+  const out = (data ?? {}) as { result?: string; pair_number?: number };
+  // Another iPad holds the pair ('claimed'): for the pupils, their names are taken
+  const result = out.result === "claimed" ? "taken" : out.result;
+  if (result === "ok" || result === "not_planned" || result === "taken" || result === "invalid_lesson") {
+    return { result, pairNumber: out.pair_number };
+  }
+  return { result: "unavailable" };
 }
 
 /**

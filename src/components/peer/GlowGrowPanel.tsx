@@ -11,6 +11,8 @@ import { GLOW_GROW_MAX_LENGTH, GlowGrowCard, GlowGrowChoice, GlowGrowPicks, addH
 interface GlowGrowPanelProps {
   card: GlowGrowCard;
   performer: 'Apple' | 'Banana';
+  /** How to show the performer: "Banana (Joseph)" once the pair checked in by name (#188). */
+  performerName?: string;
   cueCount: number;
   cuesOpen: boolean;              // the assessor reopened the folded cue list
   onCuesOpen: (open: boolean) => void;
@@ -81,11 +83,11 @@ const OwnIdeaBox: React.FC<{ text: string; onText: (text: string) => void }> = (
   );
 };
 
-export const GlowGrowPanel: React.FC<GlowGrowPanelProps> = ({ card, performer, cueCount, cuesOpen, onCuesOpen, onPicks }) => {
+export const GlowGrowPanel: React.FC<GlowGrowPanelProps> = ({ card, performer, performerName = performer, cueCount, cuesOpen, onCuesOpen, onPicks }) => {
   if (!card.allTicked) {
     return (
       <p className="mb-3 px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-xs font-bold text-slate-300">
-        Tick every cue ({card.tickedCount} of {cueCount}) to tell {performer} a glow and a grow.
+        Tick every cue ({card.tickedCount} of {cueCount}) to tell {performerName} a glow and a grow.
       </p>
     );
   }
@@ -133,7 +135,7 @@ export const GlowGrowPanel: React.FC<GlowGrowPanelProps> = ({ card, performer, c
       </div>
 
       <div className="mb-3 p-3 rounded-2xl bg-slate-800/90 border-2 border-amber-400/70 flex flex-col gap-3">
-        <h3 className="text-base font-black text-amber-300">💬 Tell {performer}</h3>
+        <h3 className="text-base font-black text-amber-300">💬 Tell {performerName}</h3>
 
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-black text-emerald-300">🌟 Glow · {card.glowStarter}…</p>
@@ -153,7 +155,7 @@ export const GlowGrowPanel: React.FC<GlowGrowPanelProps> = ({ card, performer, c
 
         {card.sentence ? (
           <div className="p-3 rounded-2xl bg-slate-900 border border-slate-700 flex flex-col gap-2">
-            <p className="text-[11px] font-bold text-slate-400">Say this to {performer}:</p>
+            <p className="text-[11px] font-bold text-slate-400">Say this to {performerName}:</p>
             <p className="text-base font-black text-white leading-snug">{card.sentence}</p>
             {/* Spoken only on a tap: a hall of iPads must not all talk at once */}
             <button

@@ -9,12 +9,16 @@ A signed-in PE teacher who plans lessons, reviews pupils' work and owns all stud
 _Avoid_: User, admin
 
 **Pupil**:
-An anonymous child taking part in a lesson on a shared device, known only by pair number and Apple/Banana label.
-_Avoid_: Learner, kid, child, student (when no name is attached)
+A child taking part in a lesson on a shared device, who picks their own name at check-in; the device knows them only by that name, their pair number and their Apple/Banana label, and only for that lesson.
+_Avoid_: Learner, kid, child, student (when speaking of the child in the lesson rather than the teacher's record)
 
 **Student**:
 A named child the teacher keeps a record for; analyses and teacher assessments are filed under them.
-_Avoid_: Pupil (when a name is attached), learner
+_Avoid_: Pupil (when speaking of the record), learner
+
+**Short Name**:
+What a student is called day to day, such as "Aisha" for "Nur Aisha binte Ahmad"; it is the only name a pupil device shows.
+_Avoid_: Nickname, display name, first name
 
 ## Classroom
 
@@ -51,7 +55,7 @@ The fixed labels for the two pupils in a pair for a lesson (like "Pupil A" and "
 _Avoid_: Partner 1/2
 
 **Pair Assignment**:
-The teacher's plan, made before a lesson, of which students form each pair and who is Apple and who is Banana.
+The teacher's plan of which students form each pair and who is Apple and who is Banana. Every lesson needs one: pupils check in against it, and the teacher can change it during the lesson.
 
 **Performer**:
 The pupil being filmed while doing a skill.
@@ -61,7 +65,7 @@ The pupil watching the performer and ticking cues; the two pupils in a pair take
 _Avoid_: Coach, partner
 
 **Check-in**:
-A pair announcing it is present and ready (with a pair photo) before practice begins. The teacher can clear it, which frees the pair number for the same pair on any device and leads to a restart; it never removes work.
+A pair announcing it is present and ready before practice begins: each pupil taps their own name, which places them in their planned pair, then they take a pair photo. A name can be taken once per lesson. The teacher can clear it, which frees the pair's names for the same pair on any device and leads to a restart; it never removes work.
 _Avoid_: Pair session
 
 **Classroom Board**:
@@ -103,6 +107,14 @@ _Avoid_: Redo (that is a redo request), reset
 
 **Redo Request**:
 The teacher's green light for a pair to try again; each performer sees their earlier attempt and chooses to keep it or film again, and a new attempt replaces the old one.
+
+**Teacher Note**:
+A short message from the teacher to one pair about their submission. A new note replaces the last, and the teacher can see when the pair first saw it and when they said they got it. A restart sets it aside with the earlier work.
+_Avoid_: Feedback, teacher cue, praise, comment
+
+**Completed**:
+The teacher's mark that they have finished reviewing a pair's submission. It awards nothing and is not a level: a performer's level is their final level. The teacher can undo it, and a redo request undoes it too.
+_Avoid_: Approved, award star, graded
 
 ## Skills and grading
 

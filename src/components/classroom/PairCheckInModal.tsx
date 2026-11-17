@@ -1,14 +1,19 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { speechService } from '../../services/speechService';
 import { saveActivePairSession, PairSessionData } from '../../services/offline/offlineStorage';
+import { checkInScreen, nameOf, type PlannedStudent } from '../../utils/checkIn';
+import { NameCheckIn, type Choice } from './NameCheckIn';
+
+/** How often the names refresh while pupils pick, so taken names grey out on every iPad. */
+const NAMES_REFRESH_MS = 4000;
 
 interface PairCheckInModalProps {
   isOpen: boolean;
   lessonId: string;
   lessonTitle: string;
   skillName: string;
-  claimedPairNumbers?: Set<number>; // pair numbers already checked in by other groups
-  pairCount?: number; // pairs in this lesson, from the class QR (default 15)
+  /** Today's Pair Assignment (fetchPlannedStudents); null when it couldn't be fetched. */
+  loadPlanned: () => Promise<PlannedStudent[] | null>;
   onCompleteCheckIn: (sessionData: PairSessionData) => void;
   onCancel: () => void;
 }
@@ -18,13 +23,17 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
   lessonId,
   lessonTitle,
   skillName,
-  claimedPairNumbers,
-  pairCount = 15,
+  loadPlanned,
   onCompleteCheckIn,
   onCancel,
 }) => {
   const [step, setStep] = useState<'SELECT_PAIR' | 'TAKE_PHOTO' | 'READY_LINEUP'>('SELECT_PAIR');
-  const [selectedPairNumber, setSelectedPairNumber] = useState<number | null>(null);
+  // Check-in by name (#183): the pair tapped, and the pair it makes in the plan
+  const [planned, setPlanned] = useState<PlannedStudent[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [choice, setChoice] = useState<Choice>(null);
+  const [chosen, setChosen] = useState<{ pairNumber: number; apple: PlannedStudent; banana: PlannedStudent } | null>(null);
+  const selectedPairNumber = chosen?.pairNumber ?? null;
   const [photoData, setPhotoData] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -38,13 +47,31 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
     if (!isOpen) return;
 
     if (step === 'SELECT_PAIR') {
-      speechService.speak('Apple, please choose your pair number.');
+      speechService.speak('Tap your pair.');
     } else if (step === 'TAKE_PHOTO') {
       speechService.speak('Apple and Banana, smile together for your pair photo!');
     } else if (step === 'READY_LINEUP') {
       speechService.speak('Great job! You are ready. Please line up quietly at the classroom door!');
     }
   }, [step, isOpen]);
+
+  const refreshNames = useCallback(async () => {
+    const list = await loadPlanned();
+    if (list) {
+      setPlanned(list);
+      setLoadFailed(false);
+    } else setLoadFailed(true);
+  }, [loadPlanned]);
+
+  // The names, kept fresh while pupils pick
+  useEffect(() => {
+    if (!isOpen || step !== 'SELECT_PAIR') return;
+    refreshNames();
+    const timer = setInterval(refreshNames, NAMES_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [isOpen, step, refreshNames]);
+
+  const screen = planned ? checkInScreen(planned, choice) : null;
 
   // Auto-start camera when entering TAKE_PHOTO step
   useEffect(() => {
@@ -193,9 +220,13 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
   };
 
   const handleFinish = async () => {
-    if (!selectedPairNumber || !photoData) return;
+    if (!chosen || !photoData) return;
     const sessionData: PairSessionData = {
-      pairNumber: selectedPairNumber,
+      pairNumber: chosen.pairNumber,
+      students: {
+        apple: { id: chosen.apple.studentId, shortName: nameOf(chosen.apple) },
+        banana: { id: chosen.banana.studentId, shortName: nameOf(chosen.banana) },
+      },
       lessonId,
       pairPhoto: photoData,
       checkedInAt: new Date().toISOString(),
@@ -229,54 +260,20 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
           </button>
         </div>
 
-        {/* STEP 1: SELECT PAIR NUMBER */}
+        {/* STEP 1: TAP YOUR NAMES (#183) */}
         {step === 'SELECT_PAIR' && (
-          <div className="w-full flex flex-col items-center">
-            <div className="text-center mb-5">
-              <h2 className="text-2xl font-black text-slate-800 dark:text-white">Choose Your Pair Number</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Apple, tap your pair number below (Pair 1 to {pairCount}):
-              </p>
-            </div>
-
-            <div className="grid grid-cols-5 gap-2.5 w-full max-w-md my-2">
-              {Array.from({ length: pairCount }, (_, i) => i + 1).map((num) => {
-                const taken = claimedPairNumbers?.has(num) && selectedPairNumber !== num;
-                return (
-                  <button
-                    key={num}
-                    type="button"
-                    disabled={taken}
-                    onClick={() => setSelectedPairNumber(num)}
-                    title={taken ? `Pair ${num} is already in use by another group` : undefined}
-                    className={`relative aspect-square rounded-2xl font-black text-lg md:text-xl transition-all duration-150 flex flex-col items-center justify-center shadow-xs ${
-                      taken
-                        ? 'bg-slate-100 dark:bg-zinc-800/50 text-slate-300 dark:text-zinc-600 border border-slate-200 dark:border-zinc-800 cursor-not-allowed'
-                        : selectedPairNumber === num
-                        ? 'bg-indigo-600 text-white scale-105 shadow-md shadow-indigo-600/30 ring-4 ring-indigo-200 dark:ring-indigo-900 cursor-pointer'
-                        : 'bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-zinc-700 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer'
-                    }`}
-                  >
-                    <span>{taken ? '🔒' : num}</span>
-                    <span className="text-[9px] uppercase font-bold opacity-70">{taken ? 'Taken' : 'Pair'}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              disabled={!selectedPairNumber}
-              onClick={() => {
-                setStep('TAKE_PHOTO');
-                startFrontCamera();
-              }}
-              className="mt-6 w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold rounded-2xl text-base shadow-lg shadow-indigo-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-            >
-              <span>Continue to Pair Photo 📸</span>
-              <span>→</span>
-            </button>
-          </div>
+          <NameCheckIn
+            screen={screen}
+            loadFailed={loadFailed}
+            onChoose={setChoice}
+            onRetry={refreshNames}
+            onContinue={() => {
+              if (screen?.kind !== 'ready') return;
+              setChosen({ pairNumber: screen.pairNumber, apple: screen.apple, banana: screen.banana });
+              setStep('TAKE_PHOTO');
+              startFrontCamera();
+            }}
+          />
         )}
 
         {/* STEP 2: TAKE PAIR PHOTO */}
@@ -400,6 +397,11 @@ export const PairCheckInModal: React.FC<PairCheckInModalProps> = ({
               <span className="text-3xl font-black text-slate-800 dark:text-white">
                 PAIR #{selectedPairNumber}
               </span>
+              {chosen && (
+                <span className="text-base font-bold text-slate-600 dark:text-slate-300">
+                  {nameOf(chosen.apple)} 🍎 · {nameOf(chosen.banana)} 🍌
+                </span>
+              )}
               <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
                 Task: {skillName}
               </span>

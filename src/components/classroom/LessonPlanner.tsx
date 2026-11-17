@@ -8,7 +8,6 @@ import {
   SkillArea,
   makeLessonKeys,
   LEVELS,
-  MAX_PAIR_COUNT,
   lessonTitle,
   todayIso,
 } from '../../services/lessonService';
@@ -45,14 +44,14 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
   const [objective, setObjective] = useState(lesson?.objective ?? '');
   const [skillArea, setSkillArea] = useState<SkillArea | ''>(lesson?.skillArea ?? '');
   const [skillName, setSkillName] = useState(lesson?.skillName ?? '');
-  const [pairCount, setPairCount] = useState(lesson ? String(lesson.pairCount) : '');
   const [steps, setSteps] = useState<LessonStep[]>(lesson?.steps ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const areaSkills = skillArea ? SKILLS_BY_AREA[skillArea] : [];
   const problems = skillArea ? validateLesson({ mainSkill: skillName, skillArea, steps }) : [];
-  const pairs = Number(pairCount);
+  // The pair count follows the pairs formed on the board (#187); a new lesson starts at one
+  const pairs = lesson?.pairCount ?? 1;
 
   // ── Teach media (#89) ──
   // Files live in the lesson's folder, which needs its id and pass: an edited
@@ -99,7 +98,6 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
       : !level ? 'Choose the level.'
       : !skillArea ? 'Choose the skill area: FMS or Gymnastics.'
       : !skillName ? 'Choose the main skill.'
-      : !(Number.isInteger(pairs) && pairs >= 1 && pairs <= MAX_PAIR_COUNT) ? `Enter the number of pairs (1–${MAX_PAIR_COUNT}).`
       : null;
     if (missing) {
       setError(missing);
@@ -215,19 +213,6 @@ export const LessonPlanForm: React.FC<LessonPlanFormProps> = ({ lesson, teacherI
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1.5">
-          <span className={labelClass}>Number of pairs</span>
-          <input
-            type="number"
-            min={1}
-            max={MAX_PAIR_COUNT}
-            required
-            value={pairCount}
-            onChange={(e) => setPairCount(e.target.value)}
-            placeholder="e.g. 15"
-            className={inputClass}
-          />
-        </label>
       </div>
 
       <StepBuilder
@@ -288,6 +273,8 @@ interface LessonListProps {
   onPairs: (lesson: Lesson) => void;
   onEdit: (lesson: Lesson) => void;
   namedCounts: Record<string, number>; // lesson id → pupils named in its pairs
+  /** The "No pairs planned yet" warning for a lesson today or later (#182). */
+  pairsWarning?: (lesson: Lesson) => React.ReactNode;
 }
 
 const LessonRow: React.FC<{
@@ -298,9 +285,10 @@ const LessonRow: React.FC<{
   onPairs: () => void;
   onEdit: () => void;
   named: number;
-}> = ({ lesson, isCurrent, onShow, onDelete, onPairs, onEdit, named }) => (
+  warning?: React.ReactNode;
+}> = ({ lesson, isCurrent, onShow, onDelete, onPairs, onEdit, named, warning }) => (
   <li
-    className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center gap-3 ${
+    className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 ${
       isCurrent
         ? 'border-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/30 dark:border-indigo-700'
         : 'border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'
@@ -319,7 +307,7 @@ const LessonRow: React.FC<{
         )}
       </div>
       <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5">
-        {lesson.skillName} · {lesson.pairCount} pairs · {lesson.steps.length} step{lesson.steps.length === 1 ? '' : 's'}
+        {lesson.skillName} · {named ? `${lesson.pairCount} pair${lesson.pairCount === 1 ? '' : 's'}` : 'no pairs yet'} · {lesson.steps.length} step{lesson.steps.length === 1 ? '' : 's'}
       </p>
       {lesson.objective && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{lesson.objective}</p>}
     </div>
@@ -362,6 +350,7 @@ const LessonRow: React.FC<{
         🗑
       </button>
     </div>
+    {warning && <div className="basis-full">{warning}</div>}
   </li>
 );
 
@@ -376,6 +365,7 @@ export const LessonList: React.FC<LessonListProps> = ({
   onPairs,
   onEdit,
   namedCounts,
+  pairsWarning,
 }) => {
   const today = todayIso();
   const upcoming = lessons.filter((l) => l.lessonDate >= today).reverse(); // soonest first
@@ -393,6 +383,7 @@ export const LessonList: React.FC<LessonListProps> = ({
               onPairs={() => onPairs(l)}
               onEdit={() => onEdit(l)}
               named={namedCounts[l.id] ?? 0}
+              warning={l.lessonDate >= today ? pairsWarning?.(l) : undefined}
             />
           ))}
         </ul>

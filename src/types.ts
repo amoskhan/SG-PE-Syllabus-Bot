@@ -57,6 +57,8 @@ export interface Student {
   teacherId: string;
   indexNumber: string;
   name: string;
+  /** What the child is called day to day; read it through shortNameOf() (src/utils/classList.ts). */
+  shortName?: string;
   class?: string;
   progressSummary: Record<string, string>; // { skillName: summaryText }
   createdAt: Date;
