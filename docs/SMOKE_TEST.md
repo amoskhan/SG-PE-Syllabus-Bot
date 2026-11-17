@@ -257,6 +257,7 @@ Needs `supabase_check_in_by_name.sql` run, a lesson for **today** with Pairs nam
 - [ ] Pair 1 sends an AI analysis: it appears on Aisha's and Bala's Student Dashboard records, under the right one each.
 - [ ] **Restart** Pair 1 on the board: Aisha and Bala can be tapped again.
 - [ ] After check-in, the peer assessment reads "🍎 Apple (Aisha), your turn to record", "check how Banana (Bala) moved", "Tell Banana (Bala)". The Practice Station header says "Pair 1 · Aisha & Bala", and the buttons say "Analyse Apple (Aisha)" / "Analyse Banana (Bala)".
+- [ ] **Our progress** says "Pair #1 · Aisha & Bala", with tabs "🍌 Banana (Bala)" and "🍎 Apple (Aisha)".
 - [ ] The chat messages and the AI's replies still say only "Apple" and "Banana" — no names.
 
 Rule: `checkInScreen()` in `src/utils/checkIn.ts` (unit-tested). Short Names never go to the AI.

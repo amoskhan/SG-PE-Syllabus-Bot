@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { PairNames, roleName } from '../../utils/pairNames';
 import type { AttemptSnapshot, PairSubmissionRecord, PeerCueResult } from '../../services/offline/offlineStorage';
 import { currentAttempt, Performer, performerKey, PerformerStage, Stage } from '../../utils/pairWork';
 import MarkdownRenderer from '../chat/MarkdownRenderer';
@@ -38,6 +39,8 @@ interface PairWorkReviewProps {
   // Someone still has to be filmed, or the ticks finished: back into the recorder
   recordLabel?: string | null;
   onClose: () => void;
+  // The pupils' Short Names (#188): shown with their roles, on screen only
+  names?: PairNames;
 }
 
 const STAGE_TEXT: Record<Stage, string> = {
@@ -243,6 +246,7 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
   onStartRecording,
   recordLabel,
   onClose,
+  names = {},
 }) => {
   const [tab, setTab] = useState<Performer>('Banana');
 
@@ -251,7 +255,7 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 bg-slate-950/90 border-b border-slate-800">
         <div className="min-w-0">
-          <h1 className="text-base font-black text-white">⭐ Our progress · Pair #{pairNumber}</h1>
+          <h1 className="text-base font-black text-white">⭐ Our progress · Pair #{pairNumber}{names.apple && names.banana ? ` · ${names.apple} & ${names.banana}` : ''}</h1>
           <p className="text-xs text-slate-400 font-semibold truncate">{skillName}</p>
         </div>
         <button
@@ -296,7 +300,7 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
                         tab === p ? `${THEME[p].tab} shadow-md` : 'text-slate-300'}`}
                     >
                       <span>{THEME[p].icon}</span>
-                      <span>{p}</span>
+                      <span className="truncate">{roleName(p === 'Apple' ? 'apple' : 'banana', names)}</span>
                       {st.stage === 'submitted' && <span className="text-sm">✅</span>}
                       {st.redo && <span className="text-sm">🔄</span>}
                     </button>

@@ -2267,6 +2267,7 @@ const App: React.FC = () => {
   if (isPairReviewOpen && activePairSession) {
     return (
       <PairWorkReview
+        names={pairNames}
         pairNumber={activePairSession.pairNumber}
         skillName={activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw'}
         record={pairRecord ?? activePairSubmission}
