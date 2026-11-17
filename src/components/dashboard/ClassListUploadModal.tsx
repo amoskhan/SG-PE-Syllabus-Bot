@@ -117,6 +117,12 @@ const ClassListUploadModal: React.FC<{
                   <ul className="list-disc pl-5">
                     {result.problems.map(p => <li key={p.line}>Line {p.line}: {p.message}</li>)}
                   </ul>
+                  {result.problems.some(p => p.message.startsWith('No index number')) && (
+                    <p className="mt-2 text-slate-600 dark:text-slate-300">
+                      Every student needs their index number first, the one from the class register, e.g.{' '}
+                      <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 rounded">12, Naila Rahman, Naila, 4A</code>
+                    </p>
+                  )}
                 </div>
               )}
             </div>

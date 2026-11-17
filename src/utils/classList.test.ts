@@ -53,6 +53,15 @@ describe('readClassList', () => {
     ]);
   });
 
+  it('reports names pasted without index numbers, never skipping the first one as a heading', () => {
+    const result = readClassList('Naila\nJoseph', { defaultClass: '4A' });
+    expect(result.toAdd).toEqual([]);
+    expect(result.problems).toEqual([
+      { line: 1, message: 'No index number before "Naila"' },
+      { line: 2, message: 'No index number before "Joseph"' },
+    ]);
+  });
+
   describe('children already in the app', () => {
     const existing = [
       { id: 's12', indexNumber: '12', name: 'Nur Aisha', class: '4a' },

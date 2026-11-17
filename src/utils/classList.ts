@@ -91,14 +91,21 @@ export const readClassList = (text: string, { existing = [], defaultClass = '' }
   text.split(/\r?\n/).forEach((line, i) => {
     if (!line.trim()) return;
     const lineNo = i + 1;
-    const [indexNumber, name, shortName, ownClass] = cellsOf(line).map(tidy);
+    const cells = cellsOf(line).map(tidy);
+    const [indexNumber, name, shortName, ownClass] = cells;
     const isFirst = firstLine;
     firstLine = false;
-    // A heading row ("Index No., Name, ...") has no digit where the index number goes
-    if (isFirst && !/\d/.test(indexNumber)) return;
+    // A heading row ("Index No., Name, ...") names the columns. Only skip a first line that
+    // does: a list of bare names ("Naila") must be reported, not quietly lose its first child.
+    if (isFirst && !/\d/.test(indexNumber) && cells.some(c => /\b(index|name|class)\b/i.test(c))) return;
     const studentClass = ownClass || tidy(defaultClass);
 
-    const problem = !indexNumber ? 'No index number' : !name ? 'No name' : !studentClass ? 'No class' : null;
+    // Index numbers are numbers; a word where one goes is a name typed without its index number
+    const problem = !indexNumber ? 'No index number'
+      : !/\d/.test(indexNumber) ? `No index number before "${indexNumber}"`
+      : !name ? 'No name'
+      : !studentClass ? 'No class'
+      : null;
     if (problem) { problems.push({ line: lineNo, message: problem }); return; }
     const key = studentKey(studentClass, indexNumber);
     const earlier = seenOnLine.get(key);
