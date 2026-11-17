@@ -216,32 +216,27 @@ in `pairWork.ts`, `supabase_glow_grow.sql`.
 > `"glow_grow": {"banana": null}` (which removes an unlocked performer's
 > entry): for a performer who has submitted, the entry stays.
 
-## 5b. Class-list upload — 3 min
+## 5b. Adding students to a class — 4 min
 
-Needs `supabase_class_lists.sql` run. Student Dashboard → **Upload class list**.
-Paste:
+Needs `supabase_class_lists.sql` run. Student Dashboard.
 
-```
-Index,Name,Short Name,Class
-12,Nur Aisha binte Ahmad,Aisha,4A
-13,Bala Krishnan,,4A
-12,Daniel Lim,Daniel,4B
-1,Muhammad Adam,Adam,4B
-2,Adam Tan,Adam,4B
-3,,,4B
-```
+- [ ] **+ New class**, name it `4A`. One empty row opens at index 1.
+- [ ] Type `Muhammad Hafiz bin Rahman`: the Short Name fills itself in as `Hafiz` (grey). Enter starts row 2 at index 2.
+- [ ] Type `Nur Aisha binte Ahmad`, then change its Short Name to `Ash`. Change the full name again: `Ash` stays.
+- [ ] Rows are tinted and say "new"; ✕ removes one. **Save 2 students** saves them, and 4A now lists them.
+- [ ] In Excel, copy three rows of `Name | Index No. | Gender` (with the heading row), e.g. `Tan Wei Ming | 3 | M`. In 4A, **Paste from Excel** (or paste into a Full name box): three rows appear with the right index numbers; "Pasted columns" shows Full name, Index, Ignore.
+- [ ] Switch a column's dropdown (Gender → Short Name): the rows change to match. Switch it back.
+- [ ] Paste just names (`Naila`, `Joseph`, one per line): they are numbered after the class's highest index.
+- [ ] Paste a row with index 1 and a different full name: it shows "already in 4A: name … → …", not "new".
+- [ ] Give two new rows the same index number: the second says "Index number … is already in this list". Type `abc` as an index: "Index numbers are numbers". **Save** skips those rows.
+- [ ] An existing student without a Short Name shows a grey guess; **Use suggested Short Names (n)** fills them; saving keeps them.
+- [ ] With unsaved rows, **Back to Chat** asks "Leave without saving them?"; Cancel stays.
+- [ ] A student made by chat grading with index 30 and no class shows under "No class yet". Add index 30 in 4A: the row shows "already in 4A: class (none) → 4A"; after saving, they move to 4A with their gradings.
+- [ ] 4B can also have an index 1 (index numbers restart in every class).
 
-- [ ] The preview says 5 new and lists "Line 7: No name"
-- [ ] **Save** adds all 5: 4A and 4B both have an index 12, and both Adams are there
-- [ ] Paste the same lines again: the preview says 0 new, 0 to update, 5 already up to date
-- [ ] Change line 2's Short Name to `Ash` and paste again: 1 to update; after saving, the Dashboard shows "Ash"
-- [ ] Edit Bala and give him the Short Name `Bala`: it saves and shows on the Dashboard
-- [ ] Edit Daniel and change his index number to 1: refused ("Another student in this class already has index number 1")
-- [ ] Add a student with index 30 and **no class**, then upload `30,Same Child,,4A`: the preview shows 1 to update (class (none) → 4A), not 1 new
-
-Rules: `readClassList()`, `shortNameOf()` in `src/utils/classList.ts`
-(unit-tested); one student per teacher, class and index number in
-`supabase_class_lists.sql`.
+Rules: `checkRows()`, `readPaste()`, `suggestShortName()`, `shortNameOf()`
+in `src/utils/classList.ts` (unit-tested); one student per teacher, class
+and index number in `supabase_class_lists.sql`.
 
 ## 6. Cron endpoints — 1 min
 
