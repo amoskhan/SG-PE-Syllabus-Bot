@@ -292,6 +292,19 @@ Classroom Board → Your lessons. Needs a class with students.
 
 Rules: `pairsOf()`, `nextPairNumber()`, `pairCountFor()`, `pairChangeWarning()` in `src/utils/pairForming.ts` (unit-tested).
 
+## 5e. Teacher Note — 3 min
+
+Run `supabase/supabase_teacher_note_seen.sql` first. Board on the iPad (or a laptop), a pair checked in on another iPad, with work sent.
+
+- [ ] Review Tray → **Inspect & Review**: type a note, tap **💬 Send** once. It reads "Sending…", then the box clears and "✓ Sent 2:41 pm · not seen yet" shows under the note. On the iPad the first tap sends (it doesn't just close the keyboard). The keyboard's return key sends too.
+- [ ] Within ~10 s the pair's iPad shows the note, on whatever screen they're on (step, peer assessment or Practice Station). The tray then reads "👀 Seen 2:43 pm".
+- [ ] Send a new note: it goes back to "not seen yet" until the iPad shows it.
+- [ ] Turn off Wi-Fi on the board and send: the button turns red, "Couldn't send – tap to try again", and the note stays in the box. Wi-Fi on, tap again: sent.
+- [ ] Open another pair: the box is empty.
+- [ ] **✓ Completed** (in the review and on the card) moves the work to Graded; no star is added, and a note already sent is kept.
+
+Rules: `noteStatus()`, `sendLabel()` in `src/utils/teacherNote.ts` (unit-tested).
+
 ## 6. Cron endpoints — 1 min
 
 Not triggered by any user action, so they fail silently. Both run at

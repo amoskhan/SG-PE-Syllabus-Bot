@@ -26,6 +26,7 @@ import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal'
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
 import { pairNamesOf, roleName } from './utils/pairNames';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
+import { TeacherNoteBanner } from './components/peer/TeacherNoteBanner';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
 import { getActivePairSession, saveActivePairSession, clearActivePairSession, PairSessionData, PairSubmissionRecord, PeerCueResult, AiChatAnalysisEntry, queuePairSubmission, getSubmission, putSubmission, getOrCreatePairClaimToken, getPairProgress, savePairProgress, getCachedLessonSteps, saveCachedLessonSteps, CachedLessonSteps, StepRef, getPeerDraft, clearPeerDrafts, clearPairWorkFromBefore } from './services/offline/offlineStorage';
@@ -33,7 +34,7 @@ import { draftSummary, peerDraftId } from './utils/peerDraft';
 import { LessonStep, PairProgress, Screen, cuePlanFor, findLessonStep, glowGrowFor, hasAiAnalysis, nextScreen, progressFor, stepLabel, stepsOrLegacy } from './utils/lessonFlow';
 import { StepBar } from './components/steps/StepBar';
 import { LessonStepScreen } from './components/steps/LessonStepScreen';
-import { backupSubmissionToSupabase, upsertPairCheckIn, checkInByName, fetchPlannedStudents, fetchPupilSubmission, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep, fetchPairRestartedAt } from './services/cloudSyncService';
+import { backupSubmissionToSupabase, upsertPairCheckIn, checkInByName, fetchPlannedStudents, fetchPupilSubmission, markTeacherNoteSeen, uploadPupilClip, keepPupilWork, fetchPupilLessonSteps, reportPairStep, fetchPairRestartedAt } from './services/cloudSyncService';
 import { runPeerCoachingAnalysis } from './services/ai/peerCoachingAI';
 import { setPupilAiRequest, PupilAiRequest, onPupilUsage } from './services/ai/aiAccess';
 import { focusCriteria, getAllCuesForSkill, getLessonCues, lessonGradingCues } from './data/peerSyllabusCues';
@@ -919,7 +920,8 @@ const App: React.FC = () => {
     return () => { cancelled = true; };
   }, [activePairSession?.pairNumber, activePairSession?.lessonId, draftSkillName, appMode]);
 
-  // While in a Practice Station, poll the pair's submission row for a teacher comment.
+  // Through the lesson, poll the pair's submission row for a Teacher Note. When
+  // the iPad shows one, it tells the teacher it was seen (#179).
   useEffect(() => {
     const src = activePairSession ?? (activePeerSessionData
       ? { lessonId: activePeerSessionData.lessonId, pairNumber: activePeerSessionData.pairNumber, skillName: activePeerSessionData.skillName }
@@ -935,6 +937,9 @@ const App: React.FC = () => {
       if (fb && fb !== lastSeenTeacherFeedbackRef.current) {
         lastSeenTeacherFeedbackRef.current = fb;
         setTeacherFeedbackBanner(fb);
+        if (sub?.teacherFeedback) { // the database records only the first time
+          markTeacherNoteSeen(subId, getOrCreatePairClaimToken(src.lessonId), src.lessonId, sub.teacherFeedback);
+        }
       }
       // A new redo request: tell the pair once (submissionLock.ts)
       const redo = sub && redoIsOpen(sub) ? sub.redoRequestedAt : undefined;
@@ -2531,6 +2536,9 @@ const App: React.FC = () => {
           onHome={() => setAppMode('home_screen')}
         />
         <TeacherHelpBeacon pairNumber={activePairSession.pairNumber} onSignalHelp={handleSignalPairNeedsHelp} />
+        {teacherFeedbackBanner && (
+          <TeacherNoteBanner overlay message={teacherFeedbackBanner} onDismiss={() => setTeacherFeedbackBanner(null)} />
+        )}
       </div>
     );
   }
@@ -2542,6 +2550,9 @@ const App: React.FC = () => {
       : activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw';
     return (
       <div className="relative h-[100dvh] w-full overflow-hidden bg-slate-900 flex flex-col">
+        {teacherFeedbackBanner && (
+          <TeacherNoteBanner message={teacherFeedbackBanner} onDismiss={() => setTeacherFeedbackBanner(null)} />
+        )}
         {/* The step bar, except when filming one performer again (#94) */}
         {!refilmPerformer && stepScreen.kind === 'step' && lessonSteps.length > 1 && (
           <StepBar
@@ -2678,23 +2689,7 @@ const App: React.FC = () => {
 
         {/* Teacher feedback banner (student sees the teacher's comment on their submitted analysis) */}
         {teacherFeedbackBanner && (
-          <div className="shrink-0 z-40 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-300 dark:border-amber-800/70 px-4 py-2.5">
-            <div className="max-w-5xl mx-auto flex items-start gap-3">
-              <span className="text-lg shrink-0">📩</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] uppercase font-extrabold tracking-wider text-amber-700 dark:text-amber-300">Teacher Feedback</p>
-                <p className="text-sm text-amber-900 dark:text-amber-100 leading-snug">{teacherFeedbackBanner}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTeacherFeedbackBanner(null)}
-                className="shrink-0 w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-bold text-xs cursor-pointer"
-                aria-label="Dismiss"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
+          <TeacherNoteBanner message={teacherFeedbackBanner} onDismiss={() => setTeacherFeedbackBanner(null)} />
         )}
 
         {/* Minimalist Floating Top Bar */}

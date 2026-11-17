@@ -49,6 +49,7 @@ import { analysesSentKey, effectiveLevel, normaliseLevel } from '../utils/gradin
 import { LessonStep, currentIndex, stepLabel } from '../utils/lessonFlow';
 import type { StepRef } from '../services/offline/offlineStorage';
 import { performerLock } from '../utils/submissionLock';
+import { NoteSend, noteStatus, sendLabel } from '../utils/teacherNote';
 import { Student, SkillAnalysis } from '../types';
 import { getStudents } from '../services/studentService';
 import {
@@ -275,6 +276,8 @@ const reviewSignature = (s: PairSubmissionRecord) => JSON.stringify([
   // Each performer's glow and grow (#156), so one that arrives shows on an open pair
   s.glowGrow, s.firstAttempt && { apple: s.firstAttempt.apple?.glowGrow, banana: s.firstAttempt.banana?.glowGrow },
   s.aiTeacherReport?.generatedAt, s.appleSentAt, s.bananaSentAt, s.redoRequestedAt, s.status, s.teacherFeedback, s.teacherStar,
+  // When the Teacher Note was sent and seen (#179)
+  s.teacherFeedbackSentAt, s.teacherFeedbackSeenAt,
   // A restart (#173) sets work aside; removing an earlier go takes one away
   s.restartedAt, s.earlierWork?.map((e) => e.restartedAt),
 ]);
@@ -530,7 +533,13 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
   };
 
 
-  const [feedbackSent, setFeedbackSent] = useState(false);
+  // The Teacher Note's Send button (#179): it shows while it saves, and a failed save says so
+  const [noteSend, setNoteSend] = useState<NoteSend>('idle');
+  // A note typed for one pair never carries over to the next one opened
+  useEffect(() => {
+    setTeacherFeedbackText('');
+    setNoteSend('idle');
+  }, [activeReviewSub?.id]);
 
   // The open review follows the 3-second refresh, so new work shows without
   // closing it. The feedback box is separate state, so typing isn't lost.
@@ -605,22 +614,35 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     );
   };
 
-  // Send just the teacher's comment back to the pair — no status change, no modal close.
+  // Send just the Teacher Note to the pair — no status change, no modal close.
+  // It only counts as sent once the cloud has it, because that's where the
+  // pair's iPad reads it (#179).
   const handleSendFeedback = async (sub: PairSubmissionRecord) => {
     const text = teacherFeedbackText.trim();
-    if (!text) return;
+    if (!text || noteSend === 'sending') return;
+    setNoteSend('sending');
     await updateSubmissionStatus(sub.id, sub.status, text);
-    if (teacherId) await updateCloudSubmissionFeedback(sub.id, text);
-    setFeedbackSent(true);
-    setActiveReviewSub({ ...sub, teacherFeedback: text });
-    setTimeout(() => setFeedbackSent(false), 2500);
+    const saved = !!teacherId && (await updateCloudSubmissionFeedback(sub.id, text));
+    if (!saved) {
+      setNoteSend('failed'); // the note stays in the box to try again
+      return;
+    }
+    setNoteSend('idle');
+    setTeacherFeedbackText('');
+    setActiveReviewSub((prev) => (prev && prev.id === sub.id
+      ? { ...prev, teacherFeedback: text, teacherFeedbackSentAt: new Date().toISOString(), teacherFeedbackSeenAt: undefined }
+      : prev));
     loadSubmissions();
   };
 
-  const handleApprove = async (sub: PairSubmissionRecord, star: boolean = true) => {
-    await updateSubmissionStatus(sub.id, 'approved', teacherFeedbackText || 'Well done pair!', star);
-    if (teacherId) {
-      await updateCloudSubmissionStatus(sub.id, 'approved', teacherFeedbackText || 'Well done pair!', star);
+  // Completed (#179; was "Approve & Award Star"): no new stars, and a note
+  // already sent stays unless a new one is typed
+  const handleComplete = async (sub: PairSubmissionRecord) => {
+    const note = teacherFeedbackText.trim() || sub.teacherFeedback || 'Well done pair!';
+    await updateSubmissionStatus(sub.id, 'approved', note);
+    if (teacherId && !(await updateCloudSubmissionStatus(sub.id, 'approved', note))) {
+      window.alert("Couldn't mark it Completed. Check the Wi-Fi and try again.");
+      return;
     }
     setTeacherFeedbackText('');
     setActiveReviewSub(null);
@@ -1129,7 +1151,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               </h3>
               <p className="text-xs text-slate-400 mt-1">
                 {trayTab === 'TO_GRADE'
-                  ? 'When pupils send their work, it appears here. Approve it and it moves to Graded.'
+                  ? 'When pupils send their work, it appears here. Mark it Completed and it moves to Graded.'
                   : 'Work you approve is kept here, by lesson.'}
               </p>
             </div>
@@ -1202,7 +1224,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                         : 'bg-amber-100 text-amber-800'
                     }`}>
                       {sub.status === 'approved'
-                        ? '✓ Approved'
+                        ? '✓ Completed'
                         : sub.status === 'resubmitted'
                         ? '🔁 Resubmitted'
                         : '⏳ Pending'}
@@ -1234,6 +1256,7 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     {sub.teacherFeedback && (
                       <p className="p-2 bg-slate-50 dark:bg-zinc-800 rounded-lg text-[11px] italic text-slate-600 dark:text-slate-300">
                         Teacher: "{sub.teacherFeedback}"
+                        <span className="block not-italic font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{noteStatus(sub)}</span>
                       </p>
                     )}
                   </div>
@@ -1247,10 +1270,10 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                     </button>
                     {sub.status !== 'approved' && (
                       <button
-                        onClick={() => handleApprove(sub, true)}
+                        onClick={() => handleComplete(sub)}
                         className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
                       >
-                        ⭐ Quick Approve
+                        ✓ Completed
                       </button>
                     )}
                     <button
@@ -1585,25 +1608,54 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
             {/* Teacher Feedback Note */}
             <div className="my-4">
               <label className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-1.5 block">
-                Teacher Cue / Praise (Sent to Pair iPad):
+                Teacher Note (sent to the pair's iPad):
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={teacherFeedbackText}
-                  onChange={(e) => setTeacherFeedbackText(e.target.value)}
+                  onChange={(e) => {
+                    setTeacherFeedbackText(e.target.value);
+                    if (noteSend === 'failed') setNoteSend('idle');
+                  }}
+                  // The keyboard's return key sends too (#179)
+                  enterKeyHint="send"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      handleSendFeedback(activeReviewSub);
+                    }
+                  }}
                   placeholder="e.g. Great follow through Apple! Banana, remember to keep your knees bent."
                   className="flex-1 px-4 py-2.5 text-xs bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl outline-none"
                 />
                 <button
                   type="button"
-                  onClick={() => handleSendFeedback(activeReviewSub)}
-                  disabled={!teacherFeedbackText.trim()}
-                  className="shrink-0 px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  // Sends on touch-down (#179): on an iPad the first tap used to
+                  // only close the keyboard, and the layout moved under the finger.
+                  // preventDefault keeps the keyboard up until it has sent.
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    handleSendFeedback(activeReviewSub);
+                  }}
+                  onClick={(e) => {
+                    if (e.detail === 0) handleSendFeedback(activeReviewSub); // keyboard (Enter/Space on the button)
+                  }}
+                  disabled={!teacherFeedbackText.trim() || noteSend === 'sending'}
+                  className={`shrink-0 px-3.5 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    noteSend === 'failed' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
                 >
-                  {feedbackSent ? '✓ Sent' : '💬 Send Feedback'}
+                  {sendLabel(noteSend)}
                 </button>
               </div>
+              {activeReviewSub.teacherFeedback && (
+                <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="italic">"{activeReviewSub.teacherFeedback}"</span>{' '}
+                  <span className="font-semibold">{noteStatus(activeReviewSub)}</span>
+                </p>
+              )}
             </div>
 
             {/* Whether each performer can still send (supabase_submission_lock.sql) */}
@@ -1636,10 +1688,10 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 Send Back for Re-Do 🔄
               </button>
               <button
-                onClick={() => handleApprove(activeReviewSub, true)}
+                onClick={() => handleComplete(activeReviewSub)}
                 className="flex-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-md shadow-emerald-600/20"
               >
-                Approve & Award Star ⭐
+                ✓ Completed
               </button>
             </div>
 
