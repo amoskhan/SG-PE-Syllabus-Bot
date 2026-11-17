@@ -24,6 +24,7 @@ import Dashboard from './pages/Dashboard';
 import { TeacherClassroomBoard } from './pages/TeacherClassroomBoard';
 import { ClassQrScannerModal } from './components/classroom/ClassQrScannerModal';
 import { PairCheckInModal } from './components/classroom/PairCheckInModal';
+import { pairNamesOf, roleName } from './utils/pairNames';
 import { PeerCoachingSession, CompletedPeerSession, RefilmedAttempt } from './components/peer/PeerCoachingSession';
 import { PairWorkReview } from './components/peer/PairWorkReview';
 import { TeacherHelpBeacon } from './components/classroom/TeacherHelpBeacon';
@@ -947,6 +948,11 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePairSession?.pairNumber, activePairSession?.lessonId, activePeerSessionData, appMode]);
+
+  // The pupils' Short Names with their roles (#188): on screen only, never in a
+  // chat message or anything sent to the AI (ADR 0004)
+  const pairNames = pairNamesOf(activePairSession);
+  const performerName = (p: 'Apple' | 'Banana') => roleName(p === 'Apple' ? 'apple' : 'banana', pairNames);
 
   // Today's Pair Assignment for the name buttons at check-in (#183)
   const loadPlannedStudents = useCallback(
@@ -2547,6 +2553,7 @@ const App: React.FC = () => {
         )}
         <div className="flex-1 min-h-0">
         <PeerCoachingSession
+          names={pairNames}
           pairNumber={activePairSession.pairNumber}
           lessonId={activePairSession.lessonId}
           skillName={activePairSession.skillName || scannedLessonData.skillName || 'Overhand Throw'}
@@ -2633,12 +2640,12 @@ const App: React.FC = () => {
               </button>
               <div className="min-w-0 flex-1">
                 <p className="text-sm sm:text-base font-black text-white truncate">
-                  🍎🍌 Pair {activePeerSessionData.pairNumber} · {assessSkillName}
+                  🍎🍌 Pair {activePeerSessionData.pairNumber}{pairNames.apple && pairNames.banana ? ` · ${pairNames.apple} & ${pairNames.banana}` : ''} · {assessSkillName}
                 </p>
                 {(appleTotal > 0 || bananaTotal > 0 || (activePairSession && lessonSteps.length > 1)) && (
                   <p className="text-[11px] sm:text-xs font-bold text-slate-300 truncate">
                     {activePairSession && stepScreen.kind === 'step' && lessonSteps.length > 1 && `Step ${stepScreen.number} of ${stepScreen.total} · `}
-                    {(appleTotal > 0 || bananaTotal > 0) && `Partner ticks: 🍎 ${appleMet}/${appleTotal} · 🍌 ${bananaMet}/${bananaTotal}`}
+                    {(appleTotal > 0 || bananaTotal > 0) && `Partner ticks: 🍎 ${pairNames.apple ?? ''} ${appleMet}/${appleTotal} · 🍌 ${pairNames.banana ?? ''} ${bananaMet}/${bananaTotal}`.replace(/  +/g, ' ')}
                   </p>
                 )}
               </div>
@@ -2885,10 +2892,10 @@ const App: React.FC = () => {
                           className={`h-12 px-3 active:scale-[0.98] rounded-xl text-sm font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
                             banana ? 'bg-amber-400 hover:bg-amber-300 text-amber-950' : 'bg-rose-500 hover:bg-rose-400 text-white'}`}
                         >
-                          <span>{banana ? '🍌' : '🍎'}</span><span>{analysisUsed(p) ? `${p} analysed ✓` : `Analyse ${p}`}</span>
+                          <span>{banana ? '🍌' : '🍎'}</span><span>{analysisUsed(p) ? `${performerName(p)} analysed ✓` : `Analyse ${performerName(p)}`}</span>
                         </button>
                         {st.stage === 'submitted' ? (
-                          <p className="h-10 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400">✅ {p} submitted</p>
+                          <p className="h-10 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400">✅ {performerName(p)} submitted</p>
                         ) : st.canKeep ? (
                           <div className="flex gap-1.5">
                             <button

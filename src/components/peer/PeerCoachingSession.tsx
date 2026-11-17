@@ -24,6 +24,7 @@ import { poseDetectionService } from '../../services/vision/poseDetectionService
 import VideoAnalysisPlayer from '../video/VideoAnalysisPlayer';
 import { GlowGrowPicks, GlowGrowSetting, SavedGlowGrow, glowGrowAfterSend, glowGrowCard, glowGrowToSend, pairGlowGrow } from '../../utils/glowGrow';
 import { GlowGrowPanel } from './GlowGrowPanel';
+import { PairNames, roleName } from '../../utils/pairNames';
 
 export interface CompletedPeerSession {
   pairNumber: number;
@@ -67,6 +68,8 @@ interface PeerCoachingSessionProps {
   // Clips of this pair the teacher already has (from an earlier visit to this
   // screen): the pair carries on from whoever hasn't been filmed
   cloudClips?: { banana?: string; apple?: string };
+  // The pupils' Short Names (#188): shown with their roles, on screen only
+  names?: PairNames;
 }
 
 export interface RefilmedAttempt {
@@ -102,8 +105,12 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
   glowGrow,
   cloudClips,
   cueSkillName,
+  names = {},
 }) => {
   const cueSkill = cueSkillName || skillName;
+  // "Apple (Amos)": on screen only, never in anything sent to the AI (ADR 0004)
+  const A = roleName('apple', names);
+  const B = roleName('banana', names);
   // Banana performs in the APPLE_* steps (Apple films), Apple in the BANANA_* steps
   const [step, setStep] = useState<Step>(refilmPerformer === 'Apple' ? 'SWAP_PROMPT' : 'APPLE_INTRO');
   const [isRecording, setIsRecording] = useState(false);
@@ -831,7 +838,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         <div className="flex items-center gap-2">
           {step.startsWith('APPLE') ? (
             <div className="flex items-center gap-1.5 px-3 py-1 bg-red-600/90 text-white rounded-full text-xs font-black ring-2 ring-red-400">
-              <span>🍎 Apple</span>
+              <span>🍎 {A}</span>
               <span className="text-[10px] font-normal opacity-85">is Recording</span>
             </div>
           ) : step === 'SWAP_PROMPT' ? (
@@ -840,7 +847,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
             </div>
           ) : step.startsWith('BANANA') ? (
             <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-slate-950 rounded-full text-xs font-black ring-2 ring-amber-300">
-              <span>🍌 Banana</span>
+              <span>🍌 {B}</span>
               <span className="text-[10px] font-normal opacity-85">is Recording</span>
             </div>
           ) : (
@@ -865,8 +872,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         {(step === 'APPLE_INTRO' || step === 'APPLE_RECORDING') && (
           <div className="w-full max-w-xl flex flex-col items-center justify-between gap-3">
             <div className="w-full bg-slate-800/90 rounded-2xl p-3 text-center border border-slate-700">
-              <span className="text-xs font-bold text-red-300">🍎 Apple's Turn to Record:</span>
-              <p className="text-sm font-black text-white">Point camera at Banana performing {cueSkill}!</p>
+              <span className="text-xs font-bold text-red-300">🍎 {A}, your turn to record:</span>
+              <p className="text-sm font-black text-white">Point camera at {B} performing {cueSkill}!</p>
             </div>
 
             {/* Camera Viewport */}
@@ -937,14 +944,14 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         {step === 'APPLE_REVIEW' && (
           <div className="w-full max-w-xl flex flex-col pb-4 animate-fade-in">
             <div className="bg-slate-800/90 p-3 rounded-2xl border border-slate-700 mb-3">
-              <p className="text-xs font-bold text-amber-400">🍎 Apple, check Banana's movement:</p>
+              <p className="text-xs font-bold text-amber-400">🍎 {A}, check how {B} moved:</p>
               <p className="text-xs text-slate-400">Watch the replay and tap thumbs up or down for each syllabus rule.</p>
             </div>
 
             {/* Video Replay with VideoAnalysisPlayer */}
             {bananaVideoUrl ? (
               <div className="w-full bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3">
-                <VideoAnalysisPlayer src={bananaVideoUrl} label="🍌 Banana" />
+                <VideoAnalysisPlayer src={bananaVideoUrl} label={`🍌 ${B}`} />
               </div>
             ) : (
               <div className="w-full bg-slate-800/60 rounded-2xl border-2 border-dashed border-indigo-500/50 p-4 mb-3 flex flex-col items-center justify-center text-center gap-2">
@@ -955,7 +962,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                   onClick={() => uploadInputBananaRef.current?.click()}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5"
                 >
-                  <span>📁 Upload Video for Banana</span>
+                  <span>📁 Upload Video for {B}</span>
                 </button>
               </div>
             )}
@@ -1037,6 +1044,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               <GlowGrowPanel
                 card={bananaTell}
                 performer="Banana"
+                performerName={B}
                 cueCount={displayedCues.length}
                 cuesOpen={cuesOpen}
                 onCuesOpen={setCuesOpen}
@@ -1053,7 +1061,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                   onClick={() => onRefilmDone?.({ performer: 'Banana', videoBlob: bananaVideoBlob, cues: bananaCues, glowGrow: glowGrowToSave?.banana, poseFrames: bananaPoseFrames })}
                   className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 font-black rounded-2xl text-base shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  <span>✅ Keep this new video of Banana</span>
+                  <span>✅ Keep this new video of {B}</span>
                 </button>
               ) : (
                 <button
@@ -1115,14 +1123,14 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         {step === 'SWAP_PROMPT' && (
           <div className="w-full max-w-md bg-slate-800 p-6 rounded-3xl border-2 border-indigo-500 text-center flex flex-col items-center animate-scale-in">
             <span className="text-6xl mb-3 animate-spin">🔄</span>
-            <h2 className="text-2xl font-black text-white">{refilmPerformer === 'Apple' ? 'FILM APPLE AGAIN!' : 'SWAP ROLES NOW!'}</h2>
+            <h2 className="text-2xl font-black text-white">{refilmPerformer === 'Apple' ? `FILM ${A.toUpperCase()} AGAIN!` : 'SWAP ROLES NOW!'}</h2>
             
             <div className="my-4 p-4 bg-slate-900/80 rounded-2xl border border-slate-700 text-left space-y-2 text-sm w-full">
               <p className="flex items-center gap-2 text-amber-300 font-bold">
-                <span>🍌 Banana:</span> Grab the iPad! You are recording now!
+                <span>🍌 {B}:</span> Grab the iPad! You are recording now!
               </p>
               <p className="flex items-center gap-2 text-red-300 font-bold">
-                <span>🍎 Apple:</span> Stand back and get ready to perform!
+                <span>🍎 {A}:</span> Stand back and get ready to perform!
               </p>
             </div>
 
@@ -1132,14 +1140,14 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                 onClick={() => handleStartRecording('Apple')}
                 className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-lg shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Record Apple Live 🎥</span>
+                <span>Record {A} Live 🎥</span>
               </button>
               <button
                 type="button"
                 onClick={() => uploadInputAppleRef.current?.click()}
                 className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-2xl text-sm border border-slate-600 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>📁 Or Upload Video of Apple</span>
+                <span>📁 Or Upload Video of {A}</span>
               </button>
             </div>
           </div>
@@ -1149,8 +1157,8 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         {step === 'BANANA_RECORDING' && (
           <div className="w-full max-w-xl flex flex-col items-center justify-between gap-3">
             <div className="w-full bg-slate-800/90 rounded-2xl p-3 text-center border border-slate-700">
-              <span className="text-xs font-bold text-amber-400">🍌 Banana's Turn to Record:</span>
-              <p className="text-sm font-black text-white">Hold camera steady! Apple is performing {cueSkill}.</p>
+              <span className="text-xs font-bold text-amber-400">🍌 {B}, your turn to record:</span>
+              <p className="text-sm font-black text-white">Hold camera steady! {A} is performing {cueSkill}.</p>
             </div>
 
             <div className="relative w-full h-[46dvh] min-h-56 max-h-[620px] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center">
@@ -1219,14 +1227,14 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
         {step === 'BANANA_REVIEW' && (
           <div className="w-full max-w-xl flex flex-col pb-4 animate-fade-in">
             <div className="bg-slate-800/90 p-3 rounded-2xl border border-slate-700 mb-3">
-              <p className="text-xs font-bold text-amber-400">🍌 Banana, check Apple's movement:</p>
+              <p className="text-xs font-bold text-amber-400">🍌 {B}, check how {A} moved:</p>
               <p className="text-xs text-slate-400">Watch the replay and check off the syllabus rules.</p>
             </div>
 
             {/* Video Replay with VideoAnalysisPlayer */}
             {appleVideoUrl ? (
               <div className="w-full bg-black rounded-2xl overflow-hidden border border-slate-700 mb-3">
-                <VideoAnalysisPlayer src={appleVideoUrl} label="🍎 Apple" />
+                <VideoAnalysisPlayer src={appleVideoUrl} label={`🍎 ${A}`} />
               </div>
             ) : (
               <div className="w-full bg-slate-800/60 rounded-2xl border-2 border-dashed border-amber-500/50 p-4 mb-3 flex flex-col items-center justify-center text-center gap-2">
@@ -1237,7 +1245,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                   onClick={() => uploadInputAppleRef.current?.click()}
                   className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5"
                 >
-                  <span>📁 Upload Video for Apple</span>
+                  <span>📁 Upload Video for {A}</span>
                 </button>
               </div>
             )}
@@ -1319,6 +1327,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
               <GlowGrowPanel
                 card={appleTell}
                 performer="Apple"
+                performerName={A}
                 cueCount={displayedCues.length}
                 cuesOpen={cuesOpen}
                 onCuesOpen={setCuesOpen}
@@ -1336,7 +1345,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
                   onClick={() => onRefilmDone?.({ performer: 'Apple', videoBlob: appleVideoBlob, cues: appleCues, glowGrow: glowGrowToSave?.apple, poseFrames: applePoseFrames })}
                   className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 font-black rounded-2xl text-base shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  <span>✅ Keep this new video of Apple</span>
+                  <span>✅ Keep this new video of {A}</span>
                 </button>
               ) : (
                 <button
@@ -1404,7 +1413,7 @@ export const PeerCoachingSession: React.FC<PeerCoachingSessionProps> = ({
           <div className="w-full max-w-md bg-slate-800 p-6 rounded-3xl border-2 border-emerald-500 text-center flex flex-col items-center animate-scale-in">
             <span className="text-6xl mb-3 animate-bounce">🎉</span>
             <h2 className="text-2xl font-black text-white">MISSION COMPLETE!</h2>
-            <p className="text-xs text-emerald-400 font-bold mt-1">Both Apple & Banana Finished Practice</p>
+            <p className="text-xs text-emerald-400 font-bold mt-1">Both {A} & {B} Finished Practice</p>
 
             {submitError && (
               <div className="my-3 w-full px-3 py-2 bg-red-900/60 border border-red-500 rounded-xl text-red-200 text-xs font-medium flex items-start gap-2 text-left">
