@@ -65,6 +65,18 @@ in-memory video data on each refresh. See CLAUDE.md.
 > Known limitation, not a bug: uploaded video is held in an in-memory
 > cache, so it is expected to be gone after a hard refresh.
 
+## 4a. Pairs planned before the QR — 2 min
+
+Classroom Board → Your lessons. Needs a class with an earlier lesson that has pairs named.
+
+- [ ] Plan a new lesson for today in that class: its row says "⚠️ No pairs planned yet" with **Copy pairs from …** (the latest earlier lesson) and **Plan pairs**. Past lessons show no warning.
+- [ ] **Show on projector**: the QR still shows, with the same warning under it.
+- [ ] **Copy pairs from …**: the warning goes, and 👥 Pairs shows the copied count.
+- [ ] Clear one place in Pairs: the warning says "1 place still unnamed" with **Name them**, and no Copy button.
+- [ ] A lesson for a class with no earlier paired lesson shows only **Plan pairs**.
+
+Rule: `pairPlanOf()` in `src/utils/pairPlan.ts` (unit-tested).
+
 ## 5. The other three modes — 2 min
 
 Each mode only needs to open and respond; full flows are not covered here.

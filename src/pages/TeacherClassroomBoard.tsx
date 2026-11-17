@@ -27,6 +27,7 @@ import {
   createLesson,
   updateLesson,
   setLessonPairCount,
+  MAX_PAIR_COUNT,
   deleteLesson,
   lessonTitle,
   getCurrentLessonId,
@@ -39,6 +40,9 @@ import { ALL, ClassFilter, fitFilter, getClassFilter, isGraded, matchesFilter, s
 import { mediaPaths, removeTeachMedia } from '../services/teachMediaService';
 import { PairAssignment } from '../components/classroom/PairAssignment';
 import { shortNameOf } from '../utils/classList';
+import { PairsWarning } from '../components/classroom/PairsWarning';
+import { pairPlanOf } from '../utils/pairPlan';
+import { pairCountFor, pairsOf } from '../utils/pairForming';
 import TeacherReviewPanel from '../components/dashboard/TeacherReviewPanel';
 import { GlowGrowSaid } from '../components/peer/GlowGrowSaid';
 import { analysesSentKey, effectiveLevel, normaliseLevel } from '../utils/gradingReview';
@@ -50,6 +54,7 @@ import { getStudents } from '../services/studentService';
 import {
   PairSlot,
   Performer,
+  copyPairs,
   fetchPairSlots,
   fetchSubmissionGradings,
   fetchGradingsByIds,
@@ -330,6 +335,31 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
     );
     return slot ? studentById.get(slot.studentId) : undefined;
   };
+  // "No pairs planned yet" (#182): warned where the lesson is planned and under its QR
+  const [copyingPairsFor, setCopyingPairsFor] = useState<string | null>(null);
+  const [pairsCopyFailed, setPairsCopyFailed] = useState<string | null>(null); // lesson id
+  const openPairs = (l: Lesson) => {
+    setPairsLessonId(l.id);
+    setViewMode('PAIRS');
+  };
+  const pairsWarningFor = (l: Lesson) => {
+    const plan = pairPlanOf(l, lessons, pairSlots);
+    const copy = async () => {
+      if (!plan.copyFrom) return;
+      setCopyingPairsFor(l.id);
+      setPairsCopyFailed(null);
+      // Copy every pair, then the lesson's pair count follows them (#187)
+      const ok = await copyPairs(plan.copyFrom.id, l.id, MAX_PAIR_COUNT);
+      if (!ok) setPairsCopyFailed(l.id);
+      const slots = await loadPairSlots();
+      if (ok && (await setLessonPairCount(l.id, pairCountFor(pairsOf(slots, l.id))))) await loadLessons();
+      setCopyingPairsFor(null);
+    };
+    return (
+      <PairsWarning plan={plan} copying={copyingPairsFor === l.id} failed={pairsCopyFailed === l.id} onCopy={copy} onPlanPairs={() => openPairs(l)} />
+    );
+  };
+
   const namedCounts = pairSlots.reduce<Record<string, number>>((acc, p) => {
     acc[p.lessonId] = (acc[p.lessonId] ?? 0) + 1;
     return acc;
@@ -841,6 +871,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
                 )}
               </div>
 
+              {/* Only a warning: the QR still works while the teacher plans pairs */}
+              <div className="w-full mt-4">{pairsWarningFor(lesson)}</div>
+
             </div>
 
             {/* Right: Live Pair Check-in Monitor */}
@@ -1000,11 +1033,9 @@ export const TeacherClassroomBoard: React.FC<TeacherClassroomBoardProps> = ({
               onEdit={(l) => { setEditingLesson(l); setViewMode('PLAN_LESSON'); }}
               onShow={(l) => showLessonOnProjector(l.id)}
               onDelete={handleDeleteLesson}
-              onPairs={(l) => {
-                setPairsLessonId(l.id);
-                setViewMode('PAIRS');
-              }}
+              onPairs={openPairs}
               namedCounts={namedCounts}
+              pairsWarning={pairsWarningFor}
             />
           ) : (
             <p className="text-sm text-slate-500">Sign in to plan and save lessons.</p>

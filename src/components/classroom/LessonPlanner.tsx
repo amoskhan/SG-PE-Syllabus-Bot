@@ -273,6 +273,8 @@ interface LessonListProps {
   onPairs: (lesson: Lesson) => void;
   onEdit: (lesson: Lesson) => void;
   namedCounts: Record<string, number>; // lesson id → pupils named in its pairs
+  /** The "No pairs planned yet" warning for a lesson today or later (#182). */
+  pairsWarning?: (lesson: Lesson) => React.ReactNode;
 }
 
 const LessonRow: React.FC<{
@@ -283,9 +285,10 @@ const LessonRow: React.FC<{
   onPairs: () => void;
   onEdit: () => void;
   named: number;
-}> = ({ lesson, isCurrent, onShow, onDelete, onPairs, onEdit, named }) => (
+  warning?: React.ReactNode;
+}> = ({ lesson, isCurrent, onShow, onDelete, onPairs, onEdit, named, warning }) => (
   <li
-    className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center gap-3 ${
+    className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 ${
       isCurrent
         ? 'border-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/30 dark:border-indigo-700'
         : 'border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'
@@ -347,6 +350,7 @@ const LessonRow: React.FC<{
         🗑
       </button>
     </div>
+    {warning && <div className="basis-full">{warning}</div>}
   </li>
 );
 
@@ -361,6 +365,7 @@ export const LessonList: React.FC<LessonListProps> = ({
   onPairs,
   onEdit,
   namedCounts,
+  pairsWarning,
 }) => {
   const today = todayIso();
   const upcoming = lessons.filter((l) => l.lessonDate >= today).reverse(); // soonest first
@@ -378,6 +383,7 @@ export const LessonList: React.FC<LessonListProps> = ({
               onPairs={() => onPairs(l)}
               onEdit={() => onEdit(l)}
               named={namedCounts[l.id] ?? 0}
+              warning={l.lessonDate >= today ? pairsWarning?.(l) : undefined}
             />
           ))}
         </ul>
