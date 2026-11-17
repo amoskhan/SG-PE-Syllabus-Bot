@@ -250,6 +250,7 @@ Needs `supabase_class_lists.sql` run. Student Dashboard.
 - [ ] With nothing changed the button says "No changes". Change index 1 to 2 and 2 to 1 (a swap): both rows turn amber, "changed". **Save changes…** opens "Change 4A?" listing "Index number 1 → 2" and "2 → 1"; **Back** changes nothing; **Yes, change it** saves both and the list re-sorts.
 - [ ] Give two students the same index number: both rows say "Index number … is used twice" and it won't save. Clear a full name: "The full name is needed". **Cancel** puts every row back as saved.
 - [ ] A student's class is changed from their profile's Edit, not the table.
+- [ ] **Delete a class (#191):** in **✎ Edit**, **🗑 Delete class** asks first ("Delete 4A?", how many students, gradings and graded videos go). **Delete N students** stays grey until the class name is typed. After it, the class is gone from the dashboard; pairs' work in the Review Tray is still there.
 
 Rules: `checkRows()`, `describeClassEdit()`, `readPaste()`, `suggestShortName()`, `shortNameOf()`
 in `src/utils/classList.ts` (unit-tested); one student per teacher, class
