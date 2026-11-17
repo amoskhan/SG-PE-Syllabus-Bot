@@ -120,6 +120,9 @@ export function mapRowToSubmission(row: any): PairSubmissionRecord {
     status: row.status || 'pending_sync',
     teacherFeedback: row.teacher_feedback || undefined,
     teacherStar: row.teacher_star || false,
+    // supabase_teacher_note_seen.sql (#179): absent before it is run
+    teacherFeedbackSentAt: row.teacher_feedback_sent_at || undefined,
+    teacherFeedbackSeenAt: row.teacher_feedback_seen_at || undefined,
     createdAt: row.created_at || new Date().toISOString(),
     claimToken: row.claim_token || undefined,
     appleSentAt: row.apple_sent_at || undefined,

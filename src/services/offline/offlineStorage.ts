@@ -154,6 +154,9 @@ export interface PairSubmissionRecord {
   status: 'pending_sync' | 'synced' | 'approved' | 'needs_redo' | 'resubmitted';
   teacherFeedback?: string;
   teacherStar?: boolean;
+  // When the Teacher Note was sent, and when the pair's iPad showed it (#179)
+  teacherFeedbackSentAt?: string;
+  teacherFeedbackSeenAt?: string;
   createdAt: string;
   syncedAt?: string;
   claimToken?: string; // identifies the group that owns this pair (see getOrCreatePairClaimToken)

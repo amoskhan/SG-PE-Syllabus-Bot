@@ -344,7 +344,7 @@ export async function updateCloudSubmissionStatus(
   status: PairSubmissionRecord['status'],
   feedback?: string,
   star?: boolean,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const updatePayload: Record<string, any> = {
       status,
@@ -362,20 +362,25 @@ export async function updateCloudSubmissionStatus(
 
     if (error) {
       console.error("[CloudSync] updateCloudSubmissionStatus error:", error);
+      return false;
     }
+    return true;
   } catch (e) {
     console.error("[CloudSync] updateCloudSubmissionStatus unexpected error:", e);
+    return false;
   }
 }
 
 /**
- * Write ONLY the teacher's comment to a submission — no status transition.
- * Used by the "Send Feedback" button that ties to the student's submitted AI chat analysis.
+ * Write ONLY the teacher's comment (the Teacher Note) to a submission — no
+ * status transition. Says whether it saved, so the Review Tray never shows
+ * "Sent" for a note the pair won't get (#179). The database stamps when it
+ * was sent (supabase_teacher_note_seen.sql).
  */
 export async function updateCloudSubmissionFeedback(
   id: string,
   feedback: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const { error } = await supabase
       .from("pair_submissions")
@@ -384,10 +389,25 @@ export async function updateCloudSubmissionFeedback(
 
     if (error) {
       console.error("[CloudSync] updateCloudSubmissionFeedback error:", error);
+      return false;
     }
+    return true;
   } catch (e) {
     console.error("[CloudSync] updateCloudSubmissionFeedback unexpected error:", e);
+    return false;
   }
+}
+
+/**
+ * The pair's iPad has shown the Teacher Note: tell the teacher (#179). Only for
+ * the note as it is now, with today's lesson pass. Best effort: before
+ * supabase_teacher_note_seen.sql is run it does nothing.
+ */
+export async function markTeacherNoteSeen(id: string, claimToken: string, lessonId: string, note: string): Promise<void> {
+  const { error } = await supabase.rpc("pupil_teacher_note_seen", {
+    p_id: id, p_claim_token: claimToken, p_pass: getLessonPass(lessonId) ?? '', p_note: note,
+  });
+  if (error) console.warn("[CloudSync] pupil_teacher_note_seen:", error.message);
 }
 
 // ─── Pair Check-In Sessions (Live Pair Check-In Grid) ─────────────────────────
