@@ -246,7 +246,7 @@ export const PairWorkReview: React.FC<PairWorkReviewProps> = ({
   onStartRecording,
   recordLabel,
   onClose,
-  names = {},
+  names = {} as PairNames,
 }) => {
   const [tab, setTab] = useState<Performer>('Banana');
 
