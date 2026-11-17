@@ -176,6 +176,62 @@ export const describeStudentEdit = (
   return { changes, ...(swapWith && { swapWith }), ...(problem && { problem }) };
 };
 
+/** One saved student's row while the teacher edits a class's table. */
+export interface ClassEditRow {
+  id: string;
+  indexNumber: string;
+  name: string;
+  shortName: string;
+}
+
+/**
+ * What editing a whole class's table changes, for the teacher to confirm:
+ * each student's changes in plain words, a problem per row that can't be
+ * saved, and the index-number moves (swaps included) to make together.
+ * `rows` holds every student in the class, so an index number used twice is
+ * caught here. "01" is the same index number as "1".
+ */
+export const describeClassEdit = (
+  students: ExistingStudent[],
+  rows: ClassEditRow[],
+): {
+  changes: { id: string; name: string; changes: string[] }[];
+  problems: Record<string, string>;
+  moves: { id: string; indexNumber: string }[];
+} => {
+  const byId = new Map(students.map(s => [s.id, s]));
+  const used = new Map<string, number>();
+  for (const r of rows) {
+    const i = tidy(r.indexNumber);
+    if (/^\d+$/.test(i)) used.set(studentKey('', i), (used.get(studentKey('', i)) ?? 0) + 1);
+  }
+
+  const result: ReturnType<typeof describeClassEdit> = { changes: [], problems: {}, moves: [] };
+  for (const r of rows) {
+    const before = byId.get(r.id);
+    if (!before) continue;
+    const indexNumber = tidy(r.indexNumber);
+    const name = tidy(r.name);
+    const shortName = tidy(r.shortName);
+    const problem = !name ? 'The full name is needed'
+      : !indexNumber ? 'The index number is needed'
+      : !/^\d+$/.test(indexNumber) ? 'Index numbers are numbers'
+      : (used.get(studentKey('', indexNumber)) ?? 0) > 1 ? `Index number ${studentKey('', indexNumber).slice(1)} is used twice`
+      : undefined;
+    if (problem) result.problems[r.id] = problem;
+
+    const moved = studentKey('', before.indexNumber) !== studentKey('', indexNumber);
+    const changes = [
+      moved && `Index number ${before.indexNumber} → ${indexNumber}`,
+      before.name !== name && `Full name ${before.name} → ${name}`,
+      (before.shortName ?? '') !== shortName && `Short Name ${before.shortName || '(none)'} → ${shortName || '(none)'}`,
+    ].filter((c): c is string => !!c);
+    if (changes.length) result.changes.push({ id: r.id, name: before.name, changes });
+    if (moved && !problem) result.moves.push({ id: r.id, indexNumber });
+  }
+  return result;
+};
+
 /** The index number a new row starts with: one after the highest already used. */
 export const nextIndexNumber = (indexNumbers: string[]): number =>
   Math.max(0, ...indexNumbers.map(n => Number(tidy(n))).filter(Number.isFinite)) + 1;

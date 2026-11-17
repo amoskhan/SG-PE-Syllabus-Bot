@@ -234,11 +234,12 @@ Needs `supabase_class_lists.sql` run. Student Dashboard.
 - [ ] With unsaved rows, **Back to Chat** asks "Leave without saving them?"; Cancel stays.
 - [ ] A student made by chat grading with index 30 and no class shows under "No class yet". Add index 30 in 4A: the row shows "already in 4A: class (none) → 4A"; after saving, they move to 4A with their gradings.
 - [ ] 4B can also have an index 1 (index numbers restart in every class).
-- [ ] In 4A, **✎ Edit** the student at index 1 and change the index to 2: **Save…** opens "You're changing: Index number 1 → 2 (… becomes 1)". **Yes, change it** swaps both, and the list re-sorts. Back instead changes nothing.
-- [ ] Edit with nothing changed: the button says "No changes". Clear the full name: "The full name is needed".
-- [ ] Edit a 4A student's class to 4B and index to one 4B already has: "Index number … is already …'s in 4B", and it won't save.
+- [ ] With saved students and no new rows, **✎ Edit 4A** sits at the bottom right. It unlocks every row (boxed inputs) and the footer says "Editing 4A"; **+ Add students** and **Paste from Excel** hide until you finish.
+- [ ] With nothing changed the button says "No changes". Change index 1 to 2 and 2 to 1 (a swap): both rows turn amber, "changed". **Save changes…** opens "Change 4A?" listing "Index number 1 → 2" and "2 → 1"; **Back** changes nothing; **Yes, change it** saves both and the list re-sorts.
+- [ ] Give two students the same index number: both rows say "Index number … is used twice" and it won't save. Clear a full name: "The full name is needed". **Cancel** puts every row back as saved.
+- [ ] A student's class is changed from their profile's Edit, not the table.
 
-Rules: `checkRows()`, `describeStudentEdit()`, `readPaste()`, `suggestShortName()`, `shortNameOf()`
+Rules: `checkRows()`, `describeClassEdit()`, `readPaste()`, `suggestShortName()`, `shortNameOf()`
 in `src/utils/classList.ts` (unit-tested); one student per teacher, class
 and index number in `supabase_class_lists.sql`.
 

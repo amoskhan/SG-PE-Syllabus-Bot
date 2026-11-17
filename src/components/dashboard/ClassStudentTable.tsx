@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Student } from '../../types';
 import {
-  checkRows, nextIndexNumber, readPaste, suggestShortName,
-  type ColumnRole, type DraftRow, type RowCheck,
+  checkRows, describeClassEdit, nextIndexNumber, readPaste, suggestShortName,
+  type ClassEditRow, type ColumnRole, type DraftRow, type RowCheck,
 } from '../../utils/classList';
-import { saveClassList } from '../../services/studentService';
-import { EditStudentModal, Modal } from './StudentManageDialogs';
+import { renumberStudents, saveClassList, updateStudent } from '../../services/studentService';
+import { Modal } from './StudentManageDialogs';
 
 // One class on the Student Dashboard as a table (#181). Saved students are
-// locked, so a stray click changes nothing: Edit opens a popup that lists
-// each change and asks to confirm. New students are added in rows, typed or
+// locked, so a stray click changes nothing: "Edit" unlocks the whole table,
+// and "Save changes…" lists every change in a popup to confirm. New students are added in rows, typed or
 // pasted from Excel, and nothing is written until "Save N students"; if that
 // would also change saved students, a popup lists them first. The rules
 // (matching, the Short Name guess, reading a paste) are in utils/classList.ts.
@@ -37,6 +37,9 @@ const ROLE_LABEL: Record<ColumnRole, string> = {
 const cell =
   'w-full px-2 py-1.5 text-sm rounded-md border border-transparent bg-transparent text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-800';
 
+const editCell =
+  'w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:italic focus:outline-none focus:border-blue-400';
+
 const secondaryButton =
   'flex-1 px-4 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors';
 const primaryButton =
@@ -60,7 +63,8 @@ const ClassStudentTable: React.FC<{
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [paste, setPaste] = useState<Paste | null>(null);
   const [pasteBox, setPasteBox] = useState(false);
-  const [editing, setEditing] = useState<Student | null>(null);
+  const [editRows, setEditRows] = useState<ClassEditRow[] | null>(null);
+  const [confirmingEdit, setConfirmingEdit] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [confirmingSave, setConfirmingSave] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -93,7 +97,9 @@ const ClassStudentTable: React.FC<{
   const updates = result.checks.flatMap(c => (c.kind === 'update' ? [c] : []));
   const toSave = result.toAdd.length + result.toUpdate.length;
   const problems = result.checks.filter(c => c.kind === 'problem').length;
-  const unsaved = filled.length > 0;
+  const edit = useMemo(() => (editRows ? describeClassEdit(students, editRows) : null), [editRows, students]);
+  const editProblems = edit ? Object.keys(edit.problems).length : 0;
+  const unsaved = filled.length > 0 || !!edit?.changes.length;
 
   useEffect(() => onUnsavedChange(unsaved), [unsaved, onUnsavedChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,6 +198,44 @@ const ClassStudentTable: React.FC<{
 
   const nameOf = (id: string) => allStudents.find(s => s.id === id)?.name ?? '';
 
+  // Editing the saved students: the whole table unlocks, and nothing is
+  // written until the teacher confirms the list of changes
+  const startEditing = () => {
+    setMessage('');
+    setEditRows(sorted.map(s => ({ id: s.id, indexNumber: s.indexNumber, name: s.name, shortName: s.shortName ?? '' })));
+  };
+  const changeSaved = (id: string, patch: Partial<ClassEditRow>) =>
+    setEditRows(rows => rows && rows.map(r => (r.id === id ? { ...r, ...patch } : r)));
+
+  const saveEdit = async () => {
+    if (!edit || !editRows) return;
+    setSaving(true);
+    setMessage('');
+    // Index numbers first, all together, so a swap never clashes halfway
+    if (!(await renumberStudents(edit.moves))) {
+      setSaving(false);
+      setConfirmingEdit(false);
+      setMessage('The index numbers didn’t save. Please try again.');
+      return;
+    }
+    let failed = 0;
+    for (const { id } of edit.changes) {
+      const row = editRows.find(r => r.id === id);
+      const before = students.find(s => s.id === id);
+      if (!row || !before) continue;
+      if (row.name.trim() === before.name && row.shortName.trim() === (before.shortName ?? '')) continue;
+      const saved = await updateStudent(id, {
+        indexNumber: row.indexNumber.trim(), name: row.name.trim(), studentClass: before.class ?? className, shortName: row.shortName,
+      });
+      if (!saved || saved === 'duplicate') failed++;
+    }
+    setSaving(false);
+    setConfirmingEdit(false);
+    if (failed) setMessage(`${failed} didn’t save. Please try again.`);
+    else setEditRows(null);
+    onSaved();
+  };
+
   return (
     <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden">
       <table className="w-full text-sm">
@@ -206,8 +250,35 @@ const ClassStudentTable: React.FC<{
         <tbody>
           {sorted.map(s => {
             const skillCount = Object.keys(s.progressSummary ?? {}).length;
+            const row = editRows?.find(r => r.id === s.id);
+            if (row) {
+              const problem = edit?.problems[s.id];
+              const changed = edit?.changes.some(c => c.id === s.id);
+              const tint = problem ? 'bg-red-50/70 dark:bg-red-900/10' : changed ? 'bg-amber-50/70 dark:bg-amber-900/10' : '';
+              return (
+                <tr key={s.id} className={`border-t border-slate-100 dark:border-zinc-800 ${tint}`}>
+                  <td className="px-1 py-1">
+                    <input className={editCell} aria-label={`Index number of ${s.name}`} inputMode="numeric" value={row.indexNumber}
+                      onChange={e => changeSaved(s.id, { indexNumber: e.target.value })} />
+                  </td>
+                  <td className="px-1 py-1">
+                    <input className={editCell} aria-label={`Full name of ${s.name}`} value={row.name}
+                      onChange={e => changeSaved(s.id, { name: e.target.value })} />
+                  </td>
+                  <td className="px-1 py-1">
+                    <input className={editCell} aria-label={`Short Name of ${s.name}`} value={row.shortName} placeholder={suggestShortName(row.name)}
+                      onChange={e => changeSaved(s.id, { shortName: e.target.value })} />
+                  </td>
+                  <td className="px-2 py-1 text-xs text-right">
+                    {problem
+                      ? <span className="text-red-600 dark:text-red-400">{problem}</span>
+                      : changed && <span className="text-amber-700 dark:text-amber-400">changed</span>}
+                  </td>
+                </tr>
+              );
+            }
             return (
-              <tr key={s.id} className="group border-t border-slate-100 dark:border-zinc-800">
+              <tr key={s.id} className="border-t border-slate-100 dark:border-zinc-800">
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{s.indexNumber}</td>
                 <td className="px-3 py-2">
                   <button onClick={() => onOpenStudent(s)} className="font-medium text-slate-800 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 text-left">
@@ -221,21 +292,12 @@ const ClassStudentTable: React.FC<{
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right text-xs text-slate-400 dark:text-slate-500">
-                  <div className="flex items-center justify-end gap-3">
-                    {skillCount > 0 && (
-                      <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full">
-                        {skillCount} skill{skillCount !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => setEditing(s)}
-                      aria-label={`Edit ${s.name}`}
-                      className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 opacity-60 group-hover:opacity-100"
-                    >
-                      ✎ Edit
-                    </button>
-                  </div>
+                <td className="px-3 py-2 text-right text-xs">
+                  {skillCount > 0 && (
+                    <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full">
+                      {skillCount} skill{skillCount !== 1 ? 's' : ''}
+                    </span>
+                  )}
                 </td>
               </tr>
             );
@@ -304,36 +366,64 @@ const ClassStudentTable: React.FC<{
         </div>
       )}
 
-      <div className="border-t border-slate-100 dark:border-zinc-800 px-3 py-2 flex flex-wrap items-center gap-3 text-sm">
-        <button onClick={addRow} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">+ Add students</button>
-        <button onClick={pasteFromExcel} className="text-blue-600 dark:text-blue-400 hover:underline">Paste from Excel</button>
-        {missing.length > 0 && (
-          <button onClick={() => setSuggesting(true)} className="text-slate-500 dark:text-slate-400 hover:underline">
-            Use suggested Short Names ({missing.length})
-          </button>
-        )}
-        <div className="ml-auto flex items-center gap-3">
-          {message && <span className="text-xs text-red-500">{message}</span>}
-          {problems > 0 && <span className="text-xs text-red-500">{problems} row{problems !== 1 ? 's' : ''} to fix</span>}
-          {toSave > 0 && (
+      {editRows ? (
+        <div className="border-t border-amber-200 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-900/10 px-3 py-2 flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-amber-800 dark:text-amber-300 font-medium">Editing {className}</span>
+          <div className="ml-auto flex items-center gap-3">
+            {message && <span className="text-xs text-red-500">{message}</span>}
+            {editProblems > 0 && <span className="text-xs text-red-500">{editProblems} row{editProblems !== 1 ? 's' : ''} to fix</span>}
+            <button onClick={() => { setEditRows(null); setMessage(''); }} className="text-slate-500 dark:text-slate-400 hover:underline">Cancel</button>
             <button
-              onClick={() => (updates.length ? setConfirmingSave(true) : save())}
-              disabled={saving}
+              onClick={() => setConfirmingEdit(true)}
+              disabled={saving || editProblems > 0 || !edit?.changes.length}
               className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
             >
-              {saving ? 'Saving…' : `Save ${toSave} student${toSave !== 1 ? 's' : ''}`}
+              {edit?.changes.length ? 'Save changes…' : 'No changes'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="border-t border-slate-100 dark:border-zinc-800 px-3 py-2 flex flex-wrap items-center gap-3 text-sm">
+          <button onClick={addRow} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">+ Add students</button>
+          <button onClick={pasteFromExcel} className="text-blue-600 dark:text-blue-400 hover:underline">Paste from Excel</button>
+          {missing.length > 0 && (
+            <button onClick={() => setSuggesting(true)} className="text-slate-500 dark:text-slate-400 hover:underline">
+              Use suggested Short Names ({missing.length})
             </button>
           )}
+          <div className="ml-auto flex items-center gap-3">
+            {message && <span className="text-xs text-red-500">{message}</span>}
+            {problems > 0 && <span className="text-xs text-red-500">{problems} row{problems !== 1 ? 's' : ''} to fix</span>}
+            {toSave > 0 && (
+              <button
+                onClick={() => (updates.length ? setConfirmingSave(true) : save())}
+                disabled={saving}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium"
+              >
+                {saving ? 'Saving…' : `Save ${toSave} student${toSave !== 1 ? 's' : ''}`}
+              </button>
+            )}
+            {sorted.length > 0 && drafts.length === 0 && (
+              <button onClick={startEditing} className="text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400">
+                ✎ Edit {className}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {editing && (
-        <EditStudentModal
-          student={editing}
-          classmates={students}
-          onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); onSaved(); }}
-        />
+      {confirmingEdit && edit && (
+        <Modal onClose={() => setConfirmingEdit(false)}>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-2">Change {className}?</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">You’re changing:</p>
+          <ul className="list-disc pl-5 text-sm text-slate-800 dark:text-slate-100 space-y-1 max-h-60 overflow-y-auto">
+            {edit.changes.map(c => <li key={c.id}><b>{c.name}</b>: {c.changes.join(', ')}</li>)}
+          </ul>
+          <div className="flex gap-2 mt-5">
+            <button onClick={() => setConfirmingEdit(false)} className={secondaryButton}>Back</button>
+            <button onClick={saveEdit} disabled={saving} className={primaryButton}>{saving ? 'Saving…' : 'Yes, change it'}</button>
+          </div>
+        </Modal>
       )}
 
       {confirmingSave && (

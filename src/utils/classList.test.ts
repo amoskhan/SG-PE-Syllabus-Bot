@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkRows, describeStudentEdit, nextIndexNumber, readPaste, shortNameOf, suggestShortName, type DraftRow, type ExistingStudent } from './classList';
+import { checkRows, describeClassEdit, describeStudentEdit, nextIndexNumber, readPaste, shortNameOf, suggestShortName, type DraftRow, type ExistingStudent } from './classList';
 
 describe('checkRows', () => {
   const existing: ExistingStudent[] = [
@@ -211,5 +211,43 @@ describe('describeStudentEdit', () => {
 
   it('can clear a Short Name', () => {
     expect(edit({ shortName: '' }).changes).toEqual(['Short Name Amos → (none)']);
+  });
+});
+
+describe('describeClassEdit', () => {
+  const amos: ExistingStudent = { id: 'a', indexNumber: '1', name: 'Khan Jun Ming Amos', shortName: 'Amos', class: '4P' };
+  const joseph: ExistingStudent = { id: 'j', indexNumber: '2', name: 'Joseph Lai', class: '4P' };
+  const row = (s: ExistingStudent, patch: Partial<{ indexNumber: string; name: string; shortName: string }> = {}) =>
+    ({ id: s.id, indexNumber: s.indexNumber, name: s.name, shortName: s.shortName ?? '', ...patch });
+
+  it('finds nothing to change when the table is as saved', () => {
+    expect(describeClassEdit([amos, joseph], [row(amos), row(joseph)]))
+      .toEqual({ changes: [], problems: {}, moves: [] });
+  });
+
+  it('lists each student’s changes in plain words', () => {
+    const edit = describeClassEdit([amos, joseph], [row(amos, { name: 'Khan Amos' }), row(joseph, { shortName: 'Joe' })]);
+    expect(edit.changes).toEqual([
+      { id: 'a', name: 'Khan Jun Ming Amos', changes: ['Full name Khan Jun Ming Amos → Khan Amos'] },
+      { id: 'j', name: 'Joseph Lai', changes: ['Short Name (none) → Joe'] },
+    ]);
+    expect(edit.moves).toEqual([]);
+  });
+
+  it('swaps two index numbers as moves', () => {
+    const edit = describeClassEdit([amos, joseph], [row(amos, { indexNumber: '2' }), row(joseph, { indexNumber: '1' })]);
+    expect(edit.problems).toEqual({});
+    expect(edit.moves).toEqual([{ id: 'a', indexNumber: '2' }, { id: 'j', indexNumber: '1' }]);
+    expect(edit.changes.map(c => c.changes)).toEqual([['Index number 1 → 2'], ['Index number 2 → 1']]);
+  });
+
+  it('refuses one index number used twice, on both rows', () => {
+    const edit = describeClassEdit([amos, joseph], [row(amos, { indexNumber: '02' }), row(joseph)]);
+    expect(edit.problems).toEqual({ a: 'Index number 2 is used twice', j: 'Index number 2 is used twice' });
+  });
+
+  it('refuses a missing name or a missing or non-number index', () => {
+    const edit = describeClassEdit([amos, joseph], [row(amos, { name: ' ' }), row(joseph, { indexNumber: 'x' })]);
+    expect(edit.problems).toEqual({ a: 'The full name is needed', j: 'Index numbers are numbers' });
   });
 });
