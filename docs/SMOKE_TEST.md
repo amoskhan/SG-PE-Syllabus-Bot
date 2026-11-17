@@ -216,6 +216,32 @@ in `pairWork.ts`, `supabase_glow_grow.sql`.
 > `"glow_grow": {"banana": null}` (which removes an unlocked performer's
 > entry): for a performer who has submitted, the entry stays.
 
+## 5b. Class-list upload — 3 min
+
+Needs `supabase_class_lists.sql` run. Student Dashboard → **Upload class list**.
+Paste:
+
+```
+Index,Name,Short Name,Class
+12,Nur Aisha binte Ahmad,Aisha,4A
+13,Bala Krishnan,,4A
+12,Daniel Lim,Daniel,4B
+1,Muhammad Adam,Adam,4B
+2,Adam Tan,Adam,4B
+3,,,4B
+```
+
+- [ ] The preview says 5 new and lists "Line 7: No name"
+- [ ] **Save** adds all 5: 4A and 4B both have an index 12, and both Adams are there
+- [ ] Paste the same lines again: the preview says 0 new, 0 to update, 5 already up to date
+- [ ] Change line 2's Short Name to `Ash` and paste again: 1 to update; after saving, the Dashboard shows "Ash"
+- [ ] Edit Bala and give him the Short Name `Bala`: it saves and shows on the Dashboard
+- [ ] Edit Daniel and change his index number to 1: refused ("Another student in this class already has index number 1")
+
+Rules: `readClassList()`, `shortNameOf()` in `src/utils/classList.ts`
+(unit-tested); one student per teacher, class and index number in
+`supabase_class_lists.sql`.
+
 ## 6. Cron endpoints — 1 min
 
 Not triggered by any user action, so they fail silently. Both run at

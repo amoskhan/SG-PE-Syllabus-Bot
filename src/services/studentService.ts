@@ -2,6 +2,7 @@ import { supabase } from './db/supabaseClient';
 import { Student, SkillAnalysis } from '../types';
 import { savePupilSubmission, uploadClipWithinLimit } from './cloudSyncService';
 import type { PairGlowGrowToSend } from '../utils/glowGrow';
+import { studentKey, type ClassListResult } from '../utils/classList';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -10,6 +11,7 @@ const mapStudent = (row: any): Student => ({
     teacherId: row.teacher_id,
     indexNumber: row.index_number,
     name: row.name,
+    shortName: row.short_name ?? undefined,
     class: row.class ?? undefined,
     progressSummary: row.progress_summary ?? {},
     createdAt: new Date(row.created_at),
@@ -51,24 +53,28 @@ export const getStudents = async (teacherId: string): Promise<Student[]> => {
     return (data ?? []).map(mapStudent);
 };
 
+/**
+ * The student with this index number in this class ("4b" and "4B" are the
+ * same class), or a new one. Index numbers restart in every class (#181).
+ * Without a class, an index number used by exactly one student finds them.
+ */
 export const getOrCreateStudent = async (
     teacherId: string,
-    { indexNumber, name, studentClass }: { indexNumber: string; name: string; studentClass?: string }
+    { indexNumber, name, studentClass, shortName }: { indexNumber: string; name: string; studentClass?: string; shortName?: string }
 ): Promise<Student | null> => {
-    // Try fetch first
-    const { data: existing } = await supabase
-        .from('students')
-        .select('*')
-        .eq('teacher_id', teacherId)
-        .eq('index_number', indexNumber)
-        .maybeSingle();
+    const students = await getStudents(teacherId);
+    const want = studentKey(studentClass, indexNumber);
+    const existing = studentClass
+        ? students.find(s => studentKey(s.class, s.indexNumber) === want)
+        : (() => {
+            const sameIndex = students.filter(s => studentKey('', s.indexNumber) === studentKey('', indexNumber));
+            return sameIndex.length === 1 ? sameIndex[0] : sameIndex.find(s => !s.class);
+        })();
+    if (existing) return existing;
 
-    if (existing) return mapStudent(existing);
-
-    // Create new
     const { data: created, error } = await supabase
         .from('students')
-        .insert({ teacher_id: teacherId, index_number: indexNumber, name, class: studentClass ?? null })
+        .insert({ teacher_id: teacherId, index_number: indexNumber, name, class: studentClass ?? null, short_name: shortName?.trim() || null })
         .select()
         .single();
 
@@ -77,17 +83,21 @@ export const getOrCreateStudent = async (
 };
 
 /**
- * Rename a student, or change their index number or class. Returns
- * 'duplicate' when another of this teacher's students already has that index
- * number (students are unique per teacher + index number).
+ * Rename a student, or change their index number, class or Short Name. Returns
+ * 'duplicate' when another of this teacher's students in that class already
+ * has that index number.
  */
 export const updateStudent = async (
     studentId: string,
-    { indexNumber, name, studentClass }: { indexNumber: string; name: string; studentClass?: string }
+    { indexNumber, name, studentClass, shortName }: { indexNumber: string; name: string; studentClass?: string; shortName?: string }
 ): Promise<Student | 'duplicate' | null> => {
     const { data, error } = await supabase
         .from('students')
-        .update({ index_number: indexNumber, name, class: studentClass || null })
+        .update({
+            index_number: indexNumber, name, class: studentClass || null,
+            // Left out, a Short Name is kept as it is
+            ...(shortName !== undefined && { short_name: shortName.trim() || null }),
+        })
         .eq('id', studentId)
         .select()
         .single();
@@ -97,6 +107,37 @@ export const updateStudent = async (
         return null;
     }
     return mapStudent(data);
+};
+
+/**
+ * Save a class list the teacher has checked (readClassList): add the new
+ * students in one go, then update the changed ones. Returns how many of each
+ * were saved, so the teacher can be told if any didn't.
+ */
+export const saveClassList = async (
+    teacherId: string,
+    { toAdd, toUpdate }: Pick<ClassListResult, 'toAdd' | 'toUpdate'>
+): Promise<{ added: number; updated: number; failed: number }> => {
+    let added = 0;
+    let failed = 0;
+    if (toAdd.length) {
+        const { data, error } = await supabase
+            .from('students')
+            .insert(toAdd.map(r => ({
+                teacher_id: teacherId,
+                index_number: r.indexNumber,
+                name: r.name,
+                short_name: r.shortName ?? null,
+                class: r.studentClass,
+            })))
+            .select('id');
+        if (error) { console.error('saveClassList insert error:', error); failed += toAdd.length; }
+        else added = data?.length ?? 0;
+    }
+    const results = await Promise.all(toUpdate.map(r =>
+        updateStudent(r.id, { indexNumber: r.indexNumber, name: r.name, studentClass: r.studentClass, shortName: r.shortName ?? '' })));
+    const updated = results.filter(r => r && r !== 'duplicate').length;
+    return { added, updated, failed: failed + (toUpdate.length - updated) };
 };
 
 /**

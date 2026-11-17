@@ -156,7 +156,7 @@ const App: React.FC = () => {
   const activeStudentContextRef = React.useRef<{ studentId: string; student: Student; videoHash?: string; videoFile?: File } | null>(null);
   const pendingGymnasticsRef = React.useRef<{
     files: File[];
-    metadata: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string };
+    metadata: { startTime?: number; endTime?: number; skillName?: string; studentIndexNumber?: string; studentName?: string; studentClass?: string };
   } | null>(null);
 
   // DEFAULT WELCOME MESSAGE
@@ -1695,7 +1695,7 @@ const App: React.FC = () => {
     files?: File[],
     metadata?: {
       startTime?: number; endTime?: number; skillName?: string; isVerified?: boolean;
-      studentIndexNumber?: string; studentName?: string; gymnasticsModeConfirmed?: boolean;
+      studentIndexNumber?: string; studentName?: string; studentClass?: string; gymnasticsModeConfirmed?: boolean;
       performer?: 'Apple' | 'Banana'; // Practice Station "Analyse": whose performance is graded
       webSearch?: boolean; // The teacher tapped "Search the web": Gemini with Google Search, no syllabus
       lessonChecklist?: string[]; // A gymnastics lesson's own cues (#150): what the AI grades
@@ -1736,6 +1736,7 @@ const App: React.FC = () => {
           student = await getOrCreateStudent(user.id, {
             indexNumber: metadata.studentIndexNumber,
             name: metadata.studentName,
+            studentClass: metadata.studentClass,
           });
           studentId = student?.id;
           console.log('[Student] Resolved student:', student?.name, studentId);

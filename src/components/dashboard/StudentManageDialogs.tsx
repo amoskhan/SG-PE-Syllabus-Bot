@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Student } from '../../types';
 import { updateStudent, deleteStudent } from '../../services/studentService';
+import { shortNameOf } from '../../utils/classList';
 
 const inputClass =
   'w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -24,6 +25,7 @@ export const EditStudentModal: React.FC<{
     indexNumber: student.indexNumber,
     name: student.name,
     studentClass: student.class ?? '',
+    shortName: student.shortName ?? '',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -34,9 +36,9 @@ export const EditStudentModal: React.FC<{
     if (!indexNumber || !name) return setError('Index number and name are required.');
     setSaving(true);
     setError('');
-    const result = await updateStudent(student.id, { indexNumber, name, studentClass: form.studentClass.trim() });
+    const result = await updateStudent(student.id, { indexNumber, name, studentClass: form.studentClass.trim(), shortName: form.shortName });
     setSaving(false);
-    if (result === 'duplicate') return setError(`Another student already has index number ${indexNumber}.`);
+    if (result === 'duplicate') return setError(`Another student in this class already has index number ${indexNumber}.`);
     if (!result) return setError('Couldn’t save. Please try again.');
     onSaved(result);
   };
@@ -52,6 +54,11 @@ export const EditStudentModal: React.FC<{
         <div>
           <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Name *</label>
           <input className={inputClass} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Short Name</label>
+          <input className={inputClass} placeholder={shortNameOf({ name: form.name }) || 'e.g. Aisha'} value={form.shortName} onChange={e => setForm(f => ({ ...f, shortName: e.target.value }))} />
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">What the child is called. Pupil iPads show only this name.</p>
         </div>
         <div>
           <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Class</label>

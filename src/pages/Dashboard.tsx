@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Student } from '../types';
 import { getStudents, getOrCreateStudent } from '../services/studentService';
 import { useAuth } from '../hooks/useAuth';
+import ClassListUploadModal from '../components/dashboard/ClassListUploadModal';
 
 interface Props {
   onOpenChat: () => void;
@@ -13,7 +14,8 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
   const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState({ indexNumber: '', name: '', studentClass: '' });
+  const [showUpload, setShowUpload] = useState(false);
+  const [addForm, setAddForm] = useState({ indexNumber: '', name: '', shortName: '', studentClass: '' });
   const [addError, setAddError] = useState('');
   const [addLoading, setAddLoading] = useState(false);
 
@@ -51,7 +53,7 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
         return exists ? prev : [s, ...prev];
       });
       setShowAddModal(false);
-      setAddForm({ indexNumber: '', name: '', studentClass: '' });
+      setAddForm({ indexNumber: '', name: '', shortName: '', studentClass: '' });
     } else {
       setAddError('Failed to create student. Please try again.');
     }
@@ -94,6 +96,12 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
               Back to Chat
             </button>
             <button
+              onClick={() => setShowUpload(true)}
+              className="px-3 py-2 text-sm rounded-lg border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors font-medium"
+            >
+              Upload class list
+            </button>
+            <button
               onClick={() => setShowAddModal(true)}
               className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
             >
@@ -128,6 +136,7 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
                       >
                         <div>
                           <span className="font-medium text-slate-800 dark:text-white text-sm">{s.name}</span>
+                          {s.shortName && <span className="ml-1.5 text-xs text-slate-500 dark:text-slate-400">“{s.shortName}”</span>}
                           <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">#{s.indexNumber}</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
@@ -148,6 +157,15 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
             ))
         )}
       </div>
+
+      {showUpload && user && (
+        <ClassListUploadModal
+          teacherId={user.id}
+          students={students}
+          onClose={() => setShowUpload(false)}
+          onSaved={() => { getStudents(user.id).then(setStudents); }}
+        />
+      )}
 
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
@@ -171,6 +189,16 @@ const Dashboard: React.FC<Props> = ({ onOpenChat }) => {
                   value={addForm.name}
                   onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
                 />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Short Name</label>
+                <input
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. Ali"
+                  value={addForm.shortName}
+                  onChange={e => setAddForm(f => ({ ...f, shortName: e.target.value }))}
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">What the child is called. Pupil iPads show only this name.</p>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">Class</label>
